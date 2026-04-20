@@ -53,7 +53,7 @@ export default async function ReportsPage() {
           )}
         </div>
         <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>
-          JSON endpoints default to the <strong>busiest job year on file</strong> (same as Home) when <code>?year</code> is
+          JSON endpoints default to the <strong>current calendar year</strong> (same as Home) when <code>?year</code> is
           omitted; add <code>?year=all</code> for lifetime totals (includes archive years).
         </p>
         <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>

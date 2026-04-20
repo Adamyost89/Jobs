@@ -107,8 +107,8 @@ export default async function PayoutSummaryPage({
 
       <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)", lineHeight: 1.5 }}>
         Totals are from <strong>posted commission checks</strong> in the app (same as the payment history on each job).
-        Dates use <strong>Eastern</strong> time. Default job year is <strong>{preferredY}</strong> (busiest on file;
-        calendar {curY}) — change the filter to match
+        Dates use <strong>Eastern</strong> time. Default job year is <strong>{preferredY}</strong> (calendar {curY}) — change
+        the filter to match
         the year you&apos;re closing payroll for.
       </p>
 

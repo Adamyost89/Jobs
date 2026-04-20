@@ -6,21 +6,11 @@ export function defaultDashboardYear(): number {
 }
 
 /**
- * Prefer the job **work year** with the most rows so operators are not dropped on an empty
- * current calendar year when their book is 2024/2025.
+ * Preferred default across dashboard/report pages when `?year=` is omitted.
+ * We intentionally use the current calendar year.
  */
-export async function preferredDashboardJobYear(db: PrismaClient): Promise<number> {
-  const rows = await db.job.groupBy({
-    by: ["year"],
-    _count: { _all: true },
-  });
-  if (!rows.length) return defaultDashboardYear();
-  rows.sort((a, b) => {
-    const c = (b._count._all ?? 0) - (a._count._all ?? 0);
-    if (c !== 0) return c;
-    return b.year - a.year;
-  });
-  return rows[0]!.year;
+export async function preferredDashboardJobYear(_db: PrismaClient): Promise<number> {
+  return defaultDashboardYear();
 }
 
 export type WorkYearQueryOpts = {

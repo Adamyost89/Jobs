@@ -222,7 +222,7 @@ export default async function JobsPage({
         <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Jobs</h1>
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 560 }}>
           Default year <strong>{yearSelectDefault === "all" ? "all" : yearSelectDefault}</strong>{" "}
-          {yearParamRaw ? "" : `(most jobs on file; calendar year ${calendarY}). `}
+          {yearParamRaw ? "" : `(default is current calendar year ${calendarY}). `}
           <Link href="/dashboard/archives">Archives</Link> for quick year links.
           {canEditJobs(user) ? (
             <>

@@ -86,7 +86,7 @@ export default async function DashboardHome({
       <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 720 }}>
         {!yearParamRaw ? (
           <>
-            Showing <strong>{workYear}</strong> (default is the year with the most jobs on file; today is calendar{" "}
+            Showing <strong>{workYear}</strong> (default is current calendar year{" "}
             <strong>{calendarY}</strong>).
           </>
         ) : (
