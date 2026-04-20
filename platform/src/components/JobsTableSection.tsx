@@ -106,7 +106,10 @@ export function JobsTableSection({
   }, []);
 
   const cols = useMemo(
-    () => visibleColumnOrder(prefs).filter((id) => canSeeGp || (id !== "gp" && id !== "gpPct")),
+    () =>
+      visibleColumnOrder(prefs).filter(
+        (id) => canSeeGp || (id !== "gp" && id !== "gpPct" && id !== "retail" && id !== "insurance")
+      ),
     [prefs, canSeeGp]
   );
   const visibleRows = useMemo(
