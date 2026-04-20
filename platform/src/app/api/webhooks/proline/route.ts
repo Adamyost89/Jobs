@@ -94,31 +94,7 @@ export async function POST(req: Request) {
     const leadNorm = e.leadNumber?.trim() || null;
     const pid = e.prolineJobId?.trim() || null;
 
-    // 1) ProLine project_id is authoritative when it matches a row.
-    if (pid) {
-      const byId = await prisma.job.findFirst({
-        where: { prolineJobId: pid },
-        select: {
-          id: true,
-          jobNumber: true,
-          leadNumber: true,
-          prolineJobId: true,
-          invoicedTotal: true,
-          amountPaid: true,
-          updatedAt: true,
-        },
-      });
-      if (byId) {
-        logProlineWebhook("match_by_proline_job_id", {
-          jobId: byId.id,
-          jobNumber: byId.jobNumber,
-          leadNumber: byId.leadNumber,
-        });
-        return byId;
-      }
-    }
-
-    // 2) ProLine project_number (leadNumber) identifies the job when no id row exists yet.
+    // 1) ProLine project_number (leadNumber) is the primary identifier for jobs.
     if (leadNorm) {
       const leadRows = await prisma.job.findMany({
         where: {
@@ -141,26 +117,50 @@ export async function POST(req: Request) {
       });
       if (!leadRows.length) {
         logProlineWebhook("no_match_by_lead", { leadNumber: leadNorm });
-        return null;
-      }
-      if (pid) {
-        const both = leadRows.find((r) => r.prolineJobId === pid);
-        if (both) {
-          logProlineWebhook("match_lead_and_id", { jobId: both.id, jobNumber: both.jobNumber });
-          return both;
+      } else {
+        if (pid) {
+          const both = leadRows.find((r) => r.prolineJobId === pid);
+          if (both) {
+            logProlineWebhook("match_lead_and_id", { jobId: both.id, jobNumber: both.jobNumber });
+            return both;
+          }
         }
+        const chosen = leadRows[0] ?? null;
+        if (chosen && leadRows.length > 1) {
+          logProlineWebhook("match_lead_ambiguous", {
+            leadNumber: leadNorm,
+            chosenJobNumber: chosen.jobNumber,
+            candidateCount: leadRows.length,
+          });
+        } else if (chosen) {
+          logProlineWebhook("match_by_lead", { jobId: chosen.id, jobNumber: chosen.jobNumber });
+        }
+        return chosen;
       }
-      const chosen = leadRows[0] ?? null;
-      if (chosen && leadRows.length > 1) {
-        logProlineWebhook("match_lead_ambiguous", {
-          leadNumber: leadNorm,
-          chosenJobNumber: chosen.jobNumber,
-          candidateCount: leadRows.length,
+    }
+
+    // 2) Fallback to project_id if there is no usable leadNumber match.
+    if (pid) {
+      const byId = await prisma.job.findFirst({
+        where: { prolineJobId: pid },
+        select: {
+          id: true,
+          jobNumber: true,
+          leadNumber: true,
+          prolineJobId: true,
+          invoicedTotal: true,
+          amountPaid: true,
+          updatedAt: true,
+        },
+      });
+      if (byId) {
+        logProlineWebhook("match_by_proline_job_id_fallback", {
+          jobId: byId.id,
+          jobNumber: byId.jobNumber,
+          leadNumber: byId.leadNumber,
         });
-      } else if (chosen) {
-        logProlineWebhook("match_by_lead", { jobId: chosen.id, jobNumber: chosen.jobNumber });
+        return byId;
       }
-      return chosen;
     }
 
     logProlineWebhook("no_match_no_lead", { prolineJobId: pid });
@@ -222,6 +222,7 @@ export async function POST(req: Request) {
 
   async function computeUpdateForExistingJob(existing: {
     id: string;
+    leadNumber: string | null;
     invoicedTotal: Prisma.Decimal;
     amountPaid: Prisma.Decimal | null;
   }): Promise<{
@@ -231,7 +232,20 @@ export async function POST(req: Request) {
   }> {
     const data: Prisma.JobUpdateInput = {};
     if (e.name !== undefined) data.name = e.name;
-    if (e.leadNumber !== undefined) data.leadNumber = e.leadNumber;
+    if (e.leadNumber !== undefined) {
+      const incomingLead = e.leadNumber?.trim() || null;
+      const existingLead = existing.leadNumber?.trim() || null;
+      if (!existingLead || existingLead === incomingLead) {
+        data.leadNumber = incomingLead;
+      } else if (incomingLead && existingLead !== incomingLead) {
+        // Guardrail: do not silently overwrite a different existing lead number.
+        logProlineWebhook("lead_conflict_preserve_existing", {
+          jobId: existing.id,
+          existingLead,
+          incomingLead,
+        });
+      }
+    }
     if (e.prolineJobId) data.prolineJobId = e.prolineJobId;
     if (e.contractAmount !== undefined) {
       const c = asDecimal(e.contractAmount);
