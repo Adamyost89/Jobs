@@ -179,8 +179,6 @@ async function importAlignedPersonSheet(
     const owedRaw = cellNum(prow, 1);
     const override = prow.length > 3 ? boolish(prow[3]) : false;
 
-    if (paidRaw === 0 && owedRaw === 0 && !override) continue;
-
     const canonical = canonicalByJobSp.get(canonicalKey(jobNumber, salespersonName));
     const job = await prisma.job.findUnique({ where: { jobNumber } });
     if (!job) continue;
@@ -208,14 +206,17 @@ async function importAlignedPersonSheet(
 
     if (
       !sameMoney(canonical.paid, paidRaw) ||
-        !sameMoney(canonical.owed, owedRaw) ||
-        canonical.override !== override
+      !sameMoney(canonical.owed, owedRaw) ||
+      canonical.override !== override
     ) {
       skippedMismatch += 1;
-      continue;
     }
 
-    const { paid, owed } = normalizeImportedCommissionAmounts(job.year, paidRaw, owedRaw);
+    const { paid, owed } = normalizeImportedCommissionAmounts(
+      job.year,
+      canonical.paid,
+      canonical.owed
+    );
 
     await prisma.commission.upsert({
       where: { jobId_salespersonId: { jobId: job.id, salespersonId: sp.id } },
@@ -224,12 +225,12 @@ async function importAlignedPersonSheet(
         salespersonId: sp.id,
         paidAmount: new Prisma.Decimal(paid.toFixed(2)),
         owedAmount: new Prisma.Decimal(owed.toFixed(2)),
-        override,
+        override: canonical.override,
       },
       update: {
         paidAmount: new Prisma.Decimal(paid.toFixed(2)),
         owedAmount: new Prisma.Decimal(owed.toFixed(2)),
-        override,
+        override: canonical.override,
       },
     });
     n++;
