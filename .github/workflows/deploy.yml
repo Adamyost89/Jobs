@@ -19,8 +19,29 @@ jobs:
           git fetch origin main
           git checkout main
           git reset --hard origin/main
+          git clean -fd
+          echo "Server repo now at commit: $(git rev-parse --short HEAD)"
+          echo "Commit subject: $(git log -1 --pretty=%s)"
 
           cd platform
-          docker compose -f docker-compose.prod.yml -p elevated up -d --build
+          test -f docker-compose.prod.yml
+          docker compose -f docker-compose.prod.yml -p elevated up -d --build --force-recreate --remove-orphans
           docker compose -f docker-compose.prod.yml -p elevated ps
-          curl -fsS --retry 10 --retry-delay 3 https://jobs.elevatedroofingandsiding.com/login >/dev/null
+
+          # Wait for the app to be reachable from inside the server first.
+          # This avoids failing immediately on transient public 502s while the app boots.
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:3301/login >/dev/null; then
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "App did not become ready on 127.0.0.1:3301"
+              docker compose -f docker-compose.prod.yml -p elevated logs --tail=200 app || true
+              docker compose -f docker-compose.prod.yml -p elevated logs --tail=200 db || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Verify external routing after local app is healthy.
+          curl -fsS --retry 20 --retry-delay 3 --retry-connrefused https://jobs.elevatedroofingandsiding.com/login >/dev/null
