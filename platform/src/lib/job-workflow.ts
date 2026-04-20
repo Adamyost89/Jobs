@@ -1,6 +1,5 @@
 import { Prisma, type Job } from "@prisma/client";
 import { prisma } from "./db";
-import { normalizeStatus } from "./status";
 import { computeCommissionsForJob } from "./commission-rules";
 import { skipAutoCommissionRecalcForJobYear } from "./commission-import-policy";
 import { commissionPlanForJobYear } from "./commission-plan-defaults";
@@ -79,10 +78,9 @@ export async function recalculateJobAndCommissions(jobId: string) {
   const { gp: computedGp, gpPercent: computedGpPct } = computeGpFields(job);
   const gp = shouldFigureJobGp(job) ? computedGp : job.gp;
   const gpPercent = shouldFigureJobGp(job) ? computedGpPct : job.gpPercent;
-  const normalized = normalizeStatus(job.status);
   await prisma.job.update({
     where: { id: jobId },
-    data: { gp, gpPercent, status: normalized },
+    data: { gp, gpPercent },
   });
 
   const cfg = await prisma.systemConfig.findUnique({
