@@ -24,6 +24,24 @@ function looksLikeJobNumber(s: string): boolean {
   return /^\d{8}/.test(s) || /^202[4-9]/.test(s);
 }
 
+function detectCommissionHeaderRow(
+  rows: unknown[][]
+): { headerRow0Based: number; cols: NonNullable<ReturnType<typeof resolveCommissionStyleColumns>> } | null {
+  const maxScan = Math.min(rows.length, 40);
+  for (let i = 0; i < maxScan; i++) {
+    const cols = resolveCommissionStyleColumns(rows[i] ?? []);
+    if (!cols) continue;
+    for (let j = i + 1; j < Math.min(rows.length, i + 8); j++) {
+      const row = rows[j] as unknown[] | undefined;
+      const jobNumber = String(row?.[cols.job] ?? "").trim();
+      if (looksLikeJobNumber(jobNumber)) {
+        return { headerRow0Based: i, cols };
+      }
+    }
+  }
+  return null;
+}
+
 function detectLayout(headerRow: unknown[]): "modern" | "legacy2024" {
   const c1 = String(headerRow[1] ?? "").toLowerCase();
   if (c1.includes("job")) return "modern";
@@ -103,19 +121,20 @@ async function importAlignedPersonSheet(
   console.log(sheetLabel, "(aligned) commission rows:", n);
 }
 
-async function importFullGridPersonSheet(rows: unknown[][], salespersonName: string, sheetLabel: string) {
-  const cols = resolveCommissionStyleColumns(rows[0]!);
-  if (!cols) {
-    console.warn("  Skip (no mappable headers):", sheetLabel);
-    return;
-  }
+async function importFullGridPersonSheet(
+  rows: unknown[][],
+  salespersonName: string,
+  sheetLabel: string,
+  headerRow0Based: number,
+  cols: NonNullable<ReturnType<typeof resolveCommissionStyleColumns>>
+) {
   const sp = await prisma.salesperson.upsert({
     where: { name: salespersonName },
     create: { name: salespersonName, active: true },
     update: { active: true },
   });
   let n = 0;
-  for (let r = 1; r < rows.length; r++) {
+  for (let r = headerRow0Based + 1; r < rows.length; r++) {
     const row = rows[r] as unknown[];
     const jobNumber = String(row[cols.job] ?? "").trim();
     if (!jobNumber || !looksLikeJobNumber(jobNumber)) continue;
@@ -187,19 +206,17 @@ async function main() {
     if (!sh) continue;
     const rowsPerson = XLSX.utils.sheet_to_json<unknown[]>(sh, { header: 1, defval: "" }) as unknown[][];
 
-    const cols = resolveCommissionStyleColumns(rowsPerson[0] ?? []);
-    const row1 = rowsPerson[1] as unknown[] | undefined;
-    const useFullGrid =
-      cols &&
-      row1 &&
-      cols.job >= 0 &&
-      (() => {
-        const jn = String(row1[cols.job] ?? "").trim();
-        return Boolean(jn && looksLikeJobNumber(jn));
-      })();
+    const detectedHeader = detectCommissionHeaderRow(rowsPerson);
+    const useFullGrid = Boolean(detectedHeader);
 
     if (useFullGrid) {
-      await importFullGridPersonSheet(rowsPerson, person, sheetName);
+      await importFullGridPersonSheet(
+        rowsPerson,
+        person,
+        sheetName,
+        detectedHeader!.headerRow0Based,
+        detectedHeader!.cols
+      );
     } else {
       await importAlignedPersonSheet(master.rows, master.layout, rowsPerson, person, sheetName);
     }
