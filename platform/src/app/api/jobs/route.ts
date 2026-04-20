@@ -7,6 +7,7 @@ import { canViewAllJobs } from "@/lib/rbac";
 import { allocateNextJobNumber, recalculateJobAndCommissions } from "@/lib/job-workflow";
 import { normalizeStatus } from "@/lib/status";
 import { sortJobsByJobNumber } from "@/lib/job-sort";
+import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 
 export async function GET() {
   const user = await getSession();
@@ -50,12 +51,10 @@ export async function POST(req: Request) {
   const jobNumber = await allocateNextJobNumber(d.year);
   let salespersonId: string | null = null;
   if (d.salespersonName) {
-    const sp = await prisma.salesperson.upsert({
-      where: { name: d.salespersonName },
-      create: { name: d.salespersonName },
-      update: {},
+    const sp = await resolveOrCreateSalespersonByName(prisma, d.salespersonName, {
+      preferFirstToken: true,
     });
-    salespersonId = sp.id;
+    salespersonId = sp?.id ?? null;
   }
   const contract = new Prisma.Decimal((d.contractAmount ?? 0).toFixed(2));
   const job = await prisma.job.create({

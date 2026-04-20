@@ -24,6 +24,7 @@
     "backfill:2024-commissions-paid": "tsx scripts/backfill-2024-commissions-fully-paid.ts",
     "prune:shell-jobs": "tsx scripts/prune-shell-jobs.ts",
     "sync:commission-ledger-from-payouts": "tsx scripts/sync-commission-ledger-from-payouts.ts",
+    "normalize:salespeople-first-names": "tsx scripts/normalize-salespeople-first-names.ts",
     "proline:probe": "tsx scripts/proline-probe.ts",
     "proline:selftest": "tsx scripts/proline-api-selftest.ts"
   },

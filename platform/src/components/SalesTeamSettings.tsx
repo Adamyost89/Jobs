@@ -54,7 +54,8 @@ export function SalesTeamSettings({ initial }: { initial: SalesTeamRow[] }) {
       setRows((prev) => [...prev, j.salesperson].sort((a, b) => a.name.localeCompare(b.name)));
     }
     setNewName("");
-    setMsg(`${name} added. Add them to each year’s commission plan if they earn commission.`);
+    const addedName = typeof j?.salesperson?.name === "string" ? j.salesperson.name : name;
+    setMsg(`${addedName} added. Add them to each year’s commission plan if they earn commission.`);
   }
 
   return (

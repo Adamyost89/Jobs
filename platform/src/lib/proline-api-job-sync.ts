@@ -11,6 +11,7 @@ import {
   mapProlineUserIdToSalespersonName,
   pickProlineProjectIdFromRecord,
 } from "@/lib/proline-webhook";
+import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
@@ -71,24 +72,16 @@ async function resolveSalespersonId(
 ): Promise<string | null> {
   const explicitName = pickStr(flat, ["salespersonName", "assigned_to_name", "main_assignee_name"]);
   if (explicitName) {
-    const sp = await db.salesperson.upsert({
-      where: { name: explicitName },
-      create: { name: explicitName },
-      update: {},
-    });
-    return sp.id;
+    const sp = await resolveOrCreateSalespersonByName(db, explicitName, { preferFirstToken: true });
+    return sp?.id ?? null;
   }
   const uid =
     pickStr(flat, ["assigned_to_id", "prolineUserId", "main_assignee_id"]) ||
     (typeof flat.assigned_to_id === "string" ? flat.assigned_to_id : undefined);
   const mapped = mapProlineUserIdToSalespersonName(uid, userMapJson);
   if (!mapped) return null;
-  const sp = await db.salesperson.upsert({
-    where: { name: mapped },
-    create: { name: mapped },
-    update: {},
-  });
-  return sp.id;
+  const sp = await resolveOrCreateSalespersonByName(db, mapped, { preferFirstToken: true });
+  return sp?.id ?? null;
 }
 
 export async function syncProlineJobsFromApi(

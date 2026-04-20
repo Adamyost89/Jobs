@@ -9,6 +9,7 @@ import {
   loadSalespeopleWithKindForAdmin,
   updateSalespersonAdminRaw,
 } from "@/lib/salespeople-kind-db";
+import { firstTokenName } from "@/lib/salesperson-name";
 
 export async function GET() {
   const user = await getSession();
@@ -41,8 +42,13 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const name = parsed.data.name;
-  const existing = await prisma.salesperson.findUnique({ where: { name } });
+  const name = firstTokenName(parsed.data.name);
+  if (!name) {
+    return NextResponse.json({ error: "Enter a valid first name." }, { status: 400 });
+  }
+  const existing = await prisma.salesperson.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+  });
   if (existing) {
     return NextResponse.json({ error: "That name is already in the list." }, { status: 409 });
   }

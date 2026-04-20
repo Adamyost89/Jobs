@@ -18,6 +18,7 @@ import {
   importTotalCommissionsWideSheet,
   isTotalCommissionsWideSheetName,
 } from "@/lib/total-commissions-wide-import";
+import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 
 export type { PayoutColumnMap } from "@/lib/payout-column-map";
 
@@ -174,12 +175,11 @@ export async function importPayoutSheetTab(
         skipped++;
         continue;
       }
-      const sp = await db.salesperson.upsert({
-        where: { name },
-        create: { name, active: true },
-        update: {},
+      const sp = await resolveOrCreateSalespersonByName(db, name, {
+        activeOnCreate: true,
+        preferFirstToken: true,
       });
-      salespersonId = sp.id;
+      salespersonId = sp?.id ?? null;
     }
     if (!salespersonId) {
       skipped++;

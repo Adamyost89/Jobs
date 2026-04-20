@@ -148,8 +148,8 @@ export default async function CommissionsPage() {
           <strong>Admins:</strong> If Drew (or anyone) should not earn on a job, set{" "}
           <em>Drew participation</em> to <code>No</code> on that job (workbook import column or{" "}
           <code>PATCH /api/jobs/&lt;id&gt;</code> with <code>drewParticipation</code>) and save — the next commission
-          recalc removes him. Use <strong>Zero &amp; lock</strong> on a line for a one-off correction without changing
-          the job row.
+          recalc removes him. Use <strong>Adjust amount &amp; lock</strong> on a line for a one-off correction without
+          changing the job row.
         </p>
       ) : null}
 

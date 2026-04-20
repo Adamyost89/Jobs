@@ -6,6 +6,7 @@ import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { pickCommissionPayoutScalarWriteFields } from "@/lib/job-prisma-write-fields";
 import { parsePaymentLine } from "@/lib/parse-payment-line";
+import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 
 export type TotalCommissionsWideImportResult = {
   headerRowUsed: number;
@@ -109,11 +110,11 @@ export async function importTotalCommissionsWideSheet(
       const cell = String(row[col] ?? "").trim();
       if (!cell) continue;
 
-      const sp = await db.salesperson.upsert({
-        where: { name: salespersonName },
-        create: { name: salespersonName, active: true },
-        update: {},
+      const sp = await resolveOrCreateSalespersonByName(db, salespersonName, {
+        activeOnCreate: true,
+        preferFirstToken: true,
       });
+      if (!sp) continue;
 
       const lines = cell.split(/\r?\n/);
       for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {

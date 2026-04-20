@@ -44,9 +44,25 @@ export async function POST(req: Request) {
       defaultYear,
       userMapJson: process.env.PROLINE_USER_MAP,
     });
+    console.info(
+      "[proline/sync-jobs]",
+      JSON.stringify({
+        dryRun: body.dryRun === true,
+        defaultYear,
+        pagesFetched: result.pagesFetched,
+        rowsSeen: result.rowsSeen,
+        created: result.created,
+        updated: result.updated,
+        skippedNoId: result.skippedNoId,
+        lastStatus: result.lastStatus,
+        errorCount: result.errors.length,
+        errors: result.errors.slice(0, 5),
+      })
+    );
     return NextResponse.json({ ok: true as const, ...result });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    console.error("[proline/sync-jobs] failed", message);
     return NextResponse.json({ ok: false as const, error: message }, { status: 400 });
   }
 }

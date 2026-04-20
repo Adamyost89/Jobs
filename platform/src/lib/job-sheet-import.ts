@@ -17,6 +17,7 @@ import {
   suggestModernJobColumnMapFromHeader,
   type ModernJobColumnMap,
 } from "@/lib/sheet-job-columns";
+import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 
 export type JobSheetLayout = "modern" | "legacy2024";
 
@@ -517,12 +518,10 @@ export async function importJobBookTab(
 
     let salespersonId: string | null = null;
     if (p.salespersonCell) {
-      const sp = await db.salesperson.upsert({
-        where: { name: p.salespersonCell },
-        create: { name: p.salespersonCell },
-        update: {},
+      const sp = await resolveOrCreateSalespersonByName(db, p.salespersonCell, {
+        preferFirstToken: true,
       });
-      salespersonId = sp.id;
+      salespersonId = sp?.id ?? null;
     }
 
     const createRaw = {
