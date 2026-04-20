@@ -32,18 +32,32 @@ export type PayoutSummaryByRep = {
   lastPosted: Date;
 };
 
+function inferPayoutYear(row: {
+  createdAt: Date;
+  notes?: string | null;
+  importSourceKey?: string | null;
+}): number {
+  const blob = `${row.importSourceKey ?? ""} ${row.notes ?? ""}`;
+  const m = blob.match(/total commissions\s*(\d{4})/i);
+  if (m) {
+    const y = Number.parseInt(m[1] ?? "", 10);
+    if (Number.isFinite(y)) return y;
+  }
+  return row.createdAt.getUTCFullYear();
+}
+
 export async function distinctPayoutYearsForSelect(
   prisma: PrismaClient,
   opts?: { salespersonId?: string | null }
 ): Promise<number[]> {
   const rows = await prisma.commissionPayout.findMany({
     where: opts?.salespersonId ? { salespersonId: opts.salespersonId } : undefined,
-    select: { createdAt: true },
+    select: { createdAt: true, notes: true, importSourceKey: true },
     orderBy: { createdAt: "desc" },
     take: 10000,
   });
   const years = new Set<number>();
-  for (const r of rows) years.add(r.createdAt.getUTCFullYear());
+  for (const r of rows) years.add(inferPayoutYear(r));
   return [...years].sort((a, b) => b - a);
 }
 
@@ -59,11 +73,6 @@ export async function loadPayoutSummary(
 ): Promise<{ byWindow: PayoutSummaryWindow[]; byRep: PayoutSummaryByRep[] }> {
   const where: Prisma.CommissionPayoutWhereInput = {};
   const year = opts.payoutYear ?? opts.yearInt;
-  if (year !== undefined) {
-    const start = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
-    const end = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
-    where.createdAt = { gte: start, lt: end };
-  }
   if (opts.salespersonId) {
     where.salespersonId = opts.salespersonId;
   }
@@ -76,6 +85,7 @@ export async function loadPayoutSummary(
       amount: true,
       createdAt: true,
       notes: true,
+      importSourceKey: true,
       job: {
         select: {
           jobNumber: true,
@@ -95,6 +105,7 @@ export async function loadPayoutSummary(
   const linesByPeriod = new Map<string, PayoutPeriodLine[]>();
 
   for (const r of payoutsForSummary) {
+    if (year !== undefined && inferPayoutYear(r) !== year) continue;
     const name = r.salesperson.name;
     const amt = r.amount.toNumber();
     const line: PayoutPeriodLine = {
