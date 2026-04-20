@@ -20,6 +20,93 @@ const SKIP_SHEETS = /^commission data$|^index$/i;
 const PERSON_SHEET = /^(\d{4})\s+(.+)$/;
 const SKIP_PERSON = /survey|chart|callback|^reports$|schedule|insurance|breakdown|am totals|^am$|^paid\s/i;
 
+type CanonicalCommissionRow = { paid: number; owed: number; override: boolean };
+
+function normCell(v: unknown): string {
+  return String(v ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findCol(headers: unknown[], matchers: ((h: string) => boolean)[]): number {
+  for (let i = 0; i < headers.length; i++) {
+    const h = normCell(headers[i]);
+    if (!h) continue;
+    for (const m of matchers) {
+      if (m(h)) return i;
+    }
+  }
+  return -1;
+}
+
+function mapCommissionDataHeaders(headers: unknown[]): {
+  job: number;
+  sp: number;
+  paid: number;
+  owed: number;
+  override: number;
+} | null {
+  const job = findCol(headers, [
+    (h) => h.includes("job") && h.includes("#"),
+    (h) => h === "job number",
+  ]);
+  if (job < 0) return null;
+  const sp = findCol(headers, [(h) => h === "salesperson" || h === "sales person"]);
+  const paid = findCol(headers, [(h) => h === "paid" || h === "paid amount"]);
+  const owed = findCol(headers, [(h) => h === "owed" || h === "owed amount"]);
+  const override = findCol(headers, [(h) => h === "override" || h.includes("override flag")]);
+  if (sp < 0 || paid < 0 || owed < 0) return null;
+  return {
+    job,
+    sp,
+    paid,
+    owed,
+    override: override >= 0 ? override : -1,
+  };
+}
+
+function num(v: unknown): number {
+  if (typeof v === "number" && !isNaN(v)) return v;
+  if (typeof v === "string") {
+    const x = parseFloat(v.replace(/[^0-9.-]+/g, ""));
+    return isNaN(x) ? 0 : x;
+  }
+  return 0;
+}
+
+function canonicalKey(jobNumber: string, salespersonName: string): string {
+  return `${jobNumber}::${salespersonName.trim().toLowerCase()}`;
+}
+
+function loadCanonicalCommissionData(wb: XLSX.WorkBook): Map<string, CanonicalCommissionRow> {
+  const byJobSp = new Map<string, CanonicalCommissionRow>();
+  const sh = wb.Sheets["Commission Data"];
+  if (!sh) return byJobSp;
+
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sh, { header: 1, defval: "" }) as unknown[][];
+  if (rows.length < 2) return byJobSp;
+  const cols = mapCommissionDataHeaders(rows[0] ?? []);
+  if (!cols) return byJobSp;
+
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r] as unknown[];
+    const jobNumber = String(row[cols.job] ?? "").trim();
+    const salespersonName = String(row[cols.sp] ?? "").trim();
+    if (!jobNumber || !salespersonName) continue;
+    byJobSp.set(canonicalKey(jobNumber, salespersonName), {
+      paid: num(row[cols.paid]),
+      owed: num(row[cols.owed]),
+      override: cols.override >= 0 ? boolish(row[cols.override]) : false,
+    });
+  }
+  return byJobSp;
+}
+
+function sameMoney(a: number, b: number): boolean {
+  return Math.abs(a - b) <= 0.005;
+}
+
 function looksLikeJobNumber(s: string): boolean {
   return /^\d{8}/.test(s) || /^202[4-9]/.test(s);
 }
@@ -68,7 +155,8 @@ async function importAlignedPersonSheet(
   layout: "modern" | "legacy2024",
   rowsPerson: unknown[][],
   salespersonName: string,
-  sheetLabel: string
+  sheetLabel: string,
+  canonicalByJobSp: Map<string, CanonicalCommissionRow>
 ) {
   const sp = await prisma.salesperson.upsert({
     where: { name: salespersonName },
@@ -77,6 +165,7 @@ async function importAlignedPersonSheet(
   });
 
   let n = 0;
+  let skippedMismatch = 0;
   const maxR = Math.min(rowsPerson.length, rowsMaster.length);
   for (let r = 1; r < maxR; r++) {
     const jobNumber = jobNumberFromMasterRow(rowsMaster, layout, r);
@@ -90,6 +179,17 @@ async function importAlignedPersonSheet(
     const override = prow.length > 3 ? boolish(prow[3]) : false;
 
     if (paidRaw === 0 && owedRaw === 0 && !override) continue;
+
+    const canonical = canonicalByJobSp.get(canonicalKey(jobNumber, salespersonName));
+    if (
+      canonical &&
+      (!sameMoney(canonical.paid, paidRaw) ||
+        !sameMoney(canonical.owed, owedRaw) ||
+        canonical.override !== override)
+    ) {
+      skippedMismatch += 1;
+      continue;
+    }
 
     const job = await prisma.job.findUnique({ where: { jobNumber } });
     if (!job) continue;
@@ -118,7 +218,12 @@ async function importAlignedPersonSheet(
     });
     n++;
   }
-  console.log(sheetLabel, "(aligned) commission rows:", n);
+  console.log(
+    sheetLabel,
+    "(aligned) commission rows:",
+    n,
+    skippedMismatch > 0 ? `| skipped mismatches vs Commission Data: ${skippedMismatch}` : ""
+  );
 }
 
 async function importFullGridPersonSheet(
@@ -177,6 +282,7 @@ async function main() {
     process.exit(1);
   }
   const wb = XLSX.readFile(fp);
+  const canonicalByJobSp = loadCanonicalCommissionData(wb);
   const masterCache = new Map<string, { rows: unknown[][]; layout: "modern" | "legacy2024" }>();
   for (const y of ["2023", "2024", "2025", "2026"]) {
     if (!wb.SheetNames.includes(y)) continue;
@@ -218,7 +324,14 @@ async function main() {
         detectedHeader!.cols
       );
     } else {
-      await importAlignedPersonSheet(master.rows, master.layout, rowsPerson, person, sheetName);
+      await importAlignedPersonSheet(
+        master.rows,
+        master.layout,
+        rowsPerson,
+        person,
+        sheetName,
+        canonicalByJobSp
+      );
     }
   }
   console.log("Done.");
