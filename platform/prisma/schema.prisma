@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SALESMAN
+  HR
+  ADMIN
+  SUPER_ADMIN
+}
+
+/** REP = earns on own sold jobs (see commission plan scope). MANAGER = typically all jobs. */
+enum SalespersonKind {
+  REP
+  MANAGER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role
+  salespersonId String? @unique
+  salesperson   Salesperson? @relation(fields: [salespersonId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Salesperson {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  kind      SalespersonKind @default(REP)
+  user      User?
+  jobs      Job[]    @relation("PrimarySalesperson")
+  commissions Commission[]
+  payouts   CommissionPayout[]
+}
+
+/** Per-calendar-year commission math (rates, scopes, bonus tiers). Lead # drives bracket logic. */
+model CommissionPlan {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  config    Json
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+}
+
+model Job {
+  id               String    @id @default(cuid())
+  leadNumber       String?
+  jobNumber        String    @unique
+  name             String?
+  year             Int
+  contractSignedAt DateTime?
+  contractAmount   Decimal   @default(0) @db.Decimal(14, 2)
+  changeOrders     Decimal   @default(0) @db.Decimal(14, 2)
+  invoicedTotal    Decimal   @default(0) @db.Decimal(14, 2)
+  /** Column K “Amount paid” on modern Job Numbering tabs (optional). */
+  amountPaid       Decimal?  @db.Decimal(14, 2)
+  projectRevenue   Decimal   @default(0) @db.Decimal(14, 2)
+  cost             Decimal   @default(0) @db.Decimal(14, 2)
+  gp               Decimal   @default(0) @db.Decimal(14, 2)
+  gpPercent        Decimal   @default(0) @db.Decimal(14, 4)
+  /** Sheet retail % (0–100), when present on modern tabs. */
+  retailPercent    Decimal?  @db.Decimal(10, 4)
+  /** Sheet insurance % (0–100), when present. */
+  insurancePercent Decimal? @db.Decimal(10, 4)
+  invoiceFlag      Boolean   @default(false)
+  paidInFull       Boolean   @default(false)
+  /** Zap / sheet “Update this” checkbox (modern column V when present). */
+  updateMarker     Boolean   @default(false)
+  /** “Comm Owed” checkbox (modern column T). */
+  commOwedFlag     Boolean   @default(false)
+  status           String    @default("UNKNOWN")
+  drewParticipation String?
+  paidDate         DateTime?
+  salespersonId  String?
+  salesperson      Salesperson? @relation("PrimarySalesperson", fields: [salespersonId], references: [id])
+  prolineJobId     String?
+  sourceSheet      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  commissions Commission[]
+  events      JobEvent[]
+  payouts     CommissionPayout[]
+  billedLines BilledProjectLine[]
+}
+
+/** Supplemental rows from any `*{Name}*billed*projects*.xlsx` year tabs (Drew / Brett / James / Mike / …). */
+model BilledProjectLine {
+  id                  String   @id @default(cuid())
+  sourceFilename      String
+  /** Parsed from filename, e.g. "Drew" from "Drew Billed Projects.xlsx". */
+  ownerName           String
+  sheetName           String
+  year                Int
+  jobNumber           String
+  customerName        String?
+  paidInFull          Boolean  @default(false)
+  contractAmount      Decimal  @default(0) @db.Decimal(14, 2)
+  changeOrders        Decimal  @default(0) @db.Decimal(14, 2)
+  invoicedTotal       Decimal  @default(0) @db.Decimal(14, 2)
+  amountPaid          Decimal  @default(0) @db.Decimal(14, 2)
+  expectedCommission  Decimal  @default(0) @db.Decimal(14, 2)
+  commissionPaid      Decimal  @default(0) @db.Decimal(14, 2)
+  commissionOwed      Decimal  @default(0) @db.Decimal(14, 2)
+  jobId               String?
+  job                 Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([sourceFilename, year, jobNumber])
+}
+
+model JobEvent {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  type      String
+  source    String
+  payload   Json
+  createdAt DateTime @default(now())
+}
+
+model CommissionRuleVersion {
+  id        String   @id @default(cuid())
+  label     String
+  validFrom DateTime
+  rulesJson Json
+  createdAt DateTime @default(now())
+}
+
+model Commission {
+  id             String   @id @default(cuid())
+  jobId          String
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  salespersonId  String
+  salesperson    Salesperson @relation(fields: [salespersonId], references: [id])
+  paidAmount     Decimal  @default(0) @db.Decimal(14, 2)
+  owedAmount     Decimal  @default(0) @db.Decimal(14, 2)
+  override       Boolean  @default(false)
+  ruleVersionId  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([jobId, salespersonId])
+}
+
+model CommissionPayout {
+  id              String   @id @default(cuid())
+  salespersonId   String
+  salesperson     Salesperson @relation(fields: [salespersonId], references: [id])
+  jobId           String?
+  job             Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  payPeriodLabel  String
+  amount          Decimal  @db.Decimal(14, 2)
+  notes           String?
+  /** Idempotent key when row came from `npm run import:payouts` (Total Commissions sheets). */
+  importSourceKey String?  @unique
+  recordedByUserId String?
+  createdAt       DateTime @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  payload    Json?
+  createdAt  DateTime @default(now())
+}
+
+model SystemConfig {
+  id    String @id @default("singleton")
+  cutoverComplete Boolean @default(false)
+  companyRevenueYtd Decimal? @db.Decimal(18, 2)
+}
+
+/** Full raw grid for one Excel tab — captures every sheet so nothing is left only in .xlsx. */
+model SpreadsheetSnapshot {
+  id          String   @id @default(cuid())
+  /** Stable id per file, e.g. `job-numbering-1` from `Job Numbering(1).xlsx`. */
+  workbookKey String
+  sheetName   String
+  rowCount    Int
+  colCount    Int
+  rows        Json
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workbookKey, sheetName])
+}

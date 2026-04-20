@@ -1,0 +1,53 @@
+{
+  "name": "elevated-job-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "tunnel:dev": "ngrok http 3000",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:seed": "prisma db seed",
+    "inventory": "tsx scripts/inventory-xlsx.ts",
+    "import:jobs": "tsx scripts/import-jobs.ts",
+    "import:payouts": "tsx scripts/import-total-commissions.ts",
+    "import:commission-data": "tsx scripts/import-commission-data.ts",
+    "import:commission-sheets": "tsx scripts/import-commission-sheets.ts",
+    "import:billed-projects": "tsx scripts/import-billed-projects.ts",
+    "import:xlsx-snapshots": "tsx scripts/import-xlsx-snapshots.ts",
+    "import:job-person-sheets": "tsx scripts/import-job-numbering-person-sheets.ts",
+    "import:all": "npm run import:xlsx-snapshots && npm run import:jobs && npm run import:commission-data && npm run import:commission-sheets && npm run import:payouts && npm run import:billed-projects && npm run import:job-person-sheets",
+    "validate:import": "tsx scripts/validate-import.ts",
+    "backfill:2024-commissions-paid": "tsx scripts/backfill-2024-commissions-fully-paid.ts",
+    "prune:shell-jobs": "tsx scripts/prune-shell-jobs.ts",
+    "sync:commission-ledger-from-payouts": "tsx scripts/sync-commission-ledger-from-payouts.ts",
+    "proline:probe": "tsx scripts/proline-probe.ts",
+    "proline:selftest": "tsx scripts/proline-api-selftest.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.3.0",
+    "bcryptjs": "^2.4.3",
+    "jose": "^5.9.6",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.15.4",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "prisma": "^6.3.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "xlsx": "^0.18.5"
+  }
+}

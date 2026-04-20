@@ -1,0 +1,48 @@
+{
+  "generatedAt": "2026-02-01T00:00:00.000Z",
+  "source": "inferred_from_apps_script_and_zapier",
+  "workbooks": [
+    {
+      "file": "job numbering.xlsx",
+      "expectedTabs": [
+        "2024",
+        "2025",
+        "2026",
+        "2025 Brett",
+        "2025 Drew",
+        "2025 James",
+        "2025 Geoff",
+        "2025 Will",
+        "2026 Brett",
+        "2026 Drew",
+        "2026 James",
+        "2026 Mike",
+        "Commission Data",
+        "Paid 2026",
+        "Index"
+      ],
+      "canonicalYearTabs": ["2024", "2025", "2026"]
+    },
+    {
+      "file": "commissions.xlsx",
+      "expectedTabs": [
+        "Brett 2025",
+        "Drew 2025",
+        "James 2025",
+        "Geoff 2025",
+        "Adam 2025",
+        "Brett 2026",
+        "Drew 2026",
+        "James 2026",
+        "Mike 2026",
+        "Total Commissions 2025",
+        "Total Commissions 2026"
+      ]
+    },
+    {
+      "file": "drew billed projects.xlsx",
+      "expectedTabs": [],
+      "note": "Populate via npm run inventory when file is available"
+    }
+  ]
+}

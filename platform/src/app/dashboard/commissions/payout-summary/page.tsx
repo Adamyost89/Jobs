@@ -1,0 +1,158 @@
+import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/session";
+import { canViewAllJobs } from "@/lib/rbac";
+import { formatDateInEastern } from "@/lib/payout-display";
+import { loadPayoutSummary } from "@/lib/payout-summary";
+import { PayPeriodAllRepsTable } from "@/components/PayPeriodAllRepsTable";
+import {
+  defaultDashboardYear,
+  distinctJobYearsForSelect,
+  parseWorkYearQuery,
+  preferredDashboardJobYear,
+} from "@/lib/work-year";
+import Link from "next/link";
+
+type Search = { year?: string };
+
+function pickString(v: string | string[] | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  return Array.isArray(v) ? v[0] : v;
+}
+
+export default async function PayoutSummaryPage({
+  searchParams,
+}: {
+  searchParams: Promise<Search>;
+}) {
+  const user = await getSession();
+  if (!user) return null;
+
+  const sp = await searchParams;
+  const yearParamRaw = pickString(sp.year);
+  const preferredY = await preferredDashboardJobYear(prisma);
+  const { yearInt, yearSelectDefault } = parseWorkYearQuery(yearParamRaw, {
+    defaultYearInt: preferredY,
+    defaultYearSelect: String(preferredY),
+  });
+  const curY = defaultDashboardYear();
+  const yearOptsSet = new Set(await distinctJobYearsForSelect(prisma));
+  if (yearSelectDefault !== "all") {
+    const n = parseInt(yearSelectDefault, 10);
+    if (!Number.isNaN(n)) yearOptsSet.add(n);
+  }
+  const yearOpts = [...yearOptsSet].sort((a, b) => b - a);
+
+  const { byWindow, byRep } = await loadPayoutSummary(prisma, {
+    yearInt,
+    salespersonId: !canViewAllJobs(user) ? user.salespersonId : null,
+  });
+
+  const payPeriodAllRepsRows = byWindow.map((w) => ({
+    payPeriodLabel: w.payPeriodLabel,
+    count: w.count,
+    total: w.total,
+    lastPostedLabel: formatDateInEastern(w.lastPosted),
+    lines: w.lines.map((l) => ({
+      id: l.id,
+      amount: l.amount,
+      salespersonName: l.salespersonName,
+      jobNumber: l.jobNumber,
+      jobName: l.jobName,
+      jobYear: l.jobYear,
+      notes: l.notes,
+      postedLabel: formatDateInEastern(l.createdAt),
+    })),
+  }));
+
+  const money2 = (n: number) =>
+    n.toLocaleString(undefined, {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+
+  return (
+    <div className="page-stack">
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
+        <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Payout summary</h1>
+        <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 480 }}>
+          Posted check totals by pay window (same data as the payroll log, rolled up).
+        </p>
+      </div>
+
+      <form method="get" className="card" style={{ padding: "1rem 1.15rem" }}>
+        <div className="filter-bar">
+          <label>
+            Job year (for payouts tied to jobs)
+            <select name="year" defaultValue={yearSelectDefault} style={{ minWidth: 160 }}>
+              {yearOpts.map((y) => (
+                <option key={y} value={String(y)}>
+                  {y}
+                </option>
+              ))}
+              <option value="all">All years</option>
+            </select>
+          </label>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn" type="submit">
+              Apply
+            </button>
+            <a href="/dashboard/commissions/payout-summary" className="btn secondary" style={{ textDecoration: "none" }}>
+              Reset
+            </a>
+          </div>
+        </div>
+      </form>
+
+      <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)", lineHeight: 1.5 }}>
+        Totals are from <strong>posted commission checks</strong> in the app (same as the payment history on each job).
+        Dates use <strong>Eastern</strong> time. Default job year is <strong>{preferredY}</strong> (busiest on file;
+        calendar {curY}) — change the filter to match
+        the year you&apos;re closing payroll for.
+      </p>
+
+      {byWindow.length === 0 ? (
+        <p className="card" style={{ margin: 0, color: "var(--muted)" }}>
+          No payout rows for this filter yet.
+        </p>
+      ) : (
+        <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
+          <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>By pay period (all reps combined)</h2>
+          <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
+            Click a row to expand and see every posted payout line in that check bucket.
+          </p>
+          <PayPeriodAllRepsTable rows={payPeriodAllRepsRows} />
+
+          <h2 style={{ margin: "0.5rem 0 0", fontSize: "1.1rem", fontWeight: 700 }}>By salesperson &amp; pay period</h2>
+          <div style={{ overflowX: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Pay period</th>
+                  <th>Salesperson</th>
+                  <th className="cell-num"># checks</th>
+                  <th className="cell-num">Total</th>
+                  <th>Last posted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byRep.map((s) => (
+                  <tr key={`${s.payPeriodLabel}|${s.salespersonName}`}>
+                    <td>{s.payPeriodLabel}</td>
+                    <td className="cell-nowrap">{s.salespersonName}</td>
+                    <td className="cell-num">{s.count}</td>
+                    <td className="cell-num">{money2(s.total)}</td>
+                    <td className="cell-muted" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+                      {formatDateInEastern(s.lastPosted)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
