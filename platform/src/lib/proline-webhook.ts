@@ -78,6 +78,7 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
     if (typeof pnum === "string" && pnum.trim()) body.leadNumber = pnum.trim();
     else if (typeof pnum === "number" && Number.isFinite(pnum)) body.leadNumber = String(pnum);
   }
+  if (typeof body.leadNumber === "string") body.leadNumber = body.leadNumber.trim();
 
   if (body.contractAmount === undefined) {
     const av = body.approved_value;
@@ -281,7 +282,12 @@ export function normalizeProlineWebhookBody(
       internalType,
       prolineJobId,
       year: typeof body.year === "number" ? body.year : undefined,
-      leadNumber: (body.leadNumber as string | null | undefined) ?? null,
+      leadNumber: (() => {
+        const v = body.leadNumber;
+        if (v == null || v === "") return null;
+        const s = String(v).trim();
+        return s || null;
+      })(),
       name: (body.name as string | null | undefined) ?? null,
       contractAmount: typeof body.contractAmount === "number" ? body.contractAmount : undefined,
       amountPaid: typeof body.amountPaid === "number" ? body.amountPaid : undefined,

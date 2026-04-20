@@ -26,6 +26,23 @@ function invoiceDeltaMarkerType(invoiceId: string): string {
   return `PROLINE_INVOICE_DELTA_${safe || "UNKNOWN"}`;
 }
 
+function prolineWebhookDebugEnabled(): boolean {
+  const v = (process.env.PROLINE_WEBHOOK_DEBUG || "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
+
+function logProlineWebhook(message: string, data: Record<string, unknown>) {
+  if (!prolineWebhookDebugEnabled()) return;
+  console.log(
+    JSON.stringify({
+      tag: "proline_webhook",
+      ts: new Date().toISOString(),
+      message,
+      ...data,
+    })
+  );
+}
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
@@ -57,6 +74,15 @@ export async function POST(req: Request) {
   const e = normalized.event;
   const year = e.year ?? new Date().getFullYear();
 
+  logProlineWebhook("received", {
+    internalType: e.internalType,
+    prolineJobId: e.prolineJobId,
+    leadNumber: e.leadNumber ?? null,
+    status: e.status ?? null,
+    hasContract: e.contractAmount !== undefined,
+    hasCost: e.cost !== undefined,
+  });
+
   async function findExistingJobForWebhook(): Promise<{
     id: string;
     jobNumber: string;
@@ -65,44 +91,80 @@ export async function POST(req: Request) {
     invoicedTotal: Prisma.Decimal;
     amountPaid: Prisma.Decimal | null;
   } | null> {
-    const or: Prisma.JobWhereInput[] = [];
-    if (e.leadNumber) or.push({ leadNumber: e.leadNumber });
-    if (e.prolineJobId) or.push({ prolineJobId: e.prolineJobId });
-    if (!or.length) return null;
+    const leadNorm = e.leadNumber?.trim() || null;
+    const pid = e.prolineJobId?.trim() || null;
 
-    const rows = await prisma.job.findMany({
-      where: { OR: or },
-      select: {
-        id: true,
-        jobNumber: true,
-        leadNumber: true,
-        prolineJobId: true,
-        invoicedTotal: true,
-        amountPaid: true,
-        updatedAt: true,
-      },
-      orderBy: [{ updatedAt: "desc" }],
-      take: 50,
-    });
-    if (!rows.length) return null;
-
-    // Business rule: ProLine project_number identifies the job row.
-    if (e.leadNumber) {
-      const leadMatches = rows.filter((r) => r.leadNumber === e.leadNumber);
-      if (leadMatches.length) {
-        if (e.prolineJobId) {
-          const both = leadMatches.find((r) => r.prolineJobId === e.prolineJobId);
-          if (both) return both;
-        }
-        return leadMatches[0] ?? null;
+    // 1) ProLine project_id is authoritative when it matches a row.
+    if (pid) {
+      const byId = await prisma.job.findFirst({
+        where: { prolineJobId: pid },
+        select: {
+          id: true,
+          jobNumber: true,
+          leadNumber: true,
+          prolineJobId: true,
+          invoicedTotal: true,
+          amountPaid: true,
+          updatedAt: true,
+        },
+      });
+      if (byId) {
+        logProlineWebhook("match_by_proline_job_id", {
+          jobId: byId.id,
+          jobNumber: byId.jobNumber,
+          leadNumber: byId.leadNumber,
+        });
+        return byId;
       }
     }
 
-    if (e.prolineJobId) {
-      const prolineMatch = rows.find((r) => r.prolineJobId === e.prolineJobId);
-      if (prolineMatch) return prolineMatch;
+    // 2) ProLine project_number (leadNumber) identifies the job when no id row exists yet.
+    if (leadNorm) {
+      const leadRows = await prisma.job.findMany({
+        where: {
+          OR: [
+            { leadNumber: leadNorm },
+            { leadNumber: { equals: leadNorm, mode: "insensitive" } },
+          ],
+        },
+        select: {
+          id: true,
+          jobNumber: true,
+          leadNumber: true,
+          prolineJobId: true,
+          invoicedTotal: true,
+          amountPaid: true,
+          updatedAt: true,
+        },
+        orderBy: [{ updatedAt: "desc" }],
+        take: 50,
+      });
+      if (!leadRows.length) {
+        logProlineWebhook("no_match_by_lead", { leadNumber: leadNorm });
+        return null;
+      }
+      if (pid) {
+        const both = leadRows.find((r) => r.prolineJobId === pid);
+        if (both) {
+          logProlineWebhook("match_lead_and_id", { jobId: both.id, jobNumber: both.jobNumber });
+          return both;
+        }
+      }
+      const chosen = leadRows[0] ?? null;
+      if (chosen && leadRows.length > 1) {
+        logProlineWebhook("match_lead_ambiguous", {
+          leadNumber: leadNorm,
+          chosenJobNumber: chosen.jobNumber,
+          candidateCount: leadRows.length,
+        });
+      } else if (chosen) {
+        logProlineWebhook("match_by_lead", { jobId: chosen.id, jobNumber: chosen.jobNumber });
+      }
+      return chosen;
     }
-    return rows[0] ?? null;
+
+    logProlineWebhook("no_match_no_lead", { prolineJobId: pid });
+    return null;
   }
 
   async function ensureRequiredNameWriteback(job: { id: string; jobNumber: string }, originalName: string | null | undefined) {
@@ -184,6 +246,13 @@ export async function POST(req: Request) {
     }
     if (e.paidInFull !== undefined) data.paidInFull = e.paidInFull;
     if (e.paidDate !== undefined) data.paidDate = e.paidDate ? new Date(e.paidDate) : null;
+
+    if (e.salespersonName) {
+      const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {
+        preferFirstToken: true,
+      });
+      if (sp?.id) data.salesperson = { connect: { id: sp.id } };
+    }
 
     let invoiceDeltaApplied = false;
     let invoiceDeltaSkippedDuplicate = false;
@@ -284,6 +353,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ jobNumber: r.job.jobNumber, jobId: r.job.id, upsert: "created" });
     }
     const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate } = await computeUpdateForExistingJob(existing);
+    logProlineWebhook("upsert_update", {
+      jobId: existing.id,
+      jobNumber: existing.jobNumber,
+      patchKeys: Object.keys(data),
+    });
     await prisma.job.update({ where: { id: existing.id }, data });
     await prisma.jobEvent.create({
       data: {
@@ -317,11 +391,25 @@ export async function POST(req: Request) {
 
   const existing = await findExistingJobForWebhook();
   if (!existing) {
-    return NextResponse.json({ error: "Job not found for prolineJobId" }, { status: 404 });
+    logProlineWebhook("not_found", {
+      internalType: e.internalType,
+      prolineJobId: e.prolineJobId,
+      leadNumber: e.leadNumber ?? null,
+    });
+    return NextResponse.json(
+      { error: "Job not found for project_id or project_number (leadNumber)" },
+      { status: 404 }
+    );
   }
 
   const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate } = await computeUpdateForExistingJob(existing);
 
+  logProlineWebhook("typed_update", {
+    internalType: e.internalType,
+    jobId: existing.id,
+    jobNumber: existing.jobNumber,
+    patchKeys: Object.keys(data),
+  });
   await prisma.job.update({ where: { id: existing.id }, data });
   await prisma.jobEvent.create({
     data: {
