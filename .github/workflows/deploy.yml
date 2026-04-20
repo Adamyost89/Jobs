@@ -23,4 +23,4 @@ jobs:
           cd platform
           docker compose -f docker-compose.prod.yml -p elevated up -d --build
           docker compose -f docker-compose.prod.yml -p elevated ps
-          curl -fsS --retry 10 --retry-delay 3 http://127.0.0.1:3000/login >/dev/null
+          curl -fsS --retry 10 --retry-delay 3 https://jobs.elevatedroofingandsiding.com/login >/dev/null
