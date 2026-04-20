@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
 import { defaultDashboardYear } from "@/lib/work-year";
+import { prisma } from "@/lib/db";
 
 function jobYearFilterFromQuery(
   yearParam: string | undefined,

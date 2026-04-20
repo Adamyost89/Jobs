@@ -22,6 +22,24 @@ function looksLikeJobNumber(s: string): boolean {
   return /^\d{8}/.test(s) || /^202[4-9]/.test(s);
 }
 
+function detectCommissionHeaderRow(
+  rows: unknown[][]
+): { headerRow0Based: number; cols: NonNullable<ReturnType<typeof resolveCommissionStyleColumns>> } | null {
+  const maxScan = Math.min(rows.length, 40);
+  for (let i = 0; i < maxScan; i++) {
+    const cols = resolveCommissionStyleColumns(rows[i] ?? []);
+    if (!cols) continue;
+    for (let j = i + 1; j < Math.min(rows.length, i + 8); j++) {
+      const row = rows[j] as unknown[] | undefined;
+      const jobNumber = String(row?.[cols.job] ?? "").trim();
+      if (looksLikeJobNumber(jobNumber)) {
+        return { headerRow0Based: i, cols };
+      }
+    }
+  }
+  return null;
+}
+
 async function importPersonYearSheet(wb: XLSX.WorkBook, sheetName: string) {
   if (SKIP.test(sheetName)) return 0;
   if (/^total commissions/i.test(sheetName)) return 0;
@@ -34,11 +52,12 @@ async function importPersonYearSheet(wb: XLSX.WorkBook, sheetName: string) {
   if (!sh) return 0;
   const rows = XLSX.utils.sheet_to_json<unknown[]>(sh, { header: 1, defval: "" }) as unknown[][];
   if (rows.length < 2) return 0;
-  const cols = resolveCommissionStyleColumns(rows[0]!);
-  if (!cols) {
+  const header = detectCommissionHeaderRow(rows);
+  if (!header) {
     console.warn("Skip (no Job # column):", sheetName);
     return 0;
   }
+  const cols = header.cols;
 
   const sp = await prisma.salesperson.upsert({
     where: { name: salespersonName },
@@ -47,7 +66,7 @@ async function importPersonYearSheet(wb: XLSX.WorkBook, sheetName: string) {
   });
 
   let n = 0;
-  for (let r = 1; r < rows.length; r++) {
+  for (let r = header.headerRow0Based + 1; r < rows.length; r++) {
     const row = rows[r] as unknown[];
     const jobNumber = String(row[cols.job] ?? "").trim();
     if (!jobNumber || !looksLikeJobNumber(jobNumber)) continue;
