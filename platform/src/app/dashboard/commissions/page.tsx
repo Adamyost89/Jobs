@@ -18,6 +18,7 @@ export default async function CommissionsPage() {
   const suggestedPayPeriod = getCurrentPayPeriodLabel();
 
   const parts: Prisma.CommissionWhereInput[] = [];
+  parts.push({ owedAmount: { gt: 0 } });
   if (!canViewAllJobs(user)) {
     parts.push(
       user.salespersonId ? { salespersonId: user.salespersonId } : { id: "__none__" }
@@ -29,7 +30,6 @@ export default async function CommissionsPage() {
   const rows = await prisma.commission.findMany({
     where,
     orderBy: { updatedAt: "desc" },
-    take: 5000,
     include: {
       job: { select: { jobNumber: true, name: true, year: true, leadNumber: true } },
       salesperson: { select: { name: true, active: true } },

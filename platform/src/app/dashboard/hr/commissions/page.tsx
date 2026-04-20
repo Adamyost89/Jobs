@@ -14,8 +14,7 @@ export default async function HrCommissionsPayrollPage() {
   if (!canViewHrPayroll(user)) redirect("/dashboard");
 
   const candidates = await prisma.commission.findMany({
-    where: { override: false, salesperson: { active: true } },
-    take: 2500,
+    where: { override: false, owedAmount: { gt: 0 }, salesperson: { active: true } },
     include: {
       job: { select: { jobNumber: true, name: true, year: true, leadNumber: true } },
       salesperson: { select: { name: true, active: true } },
