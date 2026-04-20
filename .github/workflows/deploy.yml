@@ -17,4 +17,4 @@ jobs:
           git reset --hard origin/main
 
           cd platform
-          docker compose -f docker-compose.prod.yml -p elevated up -d
+          docker compose -f docker-compose.prod.yml -p elevated up -d --build --force-recreate
