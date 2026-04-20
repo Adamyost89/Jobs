@@ -7,6 +7,7 @@ import {
 
 /** One row in the simple UI: "from this lead # up, use this %". */
 export type LeadStepForm = { fromLead: number; usePercent: number };
+export type ScopeStepForm = { fromLead: number; useScope: "all_jobs" | "primary_only" };
 
 export type BonusForm = {
   enabled: boolean;
@@ -29,6 +30,8 @@ export type BonusForm = {
 export type CommissionPersonEditor = {
   name: string;
   scope: "all_jobs" | "primary_only";
+  /** Optional: from this lead #, use this scope instead of the default scope above. */
+  scopeSteps: ScopeStepForm[];
   /** Default / "else" commission % (0–100) */
   defaultPercent: number | "";
   /** Optional: higher lead # = different %. Ignored when bonus uses lead split (handled in bonus section). */
@@ -51,6 +54,7 @@ export const emptyBonusForm = (): BonusForm => ({
 
 export function ruleToEditor(name: string, rule: CommissionPersonRuleV1): CommissionPersonEditor {
   const leadSteps: LeadStepForm[] = [];
+  const scopeSteps: ScopeStepForm[] = [];
   let defaultPercent: number | "" = (rule.baseRate ?? 0) * 100;
 
   if (rule.leadBrackets?.length) {
@@ -61,6 +65,13 @@ export function ruleToEditor(name: string, rule: CommissionPersonRuleV1): Commis
       } else {
         leadSteps.push({ fromLead: b.minLead, usePercent: Math.round(b.rate * 10000) / 100 });
       }
+    }
+  }
+
+  if (rule.scopeByLead?.length) {
+    const sorted = [...rule.scopeByLead].sort((a, b) => b.minLead - a.minLead);
+    for (const s of sorted) {
+      if (s.minLead > 0) scopeSteps.push({ fromLead: s.minLead, useScope: s.scope });
     }
   }
 
@@ -86,7 +97,7 @@ export function ruleToEditor(name: string, rule: CommissionPersonRuleV1): Commis
     bonus.dontReopenOwedAtHigherRate = !!(rule.elevatedPaidGuard && br && "byLead" in br);
   }
 
-  return { name, scope: rule.scope, defaultPercent, leadSteps, bonus };
+  return { name, scope: rule.scope, scopeSteps, defaultPercent, leadSteps, bonus };
 }
 
 function num(v: number | "", fallback = 0): number {
@@ -98,6 +109,11 @@ function num(v: number | "", fallback = 0): number {
 export function editorToRule(ed: CommissionPersonEditor): CommissionPersonRuleV1 {
   const scope = ed.scope;
   const defPct = num(ed.defaultPercent, 0) / 100;
+  const cleanedScopeSteps = ed.scopeSteps
+    .filter((s) => s.fromLead > 0)
+    .map((s) => ({ minLead: Math.floor(s.fromLead), scope: s.useScope }))
+    .sort((a, b) => b.minLead - a.minLead);
+  const scopeByLead = cleanedScopeSteps.length > 0 ? [...cleanedScopeSteps, { minLead: 0, scope }] : undefined;
 
   if (ed.bonus.enabled) {
     const metric =
@@ -127,7 +143,7 @@ export function editorToRule(ed: CommissionPersonEditor): CommissionPersonRuleV1
       belowRates,
     };
 
-    const rule: CommissionPersonRuleV1 = { scope, runningTiers };
+    const rule: CommissionPersonRuleV1 = { scope, scopeByLead, runningTiers };
 
     if (
       ed.bonus.dontReopenOwedAtHigherRate &&
@@ -154,10 +170,10 @@ export function editorToRule(ed: CommissionPersonEditor): CommissionPersonRuleV1
       .map((s) => ({ minLead: Math.floor(s.fromLead), rate: num(s.usePercent, 0) / 100 }))
       .sort((a, b) => b.minLead - a.minLead);
     brackets.push({ minLead: 0, rate: defPct });
-    return { scope, leadBrackets: brackets };
+    return { scope, scopeByLead, leadBrackets: brackets };
   }
 
-  return { scope, baseRate: defPct };
+  return { scope, scopeByLead, baseRate: defPct };
 }
 
 export function planToEditors(plan: CommissionPlanConfigV1): CommissionPersonEditor[] {
@@ -169,6 +185,7 @@ export function newPersonEditor(name: string): CommissionPersonEditor {
   return {
     name: name.trim(),
     scope: "primary_only",
+    scopeSteps: [],
     defaultPercent: 5,
     leadSteps: [],
     bonus: emptyBonusForm(),

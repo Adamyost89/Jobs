@@ -128,9 +128,24 @@ function resolvePersonRate(rule: CommissionPersonRuleV1, ctx: CommissionComputeC
   return rule.baseRate ?? 0;
 }
 
-function effectiveScope(rule: CommissionPersonRuleV1, kind: SalesKind | undefined) {
-  if (kind === "MANAGER") return "all_jobs" as const;
-  return rule.scope;
+function scopeFromLeadBrackets(
+  leadNum: number,
+  brackets: { minLead: number; scope: "all_jobs" | "primary_only" }[] | undefined,
+  baseScope: "all_jobs" | "primary_only"
+) {
+  if (brackets?.length) {
+    const sorted = [...brackets].sort((a, b) => b.minLead - a.minLead);
+    for (const b of sorted) {
+      if (leadNum >= b.minLead) return b.scope;
+    }
+  }
+  return baseScope;
+}
+
+function effectiveScope(rule: CommissionPersonRuleV1, kind: SalesKind | undefined, leadNum: number) {
+  const scoped = scopeFromLeadBrackets(leadNum, rule.scopeByLead, rule.scope);
+  if (kind === "MANAGER" && !rule.scopeByLead?.length) return "all_jobs" as const;
+  return scoped;
 }
 
 function shouldIncludePerson(
@@ -139,7 +154,7 @@ function shouldIncludePerson(
   ctx: CommissionComputeContext
 ): boolean {
   const kind = ctx.kindBySalespersonName[salespersonName];
-  const scope = effectiveScope(rule, kind);
+  const scope = effectiveScope(rule, kind, leadNumFromCtx(ctx));
   if (scope === "all_jobs") return true;
   return ctx.primarySalespersonName === salespersonName;
 }

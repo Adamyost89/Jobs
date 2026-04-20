@@ -9,6 +9,7 @@ import {
   type BonusForm,
   type CommissionPersonEditor,
   type LeadStepForm,
+  type ScopeStepForm,
 } from "@/lib/commission-plan-form-bridge";
 
 function updateEditor(
@@ -36,6 +37,19 @@ function updateLeadStep(
     if (i !== personIndex) return row;
     const leadSteps = row.leadSteps.map((s, j) => (j === stepIndex ? { ...s, ...patch } : s));
     return { ...row, leadSteps };
+  });
+}
+
+function updateScopeStep(
+  editors: CommissionPersonEditor[],
+  personIndex: number,
+  stepIndex: number,
+  patch: Partial<ScopeStepForm>
+): CommissionPersonEditor[] {
+  return editors.map((row, i) => {
+    if (i !== personIndex) return row;
+    const scopeSteps = row.scopeSteps.map((s, j) => (j === stepIndex ? { ...s, ...patch } : s));
+    return { ...row, scopeSteps };
   });
 }
 
@@ -221,6 +235,75 @@ export function CommissionPlanForm({
                       <option value="primary_only">Only jobs where they are the salesperson on the job</option>
                     </select>
                   </label>
+                </div>
+
+                <div style={{ marginTop: "0.75rem" }}>
+                  <div style={{ fontWeight: 600, marginBottom: "0.35rem" }}>Scope by lead # (optional)</div>
+                  <p className="help" style={{ margin: "0 0 0.5rem" }}>
+                    Example: from lead 1858 switch to every job. Leave blank to always use the default scope above.
+                  </p>
+                  {ed.scopeSteps.map((step, sidx) => (
+                    <div key={sidx} className="form-row" style={{ marginBottom: "0.35rem" }}>
+                      <label className="form-field">
+                        <span>From lead #</span>
+                        <input
+                          className="input input-narrow"
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={step.fromLead}
+                          onChange={(e) =>
+                            setEditors((prev) =>
+                              updateScopeStep(prev, idx, sidx, { fromLead: parseInt(e.target.value, 10) || 0 })
+                            )
+                          }
+                        />
+                      </label>
+                      <label className="form-field">
+                        <span>Use scope</span>
+                        <select
+                          className="input"
+                          value={step.useScope}
+                          onChange={(e) =>
+                            setEditors((prev) =>
+                              updateScopeStep(prev, idx, sidx, {
+                                useScope: e.target.value as "all_jobs" | "primary_only",
+                              })
+                            )
+                          }
+                        >
+                          <option value="all_jobs">Every job</option>
+                          <option value="primary_only">Only jobs where they are the salesperson</option>
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        onClick={() =>
+                          setEditors((prev) =>
+                            updateEditor(prev, idx, {
+                              scopeSteps: prev[idx].scopeSteps.filter((_, j) => j !== sidx),
+                            })
+                          )
+                        }
+                      >
+                        Remove row
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() =>
+                      setEditors((prev) =>
+                        updateEditor(prev, idx, {
+                          scopeSteps: [...prev[idx].scopeSteps, { fromLead: 0, useScope: "all_jobs" }],
+                        })
+                      )
+                    }
+                  >
+                    Add scope rule
+                  </button>
                 </div>
 
                 {!ed.bonus.enabled && (

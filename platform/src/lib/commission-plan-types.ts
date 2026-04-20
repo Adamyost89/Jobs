@@ -35,6 +35,8 @@ export type ElevatedPaidGuard = {
 
 export type CommissionPersonRuleV1 = {
   scope: CommissionScope;
+  /** Optional lead-based scope override; first match wins by descending `minLead`. */
+  scopeByLead?: { minLead: number; scope: CommissionScope }[];
   /** Optional static rate when no `leadBrackets` / `runningTiers`. */
   baseRate?: number;
   /** First match wins scanning in descending `minLead` order. */

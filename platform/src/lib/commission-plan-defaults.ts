@@ -14,7 +14,11 @@ export function defaultCommissionPlanConfig(year: number): CommissionPlanConfigV
         Brett: { scope: "all_jobs", baseRate: 0.05 },
         Will: { scope: "all_jobs", baseRate: 0.05 },
         Drew: {
-          scope: "all_jobs",
+          scope: "primary_only",
+          scopeByLead: [
+            { minLead: 1858, scope: "all_jobs" },
+            { minLead: 0, scope: "primary_only" },
+          ],
           leadBrackets: [
             { minLead: 1858, rate: 0.01 },
             { minLead: 0, rate: 0.05 },
