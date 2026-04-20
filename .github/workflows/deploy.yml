@@ -19,15 +19,30 @@ jobs:
           git fetch origin main
           git checkout main
           git reset --hard origin/main
+          env_backup=""
+          if [ -f platform/.env ]; then
+            env_backup="$(mktemp /tmp/elevated-platform-env.XXXXXX)"
+            cp platform/.env "$env_backup"
+          fi
           git clean -fd
+          if [ -n "$env_backup" ] && [ -f "$env_backup" ]; then
+            cp "$env_backup" platform/.env
+            rm -f "$env_backup"
+          fi
           echo "Server repo now at commit: $(git rev-parse --short HEAD)"
           echo "Commit subject: $(git log -1 --pretty=%s)"
+
+          if [ ! -f platform/.env ]; then
+            echo "Missing required env file: platform/.env"
+            echo "Create /opt/elevated-sheets/platform/.env on the server, then re-run deploy."
+            exit 1
+          fi
 
           cd platform
           compose_file="docker-compose.prod.yml"
           if [ ! -f "$compose_file" ]; then
             echo "Missing required production compose file: platform/$compose_file"
-            echo "This file is server-local and must exist before deploy can run."
+            echo "Ensure this file exists in the repo and is present on the server checkout."
             exit 1
           fi
 
