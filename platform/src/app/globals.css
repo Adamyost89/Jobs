@@ -416,6 +416,11 @@ a.signed-month-drill-link:hover {
   max-width: min(1440px, 100%);
 }
 
+.page-stack--full {
+  max-width: none;
+  width: 100%;
+}
+
 .filter-bar {
   display: flex;
   flex-wrap: wrap;

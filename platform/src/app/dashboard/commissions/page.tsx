@@ -123,7 +123,7 @@ export default async function CommissionsPage() {
     });
 
   return (
-    <div className="page-stack">
+    <div className="page-stack page-stack--full">
       <div
         style={{
           display: "flex",

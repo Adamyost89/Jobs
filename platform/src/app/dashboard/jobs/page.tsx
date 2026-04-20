@@ -217,7 +217,7 @@ export default async function JobsPage({
   });
 
   return (
-    <div className="page-stack">
+    <div className="page-stack page-stack--full">
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
         <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Jobs</h1>
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 560 }}>

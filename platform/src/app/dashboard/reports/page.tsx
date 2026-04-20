@@ -14,7 +14,7 @@ export default async function ReportsPage() {
   const showSignedDashboard = canRunFullReports(user) || !!user.salespersonId;
 
   return (
-    <div className="page-stack">
+    <div className="page-stack page-stack--full">
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "0.5rem 1rem" }}>
         <h1 style={{ margin: 0 }}>Reports</h1>
         <span style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
