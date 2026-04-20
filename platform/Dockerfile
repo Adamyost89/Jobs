@@ -25,6 +25,9 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/next.config.ts ./next.config.ts
 COPY --from=build /app/prisma ./prisma
+# One-off ops scripts (e.g. normalize salespeople) run via `docker compose exec app` with tsx.
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/src ./src
 
 EXPOSE 3301
 

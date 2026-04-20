@@ -12,9 +12,15 @@
  *   unset DRY_RUN
  *   npm run normalize:salespeople-first-names
  *
- * Docker: if `DATABASE_URL` uses hostname `db` (Compose service name), that host only resolves
- * **inside** the stack network. Run the script from the app container, not from the bare host, e.g.:
- *   docker compose exec <your-nextjs-or-node-service> sh -lc 'cd /opt/elevated-sheets/platform && DRY_RUN=1 npm run normalize:salespeople-first-names'
+ * Docker (this repo’s `docker-compose.prod.yml`): the app service is named **`app`** and the
+ * container working directory is **`/app`** (not your host path under `/opt/...`).
+ *
+ *   docker compose -f docker-compose.prod.yml exec app sh -lc 'cd /app && DRY_RUN=1 npm run normalize:salespeople-first-names'
+ *
+ * Rebuild/redeploy the `app` image after Dockerfile changes so `scripts/` and `src/` exist in the container.
+ *
+ * **From the host** (no exec): if Postgres publishes port `5432` to localhost, point Prisma at
+ * `127.0.0.1` instead of `db`, e.g. set `DATABASE_URL` to the same credentials with host `127.0.0.1`.
  *
  * (PowerShell on Windows uses `$env:DRY_RUN = "1"` instead of `DRY_RUN=1`.)
  */
@@ -244,13 +250,12 @@ function printDbConnectionHint(err: unknown): void {
   console.error(`
 Could not connect to Postgres (${host}).
 
-If DATABASE_URL uses a Docker-only hostname (often "db"), run this script inside the **app**
-container on the same Compose network, for example:
+If DATABASE_URL uses a Docker-only hostname (often "db"), run inside the **app** container (repo
+prod Compose service is usually \`app\`, cwd \`/app\`), for example:
 
-  docker compose exec <app-service> sh -lc 'cd /opt/elevated-sheets/platform && DRY_RUN=1 npm run normalize:salespeople-first-names'
+  docker compose -f docker-compose.prod.yml exec app sh -lc 'cd /app && DRY_RUN=1 npm run normalize:salespeople-first-names'
 
-Or point DATABASE_URL at a host/port reachable from where you run the command (e.g. localhost
-with the DB port published).
+Or set DATABASE_URL to use 127.0.0.1 (or localhost) when Postgres publishes port 5432 on the host.
 
 Shell reminder (bash): dry run is \`DRY_RUN=1 npm run ...\`, not PowerShell \`$env:DRY_RUN\`.
 `);
