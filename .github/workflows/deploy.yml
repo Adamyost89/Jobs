@@ -14,4 +14,4 @@ jobs:
           cd /opt/elevated-sheets
           git pull origin main
           cd platform
-          docker compose -f docker-compose.prod.yml -p elevated up -d
+          docker compose -f docker-compose.prod.yml -p elevated up --build -d
