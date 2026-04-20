@@ -1,0 +1,90 @@
+export async function updateSpreadsheet({
+  spreadsheetId,
+  jobId,
+  newInvoicedTotal
+}: {
+  spreadsheetId: string;
+  jobId: string;
+  newInvoicedTotal: number;
+}): Promise<{ result: string }> {
+  try {
+    // Step 1: Find which sheet contains the Job ID (check 2026 first, then 2025)
+    const sheets = ['2026', '2025'];
+    let sheetName: string | null = null;
+    let rowIndex = -1;
+
+    for (const sheet of sheets) {
+      try {
+        const range = `${sheet}!A:A`;
+        const getResponse = await fetchWithZapier(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+          { method: 'GET' }
+        );
+        await getResponse.throwErrorIfNotOk();
+        const data = await getResponse.json();
+        const values = data.values || [];
+        const flatValues = values.map(row => String(row[0] || '').trim());
+
+        const foundIndex = flatValues.indexOf(jobId.trim());
+        if (foundIndex !== -1) {
+          sheetName = sheet;
+          rowIndex = foundIndex;
+          break;
+        }
+      } catch (error) {
+        // Continue to next sheet if this one fails
+        continue;
+      }
+    }
+
+    if (sheetName === null || rowIndex === -1) {
+      throw new Error(`Job ID "${jobId}" not found in sheets "2026" or "2025".`);
+    }
+    const rowNumber = rowIndex + 1;
+
+    // Step 2: Fetch current value from column J
+    const currentJRange = `${sheetName}!J${rowNumber}`;
+    const getCurrentJResponse = await fetchWithZapier(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${currentJRange}`,
+      { method: 'GET' }
+    );
+    await getCurrentJResponse.throwErrorIfNotOk();
+    const currentJData = await getCurrentJResponse.json();
+    const currentJValue = parseFloat(currentJData.values?.[0]?.[0] || "0");
+    if (isNaN(currentJValue)) throw new Error(`Invalid number in J${rowNumber}`);
+
+    // Step 3: Calculate new value for column J
+    const updatedJValue = currentJValue + newInvoicedTotal;
+
+    // Step 4: Update columns J and R
+    const requestBody = {
+      data: [
+        {
+          range: `${sheetName}!J${rowNumber}`,
+          values: [[updatedJValue]]
+        },
+        {
+          range: `${sheetName}!R${rowNumber}`,
+          values: [[true]]
+        }
+      ],
+      valueInputOption: "RAW"
+    };
+
+    const updateResponse = await fetchWithZapier(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      }
+    );
+    await updateResponse.throwErrorIfNotOk();
+
+    return { 
+      result: `Spreadsheet updated successfully in sheet "${sheetName}". Updated J: ${updatedJValue}, Set R to true.` 
+    };
+  } catch (error) {
+    return { result: `Error: ${error.message}` };
+  }
+}

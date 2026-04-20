@@ -1,0 +1,93 @@
+export async function updateJobSchedule({
+  spreadsheetId,
+  jobId,
+  startDate,
+  endDate
+}: {
+  spreadsheetId: string;
+  jobId: string;
+  startDate: string;
+  endDate: string;
+}): Promise<{ result: string }> {
+  // Helper function to format dates as MM/DD/YYYY
+  const formatDate = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) {
+      throw new Error(`Invalid date: ${dateStr}`);
+    }
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}/${day}/${year}`;
+  };
+
+  try {
+    // Step 1: Find which sheet contains the Job ID (check 2026 first, then 2025)
+    const sheets = ['2026', '2025'];
+    let sheetName: string | null = null;
+    let rowIndex = -1;
+
+    for (const sheet of sheets) {
+      try {
+        const range = `${sheet}!A:A`;
+        const response = await fetchWithZapier(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+          { method: 'GET' }
+        );
+        await response.throwErrorIfNotOk();
+        const data = await response.json();
+        const values = data.values || [];
+
+        const foundIndex = values.findIndex((row: string[]) => String(row[0] || '').trim() === jobId.trim());
+        if (foundIndex !== -1) {
+          sheetName = sheet;
+          rowIndex = foundIndex;
+          break;
+        }
+      } catch (error) {
+        // Continue to next sheet if this one fails
+        continue;
+      }
+    }
+
+    if (sheetName === null || rowIndex === -1) {
+      return { result: `Job ID "${jobId}" not found in sheets "2026" or "2025".` };
+    }
+    const rowNumber = rowIndex + 1; // Convert to 1-based index
+
+    // Step 2: Format dates
+    const formattedStartDate = formatDate(startDate);
+    const formattedEndDate = formatDate(endDate);
+
+    // Step 3: Define the update range (G to U)
+    const updateRange = `${sheetName}!G${rowNumber}:U${rowNumber}`;
+
+    // Step 5: Prepare the request body (G: Start Date, H: End Date, U: Status)
+    const requestBody = {
+      range: updateRange,
+      majorDimension: 'ROWS',
+      values: [[
+        formattedStartDate, // G
+        formattedEndDate,   // H
+        , , , , , , , , , , , , // I to T (empty, preserve existing data)
+        'Job Scheduled'     // U
+      ]]
+    };
+
+    // Step 6: Update the sheet
+    const updateResponse = await fetchWithZapier(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${updateRange}?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      }
+    );
+    await updateResponse.throwErrorIfNotOk();
+
+    return { result: `Job schedule updated successfully for Job ID "${jobId}" in sheet "${sheetName}": Start ${formattedStartDate}, End ${formattedEndDate}, Status "Job Scheduled"` };
+  } catch (error) {
+    console.error('Error updating job schedule:', error);
+    return { result: `Error: ${error.message}` };
+  }
+}

@@ -1,0 +1,72 @@
+export async function appendDataToGoogleSheet({
+  spreadsheetId,
+  projectNumber,
+  projectName,
+  approvedDate,
+  approvedTotal,
+  status
+}: {
+  spreadsheetId: string;
+  projectNumber: string;
+  projectName: string;
+  approvedDate: string; // Will likely come in ISO format
+  approvedTotal: string;
+  status: string;
+}): Promise<{ result: string }> {
+  function formatDateToMDY(dateString: string): string {
+    const date = new Date(dateString);
+    const month = date.getUTCMonth() + 1;
+    const day = date.getUTCDate();
+    const year = date.getUTCFullYear();
+    return `${month}/${day}/${year}`;
+  }
+
+  const formattedDate = formatDateToMDY(approvedDate);
+
+  // Append new jobs to the 2026 sheet
+  const sheetName = '2026';
+  const findRange = `'${sheetName}'!A2:A`;
+  const findUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${findRange}?majorDimension=COLUMNS`;
+
+  const findResponse = await fetchWithZapier(findUrl, { method: 'GET' });
+  await findResponse.throwErrorIfNotOk();
+
+  const findData = await findResponse.json();
+  const currentValues = findData.values ? findData.values[0] : [];
+
+  let nextRow = currentValues.length + 2;
+  for (let i = 0; i < currentValues.length; i++) {
+    if (!currentValues[i]) {
+      nextRow = i + 2;
+      break;
+    }
+  }
+
+  const requestBody = {
+    values: [
+      [
+        projectNumber, null, projectName, null,
+        formattedDate, approvedTotal,
+        null, null, null,  // G H I
+        null, null, null,  // J K L
+        null, null, null,  // M N O
+        null, null, null,  // P Q R
+        null, null,        // S T
+        status             // U
+      ]
+    ]
+  };
+
+  const appendRange = `'${sheetName}'!A${nextRow}:U${nextRow}`;
+  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${appendRange}?valueInputOption=USER_ENTERED`;
+
+  const appendResponse = await fetchWithZapier(appendUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  });
+
+  await appendResponse.throwErrorIfNotOk();
+
+  return { result: `Data appended successfully at row ${nextRow}` };
+}

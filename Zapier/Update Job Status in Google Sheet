@@ -1,0 +1,100 @@
+export async function updateJobStatusInSheet({
+  spreadsheetId,
+  jobId,
+  status
+}: {
+  spreadsheetId: string;
+  jobId: string;
+  status: string;
+}): Promise<{ result: string }> {
+  try {
+    console.log('Input parameters:', { spreadsheetId, jobId, status });
+
+    // Step 1: Find which sheet contains the Job ID (check 2026 first, then 2025)
+    const sheets = ['2026', '2025'];
+    let sheetName: string | null = null;
+    let rowIndex = -1;
+
+    for (const sheet of sheets) {
+      try {
+        const range = `${sheet}!A:A`;
+        const getResponse = await fetchWithZapier(
+          `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`,
+          { method: 'GET' }
+        );
+        await getResponse.throwErrorIfNotOk();
+        const data = await getResponse.json();
+        console.log(`API Response for ${sheet}:`, data);
+
+        const values = data.values || [];
+        const foundIndex = values.findIndex(row => String(row[0] || '').trim() === jobId.trim());
+        if (foundIndex !== -1) {
+          sheetName = sheet;
+          rowIndex = foundIndex;
+          break;
+        }
+      } catch (error) {
+        // Continue to next sheet if this one fails
+        continue;
+      }
+    }
+
+    if (sheetName === null || rowIndex === -1) {
+      throw new Error(`Job ID ${jobId} not found in sheets "2026" or "2025".`);
+    }
+    const rowNumber = rowIndex + 1;
+    console.log(`Updating row ${rowNumber} in sheet "${sheetName}":`, rowNumber);
+
+    // Step 2: Define statuses that map to "In Billing"
+    const billingStatuses = new Set([
+      "PARTIAL INVOICE",
+      "JOB COMPLETE",
+      "INVOICE READY",
+      "INVOICE SENT",
+      "PENDING INSURANCE SUPPLEMENTS",
+      "REVIEWS",
+      "PAID & CLOSED"
+    ]);
+
+    // Step 3: Process the status
+    const normalizedStatus = status.toUpperCase().trim();
+    console.log('Normalized status:', normalizedStatus);
+    let finalStatus = billingStatuses.has(normalizedStatus) ? "In Billing" : status;
+    console.log('Final status before Title Case:', finalStatus);
+
+    // Step 4: Convert to Title Case
+    const toTitleCase = (str: string): string =>
+      str
+        .toLowerCase()
+        .split(" ")
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+    finalStatus = toTitleCase(finalStatus);
+    console.log('Final status after Title Case:', finalStatus);
+
+    // Step 5: Define and update the status range (column U)
+    const statusRange = `${sheetName}!U${rowNumber}`;
+    const requestBody = {
+      range: statusRange,
+      majorDimension: 'ROWS',
+      values: [[finalStatus]]
+    };
+    console.log('Updating range:', statusRange, 'with body:', requestBody);
+
+    const updateResponse = await fetchWithZapier(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${statusRange}?valueInputOption=RAW`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      }
+    );
+    await updateResponse.throwErrorIfNotOk();
+    console.log('Update API Response:', await updateResponse.json());
+
+    return { result: `Status updated successfully for Job ID ${jobId} as "${finalStatus}" in sheet "${sheetName}".` };
+  } catch (error) {
+    console.error('Error updating job status:', error);
+    return { result: `Error: ${error.message}` };
+  }
+}

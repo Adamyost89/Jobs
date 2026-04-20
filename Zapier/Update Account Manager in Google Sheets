@@ -1,0 +1,59 @@
+export async function updateAccountManager({
+  spreadsheetId,
+  jobId,
+  accountManager
+}: {
+  spreadsheetId: string;
+  jobId: string;
+  accountManager: string;
+}): Promise<{ result: string }> {
+  // Step 1: Find which sheet contains the Job ID (check 2026 first, then 2025)
+  const sheets = ['2026', '2025'];
+  let sheetName: string | null = null;
+  let rowIndex = -1;
+
+  for (const sheet of sheets) {
+    try {
+      const range = `${sheet}!A:A`;
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`;
+      const response = await fetchWithZapier(url, { method: 'GET' });
+      await response.throwErrorIfNotOk();
+      const data = await response.json();
+      const values: string[][] = data.values || [];
+
+      const foundIndex = values.findIndex(row => String(row[0] || '').trim() === jobId.trim());
+      if (foundIndex !== -1) {
+        sheetName = sheet;
+        rowIndex = foundIndex;
+        break;
+      }
+    } catch (error) {
+      // Continue to next sheet if this one fails
+      continue;
+    }
+  }
+
+  if (sheetName === null || rowIndex === -1) {
+    throw new Error(`Job ID "${jobId}" not found in sheets "2026" or "2025".`);
+  }
+
+  const rowNumber = rowIndex + 1;
+
+  // Step 2: Update column I with only the first name
+  const firstName = accountManager.split(' ')[0]; // Take the first part of the name
+  const updateRange = `${sheetName}!I${rowNumber}`;
+  const requestBody = {
+    range: updateRange,
+    majorDimension: 'ROWS',
+    values: [[firstName]] // Use only the first name
+  };
+  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${updateRange}?valueInputOption=RAW`;
+  const updateResponse = await fetchWithZapier(updateUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody)
+  });
+  await updateResponse.throwErrorIfNotOk();
+
+  return { result: `Account Manager updated to "${firstName}" for Job ID "${jobId}" in column I of sheet "${sheetName}".` };
+}

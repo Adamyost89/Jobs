@@ -1,0 +1,47 @@
+export async function getJobNumberFromSheet({
+  spreadsheetId,
+  jobId
+}: {
+  spreadsheetId: string;
+  jobId: string;
+}): Promise<{ result: string | null }> {
+  // Search in both sheets (check 2026 first, then 2025)
+  const sheets = ['2026', '2025'];
+
+  for (const sheetName of sheets) {
+    try {
+      // Define the range to search for the Job ID in column A and get the corresponding job number from column B
+      const range = `${sheetName}!A:B`;
+
+      // Construct the URL for the Google Sheets API request
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}`;
+
+      // Fetch the data from the specified range in the Google Sheet
+      const response = await fetchWithZapier(url, {
+        method: 'GET'
+      });
+
+      // Throw an error if the response is not OK
+      await response.throwErrorIfNotOk();
+
+      // Parse the JSON response to get the values
+      const data = await response.json();
+
+      // Extract the values from the response
+      const values: string[][] = data.values || [];
+
+      // Iterate over the rows to find the jobId in column A and get the corresponding job number from column B
+      for (const row of values) {
+        if (String(row[0] || '').trim() === jobId.trim()) {
+          return { result: row[1] || null };
+        }
+      }
+    } catch (error) {
+      // Continue to next sheet if this one fails
+      continue;
+    }
+  }
+
+  // Return null if not found in either sheet
+  return { result: null };
+}

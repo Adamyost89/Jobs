@@ -1,0 +1,46 @@
+export async function getColumnAValuesFromSheet2025(params: { spreadsheetId: string }): Promise<{ result: any[] }> {
+  // Extract the spreadsheetId from the input object
+  const { spreadsheetId } = params;
+
+  // Get values from both 2026 and 2025 sheets
+  const sheets = ['2026', '2025'];
+  const allValues: any[] = [];
+
+  for (const sheetName of sheets) {
+    try {
+      // Define the range to retrieve values from column A
+      const range = `${sheetName}!A:A`;
+
+      // Construct the URL for the Google Sheets API request
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+
+      // Make the API request using fetchWithZapier
+      const response = await fetchWithZapier(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      // Throw an error if the response is not ok
+      await response.throwErrorIfNotOk();
+
+      // Parse the JSON response
+      const data = await response.json();
+
+      // Flatten the 2D array into a 1D array and filter out empty values
+      const columnAValues = (data.values || []).flat().filter(value => value !== "" && value !== undefined && value !== null);
+      allValues.push(...columnAValues);
+    } catch (error) {
+      // Continue to next sheet if this one fails
+      console.log(`Error reading ${sheetName}:`, error);
+      continue;
+    }
+  }
+
+  // Log the result for debugging
+  console.log("Column A values from both sheets:", allValues);
+
+  // Return the flattened values from both sheets
+  return { result: allValues };
+}

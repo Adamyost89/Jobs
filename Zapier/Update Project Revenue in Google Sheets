@@ -1,0 +1,175 @@
+// Helper function to validate that values array matches the expected range
+function validateRangeAndValues(range: string, values: any[][]): void {
+  // Extract column range from A1 notation (e.g., "K229:AC229" -> K to AC)
+  const rangeMatch = range.match(/([A-Z]+)(\d+):([A-Z]+)(\d+)/);
+  if (!rangeMatch) {
+    // Single cell range (e.g., "K229")
+    const singleCellMatch = range.match(/([A-Z]+)(\d+)/);
+    if (singleCellMatch && values[0]?.length !== 1) {
+      throw new Error(`Range ${range} expects 1 value, but got ${values[0]?.length || 0} values`);
+    }
+    return;
+  }
+  
+  const startCol = rangeMatch[1];
+  const endCol = rangeMatch[3];
+  
+  // Convert column letters to numbers (A=1, B=2, ..., Z=26, AA=27, AB=28, AC=29, etc.)
+  function colToNum(col: string): number {
+    let num = 0;
+    for (let i = 0; i < col.length; i++) {
+      num = num * 26 + (col.charCodeAt(i) - 64);
+    }
+    return num;
+  }
+  
+  // Helper to convert column number back to letter for error messages
+  function numToCol(num: number): string {
+    let col = '';
+    while (num > 0) {
+      const remainder = (num - 1) % 26;
+      col = String.fromCharCode(65 + remainder) + col;
+      num = Math.floor((num - 1) / 26);
+    }
+    return col;
+  }
+  
+  const startColNum = colToNum(startCol);
+  const endColNum = colToNum(endCol);
+  const expectedCols = endColNum - startColNum + 1;
+  const actualCols = values[0]?.length || 0;
+  
+  if (actualCols !== expectedCols) {
+    const overflowCol = numToCol(startColNum + actualCols - 1);
+    throw new Error(`Range ${range} expects ${expectedCols} columns (${startCol} to ${endCol}), but values array has ${actualCols} values. This will cause a write to column ${overflowCol} which is outside the range. Please trim the values array to exactly ${expectedCols} elements.`);
+  }
+}
+
+// Formula safe single cell updater for Net Revenue in column K
+export async function updateSheetWithNetRevenue({
+  spreadsheetId,
+  projectNumber,
+  netRevenue
+}: {
+  spreadsheetId: string;
+  projectNumber: string;
+  netRevenue: number;
+}): Promise<{ result: string }> {
+  const projectColumn = "A";           // change to "A" if Project Number is in column A
+  const firstDataRow = 2;              // assumes headers on row 1
+
+  // 1) Find which sheet contains the Project Number (check 2026 first, then 2025, then 2024)
+  const sheets = ['2026', '2025', '2024'];
+  let sheetName: string | null = null;
+  let rowIndex = -1;
+
+  for (const sheet of sheets) {
+    try {
+      const findUrl =
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/` +
+        `${sheet}!${projectColumn}${firstDataRow}:${projectColumn}10000?valueRenderOption=UNFORMATTED_VALUE`;
+
+      const findRes = await fetchWithZapier(findUrl);
+      await findRes.throwErrorIfNotOk();
+      const findJson = await findRes.json();
+      const colValues: any[][] = findJson.values || [];
+
+      const wanted = String(projectNumber).trim();
+      const idx = colValues.findIndex(r => String(r?.[0] ?? "").trim() === wanted);
+      if (idx !== -1) {
+        sheetName = sheet;
+        rowIndex = idx;
+        break;
+      }
+    } catch (error) {
+      // Continue to next sheet if this one fails
+      continue;
+    }
+  }
+
+  if (sheetName === null || rowIndex === -1) {
+    throw new Error(`Project Number ${projectNumber} not found in sheets "2026", "2025", or "2024" column ${projectColumn}.`);
+  }
+  const rowNumber = firstDataRow + rowIndex;
+
+  // 2) Read K for that row twice, once as value and once as formula
+  const kRange = `${sheetName}!K${rowNumber}:K${rowNumber}`;
+
+  const kValueUrl =
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/` +
+    `${kRange}?valueRenderOption=UNFORMATTED_VALUE`;
+  const kFormulaUrl =
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/` +
+    `${kRange}?valueRenderOption=FORMULA`;
+
+  const [kValRes, kFormRes] = await Promise.all([
+    fetchWithZapier(kValueUrl),
+    fetchWithZapier(kFormulaUrl)
+  ]);
+  await kValRes.throwErrorIfNotOk();
+  await kFormRes.throwErrorIfNotOk();
+
+  const kValJson = await kValRes.json();
+  const kFormJson = await kFormRes.json();
+  const currentK = Number(kValJson.values?.[0]?.[0] ?? 0);
+  const kFormula = String(kFormJson.values?.[0]?.[0] ?? "");
+  const kHasFormula = kFormula.startsWith("=");
+
+  if (kHasFormula) {
+    // Abort to avoid blowing away your formula
+    return { result: `Skipped update. K${rowNumber} contains a formula.` };
+  }
+
+  const updated = currentK + Number(netRevenue || 0);
+
+  // 3) Update K cell
+  const updateUrl =
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/` +
+    `${sheetName}!K${rowNumber}?valueInputOption=USER_ENTERED`;
+
+  // Ensure values array matches the range (single cell = 1 value)
+  const valuesArray = [[updated]];
+  const updateRange = `${sheetName}!K${rowNumber}`;
+  
+  // Validate: single cell range should have exactly 1 value
+  validateRangeAndValues(updateRange, valuesArray);
+
+  const updateBody = {
+    range: updateRange,
+    majorDimension: "ROWS",
+    values: valuesArray
+  };
+
+  const putRes = await fetchWithZapier(updateUrl, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updateBody)
+  });
+  await putRes.throwErrorIfNotOk();
+
+  // 4) Update AC column with current date if sheet is 2024 or 2025
+  let resultMessage = `Updated K${rowNumber} to ${updated}.`;
+  if (sheetName === "2024" || sheetName === "2025") {
+    const currentDate = new Date().toISOString().split('T')[0]; // Format as YYYY-MM-DD
+    const acUpdateUrl =
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/` +
+      `${sheetName}!AC${rowNumber}?valueInputOption=USER_ENTERED`;
+    
+    const acUpdateBody = {
+      range: `${sheetName}!AC${rowNumber}`,
+      majorDimension: "ROWS",
+      values: [[currentDate]]
+    };
+
+    const acPutRes = await fetchWithZapier(acUpdateUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(acUpdateBody)
+    });
+    await acPutRes.throwErrorIfNotOk();
+    
+    resultMessage = `Updated K${rowNumber} to ${updated} and AC${rowNumber} to ${currentDate}.`;
+  }
+
+  return { result: resultMessage };
+}

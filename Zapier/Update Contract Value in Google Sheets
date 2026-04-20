@@ -1,0 +1,90 @@
+export async function updateContractValue({
+  spreadsheetId,
+  projectNumber,
+  newContractValue
+}: {
+  spreadsheetId: string;
+  projectNumber: string;
+  newContractValue: number;
+}): Promise<{ result: string }> {
+  try {
+    // Step 1: Find which sheet contains the project number (check 2026 first, then 2025)
+    const sheets = ['2026', '2025'];
+    let sheetName: string | null = null;
+    let targetRow = -1;
+
+    for (const sheet of sheets) {
+      try {
+        const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheet}!A:F`;
+        const getResponse = await fetchWithZapier(getUrl);
+
+        await getResponse.throwErrorIfNotOk();
+
+        const getData = await getResponse.json();
+        const values = getData.values || [];
+
+        // Find the row with the specified project number in column A
+        for (let i = 0; i < values.length; i++) {
+          if (String(values[i][0] || '').trim() === projectNumber.trim()) {
+            sheetName = sheet;
+            targetRow = i + 1; // Convert to 1-based index for Google Sheets
+            break;
+          }
+        }
+
+        if (sheetName !== null) {
+          break; // Found it, exit the outer loop
+        }
+      } catch (error) {
+        // Continue to next sheet if this one fails
+        continue;
+      }
+    }
+
+    if (sheetName === null || targetRow === -1) {
+      return { result: `Project number "${projectNumber}" not found in sheets "2026" or "2025".` };
+    }
+
+    // Step 2: Get the current contract value from the found sheet
+    const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${sheetName}!A:F`;
+    const getResponse = await fetchWithZapier(getUrl);
+    await getResponse.throwErrorIfNotOk();
+    const getData = await getResponse.json();
+    const values = getData.values || [];
+
+    // Step 3: Retrieve the current contract value from column F
+    const currentContractValueStr = values[targetRow - 1][5] || '0';
+
+    // Step 4: Remove non-numeric characters from the current value
+    const cleanedCurrentValueStr = currentContractValueStr.replace(/[^\d.-]/g, '');
+    const currentContractValue = parseFloat(cleanedCurrentValueStr);
+
+    // Ensure the current contract value is a valid number, default to zero if not
+    const validCurrentContractValue = isNaN(currentContractValue) ? 0 : currentContractValue;
+
+    // Step 5: Calculate the new total contract value
+    // Ensure both values are treated as numbers
+    const updatedContractValue = Number(validCurrentContractValue) + Number(newContractValue);
+
+    // Step 3: Update the contract value in column F
+    const updateData = {
+      range: `${sheetName}!F${targetRow}`,
+      majorDimension: "ROWS",
+      values: [[updatedContractValue]] // Ensure the value is treated as a number
+    };
+
+    const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${updateData.range}?valueInputOption=USER_ENTERED`;
+    const updateResponse = await fetchWithZapier(updateUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateData)
+    });
+
+    await updateResponse.throwErrorIfNotOk();
+
+    return { result: `Contract value updated successfully in sheet "${sheetName}".` };
+
+  } catch (error) {
+    return { result: `Error: ${error.message}` };
+  }
+}

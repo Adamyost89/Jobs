@@ -78,6 +78,24 @@ export function UserManagementSettings({
     await load();
   }
 
+  async function deleteUser(id: string, email: string) {
+    setMsg(null);
+    const ok = window.confirm(`Delete user "${email}"? This cannot be undone.`);
+    if (!ok) return;
+
+    setBusy(true);
+    const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+    const j = await res.json().catch(() => ({}));
+    setBusy(false);
+
+    if (!res.ok) {
+      setMsg(typeof j.error === "string" ? j.error : "Delete failed");
+      return;
+    }
+    setMsg("User deleted.");
+    await load();
+  }
+
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
@@ -137,12 +155,12 @@ export function UserManagementSettings({
               <th>Email</th>
               <th>Role</th>
               <th>Salesperson</th>
-              <th style={{ minWidth: "14rem" }}>Change</th>
+              <th style={{ minWidth: "16rem" }}>Change</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((u) => (
-              <UserRow key={u.id} u={u} salespeople={salespeople} busy={busy} onPatch={patchUser} />
+              <UserRow key={u.id} u={u} salespeople={salespeople} busy={busy} onPatch={patchUser} onDelete={deleteUser} />
             ))}
           </tbody>
         </table>
@@ -156,11 +174,13 @@ function UserRow({
   salespeople,
   busy,
   onPatch,
+  onDelete,
 }: {
   u: Row;
   salespeople: { id: string; name: string }[];
   busy: boolean;
   onPatch: (id: string, body: { role?: Role; salespersonId?: string | null; newPassword?: string }) => Promise<void>;
+  onDelete: (id: string, email: string) => Promise<void>;
 }) {
   const [role, setRole] = useState(u.role);
   const [spId, setSpId] = useState(u.salespersonId ?? "");
@@ -198,20 +218,31 @@ function UserRow({
             onChange={(e) => setPw(e.target.value)}
             style={{ maxWidth: 220 }}
           />
-          <button
-            className="btn secondary"
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              void onPatch(u.id, {
-                role,
-                salespersonId: role === Role.SALESMAN ? spId || null : null,
-                newPassword: pw.trim() || undefined,
-              }).then(() => setPw(""))
-            }
-          >
-            Save changes
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              className="btn secondary"
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void onPatch(u.id, {
+                  role,
+                  salespersonId: role === Role.SALESMAN ? spId || null : null,
+                  newPassword: pw.trim() || undefined,
+                }).then(() => setPw(""))
+              }
+            >
+              Save changes
+            </button>
+            <button
+              className="btn secondary"
+              type="button"
+              disabled={busy}
+              style={{ background: "#7f1d1d", color: "#fee2e2" }}
+              onClick={() => void onDelete(u.id, u.email)}
+            >
+              Delete user
+            </button>
+          </div>
         </div>
       </td>
     </tr>
