@@ -166,6 +166,7 @@ async function importAlignedPersonSheet(
 
   let n = 0;
   let skippedMismatch = 0;
+  let zeroedMissingCanonical = 0;
   const maxR = Math.min(rowsPerson.length, rowsMaster.length);
   for (let r = 1; r < maxR; r++) {
     const jobNumber = jobNumberFromMasterRow(rowsMaster, layout, r);
@@ -181,23 +182,38 @@ async function importAlignedPersonSheet(
     if (paidRaw === 0 && owedRaw === 0 && !override) continue;
 
     const canonical = canonicalByJobSp.get(canonicalKey(jobNumber, salespersonName));
-    if (
-      canonical &&
-      (!sameMoney(canonical.paid, paidRaw) ||
-        !sameMoney(canonical.owed, owedRaw) ||
-        canonical.override !== override)
-    ) {
-      skippedMismatch += 1;
-      continue;
-    }
-
     const job = await prisma.job.findUnique({ where: { jobNumber } });
     if (!job) continue;
-
     const existing = await prisma.commission.findUnique({
       where: { jobId_salespersonId: { jobId: job.id, salespersonId: sp.id } },
     });
     if (existing?.override) continue;
+
+    // Commission Data is the canonical source for these imports. If a job/rep pair is
+    // absent there, force ledger amounts to zero so stale row-aligned values cannot persist.
+    if (!canonical) {
+      if (existing) {
+        await prisma.commission.update({
+          where: { id: existing.id },
+          data: {
+            paidAmount: new Prisma.Decimal("0.00"),
+            owedAmount: new Prisma.Decimal("0.00"),
+            override: false,
+          },
+        });
+        zeroedMissingCanonical += 1;
+      }
+      continue;
+    }
+
+    if (
+      !sameMoney(canonical.paid, paidRaw) ||
+        !sameMoney(canonical.owed, owedRaw) ||
+        canonical.override !== override
+    ) {
+      skippedMismatch += 1;
+      continue;
+    }
 
     const { paid, owed } = normalizeImportedCommissionAmounts(job.year, paidRaw, owedRaw);
 
@@ -222,7 +238,10 @@ async function importAlignedPersonSheet(
     sheetLabel,
     "(aligned) commission rows:",
     n,
-    skippedMismatch > 0 ? `| skipped mismatches vs Commission Data: ${skippedMismatch}` : ""
+    skippedMismatch > 0 ? `| skipped mismatches vs Commission Data: ${skippedMismatch}` : "",
+    zeroedMissingCanonical > 0
+      ? `| zeroed stale rows missing from Commission Data: ${zeroedMissingCanonical}`
+      : ""
   );
 }
 
