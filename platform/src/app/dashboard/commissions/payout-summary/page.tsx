@@ -59,6 +59,8 @@ export default async function PayoutSummaryPage({
       postedLabel: formatDateInEastern(l.createdAt),
     })),
   }));
+  const grandTotalPaid = byWindow.reduce((sum, w) => sum + w.total, 0);
+  const grandTotalLabel = yearInt === null ? "all years" : String(yearInt);
 
   const money2 = (n: number) =>
     n.toLocaleString(undefined, {
@@ -116,6 +118,9 @@ export default async function PayoutSummaryPage({
           <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>By pay period (all reps combined)</h2>
           <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
             Click a row to expand and see every posted payout line in that check bucket.
+          </p>
+          <p style={{ margin: 0, fontSize: "0.9rem" }}>
+            <strong>Grand total paid ({grandTotalLabel}):</strong> {money2(grandTotalPaid)}
           </p>
           <PayPeriodAllRepsTable rows={payPeriodAllRepsRows} />
 
