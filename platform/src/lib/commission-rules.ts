@@ -28,7 +28,7 @@ export type CommissionComputeContext = {
   customerPaid: number;
   /** Revenue target used to measure payment progress. */
   commissionableTotal: number;
-  /** Explicit settlement signal from source systems. */
+  /** Explicit settlement signal from source systems (kept for auditing/UI, not payout progression). */
   paidInFull: boolean;
   primarySalespersonName: string | null;
   drewParticipation: string | null;
@@ -184,8 +184,8 @@ export function computeCommissionsForJob(ctx: CommissionComputeContext): Commiss
   const out: CommissionRowCalc[] = [];
   const paid = Math.max(0, ctx.customerPaid);
   const invoiceBase = Math.max(0, ctx.commissionableTotal);
-  const paymentProgress =
-    ctx.paidInFull === true ? 1 : invoiceBase > 0.0005 ? clamp01(paid / invoiceBase) : 0;
+  // Commissions are earned only from collected customer cash, never from a paid-in-full flag alone.
+  const paymentProgress = invoiceBase > 0.0005 ? clamp01(paid / invoiceBase) : 0;
 
   for (const sp of orderedPeopleNames(ctx.plan)) {
     const rule = ctx.plan.people[sp];

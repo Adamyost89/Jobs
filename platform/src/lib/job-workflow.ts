@@ -97,12 +97,8 @@ export async function recalculateJobAndCommissions(jobId: string) {
 
   const basis = dec(job.projectRevenue) > 0 ? dec(job.projectRevenue) : dec(job.contractAmount) + dec(job.changeOrders);
   const commissionableTotal = dec(job.invoicedTotal) > 0 ? dec(job.invoicedTotal) : basis;
-  const customerPaid =
-    dec(job.amountPaid ?? 0) > 0
-      ? dec(job.amountPaid ?? 0)
-      : job.paidInFull
-        ? commissionableTotal
-        : 0;
+  // Commission earning follows actual customer cash collected (Amount Paid) only.
+  const customerPaid = Math.max(0, dec(job.amountPaid ?? 0));
 
   const planRow = await prisma.commissionPlan.findUnique({ where: { year: job.year } });
   const plan = commissionPlanForJobYear(job.year, planRow?.config);
