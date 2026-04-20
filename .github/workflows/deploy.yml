@@ -19,14 +19,19 @@ jobs:
           git fetch origin main
           git checkout main
           git reset --hard origin/main
-          git clean -fd
+          git clean -fd -e platform/docker-compose.prod.yml
           echo "Server repo now at commit: $(git rev-parse --short HEAD)"
           echo "Commit subject: $(git log -1 --pretty=%s)"
 
           cd platform
-          test -f docker-compose.prod.yml
-          docker compose -f docker-compose.prod.yml -p elevated up -d --build --force-recreate --remove-orphans
-          docker compose -f docker-compose.prod.yml -p elevated ps
+          compose_file="docker-compose.prod.yml"
+          if [ ! -f "$compose_file" ]; then
+            compose_file="docker-compose.yml"
+          fi
+          test -f "$compose_file"
+          echo "Using compose file: $compose_file"
+          docker compose -f "$compose_file" -p elevated up -d --build --force-recreate --remove-orphans
+          docker compose -f "$compose_file" -p elevated ps
 
           # Wait for the app to be reachable from inside the server first.
           # This avoids failing immediately on transient public 502s while the app boots.
@@ -36,8 +41,8 @@ jobs:
             fi
             if [ "$i" -eq 30 ]; then
               echo "App did not become ready on 127.0.0.1:3301"
-              docker compose -f docker-compose.prod.yml -p elevated logs --tail=200 app || true
-              docker compose -f docker-compose.prod.yml -p elevated logs --tail=200 db || true
+              docker compose -f "$compose_file" -p elevated logs --tail=200 app || true
+              docker compose -f "$compose_file" -p elevated logs --tail=200 db || true
               exit 1
             fi
             sleep 2
