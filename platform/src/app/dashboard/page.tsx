@@ -47,8 +47,9 @@ export default async function DashboardHome({
   yearOptsSet.add(workYear);
   const yearOpts = [...yearOptsSet].sort((a, b) => b - a);
 
+  const canSeeGp = canViewAllJobs(user);
   const jobWhere: Prisma.JobWhereInput = { year: workYear };
-  if (!canViewAllJobs(user)) {
+  if (!canSeeGp) {
     jobWhere.salespersonId = user.salespersonId ?? "__none__";
   }
 
@@ -111,10 +112,10 @@ export default async function DashboardHome({
               <th className="cell-num">Contract</th>
               <th className="cell-num">Change orders</th>
               <th className="cell-num">Total</th>
-              <th className="cell-num">GP</th>
+              {canSeeGp ? <th className="cell-num">GP</th> : null}
               <th className="cell-num">Retail %</th>
               <th className="cell-num">Insurance %</th>
-              <th className="cell-num">GP %</th>
+              {canSeeGp ? <th className="cell-num">GP %</th> : null}
               <th className="cell-num">Avg / contract</th>
               <th className="cell-num">Open jobs</th>
             </tr>
@@ -130,10 +131,10 @@ export default async function DashboardHome({
                 <td className="cell-num">{money2(r.contractAmt)}</td>
                 <td className="cell-num">{money2(r.changeOrders)}</td>
                 <td className="cell-num">{money2(r.total)}</td>
-                <td className="cell-num">{money2(r.gp)}</td>
+                {canSeeGp ? <td className="cell-num">{money2(r.gp)}</td> : null}
                 <td className="cell-num">{formatPctOrDash(r.retailPct)}</td>
                 <td className="cell-num">{formatPctOrDash(r.insurancePct)}</td>
-                <td className="cell-num">{formatPctOrDash(r.gpPctOfTotal)}</td>
+                {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.gpPctOfTotal)}</td> : null}
                 <td className="cell-num">{money2(r.avgPerContract)}</td>
                 <td className="cell-num">{r.openJobs}</td>
               </DrilldownTableRow>
@@ -144,10 +145,10 @@ export default async function DashboardHome({
               <td className="cell-num">{money2(grand.contractAmt)}</td>
               <td className="cell-num">{money2(grand.changeOrders)}</td>
               <td className="cell-num">{money2(grand.total)}</td>
-              <td className="cell-num">{money2(grand.gp)}</td>
+              {canSeeGp ? <td className="cell-num">{money2(grand.gp)}</td> : null}
               <td className="cell-num">{formatPctOrDash(grand.retailPct)}</td>
               <td className="cell-num">{formatPctOrDash(grand.insurancePct)}</td>
-              <td className="cell-num">{formatPctOrDash(grand.gpPctOfTotal)}</td>
+              {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.gpPctOfTotal)}</td> : null}
               <td className="cell-num">{money2(grand.avgPerContract)}</td>
               <td className="cell-num">{grand.openJobs}</td>
             </tr>
