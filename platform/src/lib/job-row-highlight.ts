@@ -2,7 +2,7 @@
 import type { Prisma } from "@prisma/client";
 import { hasDisplayableGp } from "./job-workflow";
 
-export type JobRowHighlight = "good" | "bad" | "warn" | "";
+export type JobRowHighlight = "good" | "mid" | "bad" | "warn" | "";
 
 /** Decimal fields may be plain numbers on the client after JSON serialization. */
 export type JobLike = {
@@ -27,6 +27,7 @@ function num(
 
 export type JobHighlightRules = {
   strongGpPct: number;
+  mediumGpPct: number;
   thinGpPct: number;
   completeMinGpPct: number;
   minRevenue: number;
@@ -34,6 +35,7 @@ export type JobHighlightRules = {
 
 export const DEFAULT_JOB_HIGHLIGHT_RULES: JobHighlightRules = {
   strongGpPct: 35,
+  mediumGpPct: 25,
   thinGpPct: 15,
   completeMinGpPct: 25,
   minRevenue: 500,
@@ -60,6 +62,7 @@ export function jobRowHighlightClass(job: JobLike, rules?: Partial<JobHighlightR
   if (rev > r.minRevenue && gp < 0) return "row-hl row-hl--bad";
   if (rev > r.minRevenue && gpPct > 0 && gpPct < r.thinGpPct) return "row-hl row-hl--bad";
   if (rev > r.minRevenue && gpPct >= r.strongGpPct) return "row-hl row-hl--good";
+  if (rev > r.minRevenue && gpPct >= r.mediumGpPct) return "row-hl row-hl--mid";
   if (st.includes("COMPLETE") && gpPct >= r.completeMinGpPct) return "row-hl row-hl--good";
   if (st.includes("IN_BILLING") && gpPct > 0 && gpPct < r.thinGpPct) return "row-hl row-hl--warn";
   return "";

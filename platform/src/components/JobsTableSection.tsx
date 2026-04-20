@@ -18,7 +18,7 @@ import {
   saveJobsTablePrefsToStorage,
   visibleColumnOrder,
 } from "@/lib/jobs-table-preferences";
-import { canEditJobs, type SessionUser } from "@/lib/rbac";
+import { canEditJobs, canViewAllJobs, type SessionUser } from "@/lib/rbac";
 
 export type JobsTableRowDTO = {
   id: string;
@@ -61,6 +61,7 @@ function toJobLike(row: JobsTableRowDTO): JobLike {
 function highlightRulesFromPrefs(p: JobsTablePrefsV1) {
   return {
     strongGpPct: p.highlights.strongGpPct,
+    mediumGpPct: p.highlights.mediumGpPct,
     thinGpPct: p.highlights.thinGpPct,
     completeMinGpPct: p.highlights.completeMinGpPct,
     minRevenue: p.highlights.minRevenue,
@@ -72,6 +73,8 @@ function hlVarsStyle(h: JobsTablePrefsV1["highlights"]): CSSProperties {
   return {
     ["--jobs-hl-good-border" as string]: c.good.border,
     ["--jobs-hl-good-rowbg" as string]: c.good.rowBg,
+    ["--jobs-hl-mid-border" as string]: c.medium.border,
+    ["--jobs-hl-mid-rowbg" as string]: c.medium.rowBg,
     ["--jobs-hl-bad-border" as string]: c.bad.border,
     ["--jobs-hl-bad-rowbg" as string]: c.bad.rowBg,
     ["--jobs-hl-warn-border" as string]: c.warn.border,
@@ -96,6 +99,7 @@ export function JobsTableSection({
 }) {
   const router = useRouter();
   const canEdit = canEditJobs(user);
+  const canSeeGp = canViewAllJobs(user);
   const [prefs, setPrefs] = useState<JobsTablePrefsV1>(DEFAULT_JOBS_TABLE_PREFS);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
@@ -110,7 +114,10 @@ export function JobsTableSection({
     saveJobsTablePrefsToStorage(next);
   }, []);
 
-  const cols = useMemo(() => visibleColumnOrder(prefs), [prefs]);
+  const cols = useMemo(
+    () => visibleColumnOrder(prefs).filter((id) => canSeeGp || (id !== "gp" && id !== "gpPct")),
+    [prefs, canSeeGp]
+  );
   const visibleRows = useMemo(
     () => rows.filter((row) => !deletedIds.has(row.id)),
     [rows, deletedIds]
@@ -160,6 +167,10 @@ export function JobsTableSection({
   const legendGood = {
     background: h.colors.good.legendBg,
     color: h.colors.good.legendText,
+  };
+  const legendMid = {
+    background: h.colors.medium.legendBg,
+    color: h.colors.medium.legendText,
   };
   const legendBad = {
     background: h.colors.bad.legendBg,
@@ -305,33 +316,39 @@ export function JobsTableSection({
 
   return (
     <div className="jobs-hl-vars" style={hlVarsStyle(h)}>
-      <JobsDashboardPrefsForm prefs={prefs} onChange={persist} variant="jobs" />
+      {canSeeGp ? <JobsDashboardPrefsForm prefs={prefs} onChange={persist} variant="jobs" /> : null}
 
-      <div className="card" style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.55 }}>
-        <strong style={{ color: "var(--text)" }}>GP &amp; GP%</strong> come from the <strong style={{ color: "var(--text)" }}>sheet import</strong> when
-        present. When <strong style={{ color: "var(--text)" }}>cost &gt; 0</strong> and the job is{" "}
-        <strong style={{ color: "var(--text)" }}>paid in full</strong>, the app <strong style={{ color: "var(--text)" }}>recomputes</strong> GP from
-        contract + change orders − cost.{" "}
-        {canEdit ? (
-          <>
-            Use <strong style={{ color: "var(--text)" }}>Cost</strong> and the <strong style={{ color: "var(--text)" }}>Paid</strong> toggle when the
-            invoice is settled to switch to realized GP.
-          </>
-        ) : null}
-        <br />
-        <strong style={{ color: "var(--text)" }}>Row colors</strong> (only when GP applies):{" "}
-        <span className="row-legend" style={legendGood}>
-          strong GP% (≥{h.strongGpPct}%)
-        </span>{" "}
-        ·{" "}
-        <span className="row-legend" style={legendBad}>
-          thin margin (&lt;{h.thinGpPct}%) or loss
-        </span>{" "}
-        ·{" "}
-        <span className="row-legend" style={legendWarn}>
-          cancelled / billing risk
-        </span>
-      </div>
+      {canSeeGp ? (
+        <div className="card" style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.55 }}>
+          <strong style={{ color: "var(--text)" }}>GP &amp; GP%</strong> come from the <strong style={{ color: "var(--text)" }}>sheet import</strong> when
+          present. When <strong style={{ color: "var(--text)" }}>cost &gt; 0</strong> and the job is{" "}
+          <strong style={{ color: "var(--text)" }}>paid in full</strong>, the app <strong style={{ color: "var(--text)" }}>recomputes</strong> GP from
+          contract + change orders − cost.{" "}
+          {canEdit ? (
+            <>
+              Use <strong style={{ color: "var(--text)" }}>Cost</strong> and the <strong style={{ color: "var(--text)" }}>Paid</strong> toggle when the
+              invoice is settled to switch to realized GP.
+            </>
+          ) : null}
+          <br />
+          <strong style={{ color: "var(--text)" }}>Row colors</strong> (only when GP applies):{" "}
+          <span className="row-legend" style={legendGood}>
+            {h.labels.good} (GP% ≥{h.strongGpPct}%)
+          </span>{" "}
+          ·{" "}
+          <span className="row-legend" style={legendMid}>
+            {h.labels.medium} (GP% ≥{h.mediumGpPct}%)
+          </span>{" "}
+          ·{" "}
+          <span className="row-legend" style={legendBad}>
+            {h.labels.bad} (GP% &lt;{h.thinGpPct}% or loss)
+          </span>{" "}
+          ·{" "}
+          <span className="row-legend" style={legendWarn}>
+            {h.labels.warn}
+          </span>
+        </div>
+      ) : null}
 
       <div className="card" style={{ overflowX: "auto", padding: "0.35rem 0 0.85rem" }}>
         {deleteMsg ? (
@@ -352,7 +369,7 @@ export function JobsTableSection({
             </thead>
             <tbody>
               {visibleRows.map((row) => {
-                const hl = jobRowHighlightClass(toJobLike(row), hlRules);
+                const hl = canSeeGp ? jobRowHighlightClass(toJobLike(row), hlRules) : "";
                 return (
                   <tr key={row.id} className={hl}>
                     {cols.map((id) => renderTd(row, id))}

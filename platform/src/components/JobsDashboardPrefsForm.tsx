@@ -130,6 +130,23 @@ export function JobsDashboardPrefsForm({
             />
           </label>
           <label>
+            Mid-range GP% (blue when revenue &gt; min and GP% is between thin/strong)
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              value={h.mediumGpPct}
+              onChange={(e) =>
+                onChange({
+                  ...prefs,
+                  highlights: { ...h, mediumGpPct: Number(e.target.value) || 0 },
+                })
+              }
+              style={{ width: "100%", marginTop: "0.25rem" }}
+            />
+          </label>
+          <label>
             Thin margin GP% (red / billing warn when GP% &gt; 0 and below this)
             <input
               type="number"
@@ -187,6 +204,7 @@ export function JobsDashboardPrefsForm({
             {(
               [
                 ["good", "Strong / good"],
+                ["medium", "Mid range / watch"],
                 ["bad", "Thin margin / loss"],
                 ["warn", "Cancelled / billing risk"],
               ] as const
@@ -202,8 +220,27 @@ export function JobsDashboardPrefsForm({
                     margin: 0,
                   }}
                 >
-                  <legend style={{ padding: "0 0.35rem", fontSize: "0.82rem" }}>{title}</legend>
+                  <legend style={{ padding: "0 0.35rem", fontSize: "0.82rem" }}>
+                    {h.labels[key] || title}
+                  </legend>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
+                    <label style={{ fontSize: "0.78rem", gridColumn: "1 / -1" }}>
+                      Label text
+                      <input
+                        type="text"
+                        value={h.labels[key]}
+                        onChange={(e) =>
+                          onChange({
+                            ...prefs,
+                            highlights: {
+                              ...h,
+                              labels: { ...h.labels, [key]: e.target.value },
+                            },
+                          })
+                        }
+                        style={{ width: "100%", marginTop: 2 }}
+                      />
+                    </label>
                     <label style={{ fontSize: "0.78rem" }}>
                       Left border
                       <input

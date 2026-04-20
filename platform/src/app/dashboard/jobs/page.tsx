@@ -45,6 +45,7 @@ export default async function JobsPage({
 }) {
   const user = await getSession();
   if (!user) return null;
+  const canSeeGp = canViewAllJobs(user);
 
   const sp = await searchParams;
   const q = pickString(sp.q)?.trim();
@@ -207,9 +208,9 @@ export default async function JobsPage({
       insurancePercent: j.insurancePercent?.toNumber() ?? null,
       cost: j.cost.toNumber(),
       paidInFull: j.paidInFull,
-      gp: j.gp.toNumber(),
-      gpPercent: j.gpPercent.toNumber(),
-      projectRevenue: j.projectRevenue.toNumber(),
+      gp: canSeeGp ? j.gp.toNumber() : 0,
+      gpPercent: canSeeGp ? j.gpPercent.toNumber() : 0,
+      projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
       commPaid: cx ? cx.paid : null,
       commOwed: cx ? cx.owed : null,
     };

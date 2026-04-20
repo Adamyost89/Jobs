@@ -55,13 +55,21 @@ export type HlColors = {
 
 export type JobsTableHighlightPrefs = {
   strongGpPct: number;
+  mediumGpPct: number;
   thinGpPct: number;
   /** Lower bound for GP% when status includes COMPLETE (green highlight). */
   completeMinGpPct: number;
   /** Minimum revenue (contract+CO, invoiced, or project revenue) before GP% band highlights apply. */
   minRevenue: number;
+  labels: {
+    good: string;
+    medium: string;
+    bad: string;
+    warn: string;
+  };
   colors: {
     good: HlColors;
+    medium: HlColors;
     bad: HlColors;
     warn: HlColors;
   };
@@ -80,6 +88,12 @@ const DEFAULT_COLORS: JobsTableHighlightPrefs["colors"] = {
     rowBg: "rgba(34, 197, 94, 0.07)",
     legendBg: "rgba(34, 197, 94, 0.2)",
     legendText: "#86efac",
+  },
+  medium: {
+    border: "#38bdf8",
+    rowBg: "rgba(56, 189, 248, 0.08)",
+    legendBg: "rgba(56, 189, 248, 0.2)",
+    legendText: "#bae6fd",
   },
   bad: {
     border: "#ef4444",
@@ -101,9 +115,16 @@ export const DEFAULT_JOBS_TABLE_PREFS: JobsTablePrefsV1 = {
   hiddenColumns: [],
   highlights: {
     strongGpPct: 35,
+    mediumGpPct: 25,
     thinGpPct: 15,
     completeMinGpPct: 25,
     minRevenue: 500,
+    labels: {
+      good: "Strong / good",
+      medium: "Mid range / watch",
+      bad: "Thin margin / loss",
+      warn: "Cancelled / billing risk",
+    },
     colors: DEFAULT_COLORS,
   },
 };
@@ -119,6 +140,12 @@ function parseHlColors(v: unknown, fallback: HlColors): HlColors {
   const legendBg = typeof v.legendBg === "string" ? v.legendBg : fallback.legendBg;
   const legendText = typeof v.legendText === "string" ? v.legendText : fallback.legendText;
   return { border, rowBg, legendBg, legendText };
+}
+
+function parseHlLabel(v: unknown, fallback: string): string {
+  if (typeof v !== "string") return fallback;
+  const trimmed = v.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -147,13 +174,22 @@ export function normalizeJobsTablePrefs(raw: unknown): JobsTablePrefsV1 {
 
   const hlRaw = isRecord(raw.highlights) ? raw.highlights : {};
   const colorsRaw = isRecord(hlRaw.colors) ? hlRaw.colors : {};
+  const labelsRaw = isRecord(hlRaw.labels) ? hlRaw.labels : {};
   const highlights: JobsTableHighlightPrefs = {
     strongGpPct: clamp(Number(hlRaw.strongGpPct), 0, 100) || base.highlights.strongGpPct,
+    mediumGpPct: clamp(Number(hlRaw.mediumGpPct), 0, 100) || base.highlights.mediumGpPct,
     thinGpPct: clamp(Number(hlRaw.thinGpPct), 0, 100) || base.highlights.thinGpPct,
     completeMinGpPct: clamp(Number(hlRaw.completeMinGpPct), 0, 100) || base.highlights.completeMinGpPct,
     minRevenue: Math.max(0, Number(hlRaw.minRevenue) || base.highlights.minRevenue),
+    labels: {
+      good: parseHlLabel(labelsRaw.good, base.highlights.labels.good),
+      medium: parseHlLabel(labelsRaw.medium, base.highlights.labels.medium),
+      bad: parseHlLabel(labelsRaw.bad, base.highlights.labels.bad),
+      warn: parseHlLabel(labelsRaw.warn, base.highlights.labels.warn),
+    },
     colors: {
       good: parseHlColors(colorsRaw.good, base.highlights.colors.good),
+      medium: parseHlColors(colorsRaw.medium, base.highlights.colors.medium),
       bad: parseHlColors(colorsRaw.bad, base.highlights.colors.bad),
       warn: parseHlColors(colorsRaw.warn, base.highlights.colors.warn),
     },
@@ -164,6 +200,7 @@ export function normalizeJobsTablePrefs(raw: unknown): JobsTablePrefsV1 {
     highlights.thinGpPct = highlights.strongGpPct;
     highlights.strongGpPct = t;
   }
+  highlights.mediumGpPct = clamp(highlights.mediumGpPct, highlights.thinGpPct, highlights.strongGpPct);
 
   return { version: 1, columnOrder, hiddenColumns, highlights };
 }
