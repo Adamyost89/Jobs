@@ -23,7 +23,14 @@ export function normalizeImportedCommissionAmounts(
   return { paid, owed };
 }
 
-/** Job recalc must not overwrite workbook-sourced paid/owed for these years. */
-export function skipAutoCommissionRecalcForJobYear(jobYear: number): boolean {
+/**
+ * Before cutover, sheet imports remain source-of-truth for paid/owed in 2024-2026.
+ * After cutover, app-side changes (paid toggles, costs, edits) should recalc commissions.
+ */
+export function skipAutoCommissionRecalcForJobYear(
+  jobYear: number,
+  cutoverComplete = false
+): boolean {
+  if (cutoverComplete) return false;
   return jobYear === 2024 || jobYear === 2025 || jobYear === 2026;
 }

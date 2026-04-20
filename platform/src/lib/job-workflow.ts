@@ -85,7 +85,11 @@ export async function recalculateJobAndCommissions(jobId: string) {
     data: { gp, gpPercent, status: normalized },
   });
 
-  if (skipAutoCommissionRecalcForJobYear(job.year)) {
+  const cfg = await prisma.systemConfig.findUnique({
+    where: { id: "singleton" },
+    select: { cutoverComplete: true },
+  });
+  if (skipAutoCommissionRecalcForJobYear(job.year, cfg?.cutoverComplete ?? false)) {
     return;
   }
 
