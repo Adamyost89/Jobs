@@ -50,6 +50,7 @@ export function computeGpFields(job: Pick<Job, "contractAmount" | "changeOrders"
 
 export async function allocateNextJobNumber(year: number): Promise<string> {
   const prefix = String(year);
+  const minSequence = 5001;
   const jobs = await prisma.job.findMany({
     where: { jobNumber: { startsWith: prefix } },
     select: { jobNumber: true },
@@ -58,13 +59,13 @@ export async function allocateNextJobNumber(year: number): Promise<string> {
   for (const j of jobs) {
     const rest = j.jobNumber.slice(prefix.length);
     const n = parseInt(rest, 10);
-    if (!isNaN(n) && n > 0) used.add(n);
+    if (!isNaN(n) && n >= minSequence) used.add(n);
   }
-  let next = 1;
+  let next = minSequence;
   while (used.has(next)) {
     next += 1;
   }
-  return `${prefix}${String(next).padStart(4, "0")}`;
+  return `${prefix}${String(next)}`;
 }
 
 export async function recalculateJobAndCommissions(jobId: string) {
