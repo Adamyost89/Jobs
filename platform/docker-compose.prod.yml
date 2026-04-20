@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: elevated
+      POSTGRES_PASSWORD: elevated
+      POSTGRES_DB: elevated_jobs
+    ports:
+      - "5432:5432"
+    volumes:
+      - elevated_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U elevated -d elevated_jobs"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://elevated:elevated@db:5432/elevated_jobs?schema=public}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3301:3301"
+    command: sh -c "npx prisma db push && npm run start -- -p 3301 -H 0.0.0.0"
+
+volumes:
+  elevated_pg:
