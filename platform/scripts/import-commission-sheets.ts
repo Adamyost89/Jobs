@@ -15,6 +15,17 @@ import { normalizeImportedCommissionAmounts } from "../src/lib/commission-import
 
 const prisma = new PrismaClient();
 
+async function assertImportsAllowedAfterCutover() {
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: "singleton" } });
+  const allowOverride = process.env.ALLOW_IMPORTS_AFTER_CUTOVER === "1";
+  if (cfg?.cutoverComplete && !allowOverride) {
+    throw new Error(
+      "Cutover is complete; commission imports are blocked to protect app-managed commission balances. " +
+        "Set ALLOW_IMPORTS_AFTER_CUTOVER=1 only for intentional backfills."
+    );
+  }
+}
+
 const SKIP = /^commission data$/i;
 const PERSON_YEAR = /^(.+?)\s+(20\d{2})$/;
 
@@ -110,6 +121,7 @@ async function importPersonYearSheet(wb: XLSX.WorkBook, sheetName: string) {
 }
 
 async function main() {
+  await assertImportsAllowedAfterCutover();
   const root = workbookRoot();
   const fp = resolveCommissionsXlsx(root);
   if (!fp || !fs.existsSync(fp)) {

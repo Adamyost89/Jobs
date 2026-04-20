@@ -74,7 +74,19 @@ function boolish(v: unknown): boolean {
 
 const prisma = new PrismaClient();
 
+async function assertImportsAllowedAfterCutover() {
+  const cfg = await prisma.systemConfig.findUnique({ where: { id: "singleton" } });
+  const allowOverride = process.env.ALLOW_IMPORTS_AFTER_CUTOVER === "1";
+  if (cfg?.cutoverComplete && !allowOverride) {
+    throw new Error(
+      "Cutover is complete; commission imports are blocked to protect app-managed commission balances. " +
+        "Set ALLOW_IMPORTS_AFTER_CUTOVER=1 only for intentional backfills."
+    );
+  }
+}
+
 async function main() {
+  await assertImportsAllowedAfterCutover();
   const root = workbookRoot();
   const fp = resolveJobNumberingXlsx(root);
   if (!fp || !fs.existsSync(fp)) {
