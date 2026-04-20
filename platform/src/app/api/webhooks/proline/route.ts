@@ -7,6 +7,7 @@ import {
   buildProlineProjectNameForAssignedJob,
   sendProlineNameWritebackViaZapier,
 } from "@/lib/proline-name-writeback";
+import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 
 function asDecimal(n: number): Prisma.Decimal {
   return new Prisma.Decimal(n.toFixed(2));
@@ -55,6 +56,54 @@ export async function POST(req: Request) {
 
   const e = normalized.event;
   const year = e.year ?? new Date().getFullYear();
+
+  async function findExistingJobForWebhook(): Promise<{
+    id: string;
+    jobNumber: string;
+    leadNumber: string | null;
+    prolineJobId: string | null;
+    invoicedTotal: Prisma.Decimal;
+    amountPaid: Prisma.Decimal | null;
+  } | null> {
+    const or: Prisma.JobWhereInput[] = [];
+    if (e.leadNumber) or.push({ leadNumber: e.leadNumber });
+    if (e.prolineJobId) or.push({ prolineJobId: e.prolineJobId });
+    if (!or.length) return null;
+
+    const rows = await prisma.job.findMany({
+      where: { OR: or },
+      select: {
+        id: true,
+        jobNumber: true,
+        leadNumber: true,
+        prolineJobId: true,
+        invoicedTotal: true,
+        amountPaid: true,
+        updatedAt: true,
+      },
+      orderBy: [{ updatedAt: "desc" }],
+      take: 50,
+    });
+    if (!rows.length) return null;
+
+    // Business rule: ProLine project_number identifies the job row.
+    if (e.leadNumber) {
+      const leadMatches = rows.filter((r) => r.leadNumber === e.leadNumber);
+      if (leadMatches.length) {
+        if (e.prolineJobId) {
+          const both = leadMatches.find((r) => r.prolineJobId === e.prolineJobId);
+          if (both) return both;
+        }
+        return leadMatches[0] ?? null;
+      }
+    }
+
+    if (e.prolineJobId) {
+      const prolineMatch = rows.find((r) => r.prolineJobId === e.prolineJobId);
+      if (prolineMatch) return prolineMatch;
+    }
+    return rows[0] ?? null;
+  }
 
   async function ensureRequiredNameWriteback(job: { id: string; jobNumber: string }, originalName: string | null | undefined) {
     const existing = await prisma.jobEvent.findFirst({
@@ -121,6 +170,7 @@ export async function POST(req: Request) {
     const data: Prisma.JobUpdateInput = {};
     if (e.name !== undefined) data.name = e.name;
     if (e.leadNumber !== undefined) data.leadNumber = e.leadNumber;
+    if (e.prolineJobId) data.prolineJobId = e.prolineJobId;
     if (e.contractAmount !== undefined) {
       const c = asDecimal(e.contractAmount);
       data.contractAmount = c;
@@ -163,19 +213,17 @@ export async function POST(req: Request) {
   }
 
   async function createJob() {
-    const dup = await prisma.job.findFirst({ where: { prolineJobId: e.prolineJobId } });
+    const dup = await findExistingJobForWebhook();
     if (dup) {
       return { kind: "dedupe" as const, job: dup };
     }
     const jobNumber = await allocateNextJobNumber(year);
     let salespersonId: string | null = null;
     if (e.salespersonName) {
-      const sp = await prisma.salesperson.upsert({
-        where: { name: e.salespersonName },
-        create: { name: e.salespersonName },
-        update: {},
+      const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {
+        preferFirstToken: true,
       });
-      salespersonId = sp.id;
+      salespersonId = sp?.id ?? null;
     }
     const contract = new Prisma.Decimal((e.contractAmount ?? 0).toFixed(2));
     const job = await prisma.job.create({
@@ -222,9 +270,7 @@ export async function POST(req: Request) {
   }
 
   if (e.internalType === "job.upsert") {
-    const existing = await prisma.job.findFirst({
-      where: { prolineJobId: e.prolineJobId },
-    });
+    const existing = await findExistingJobForWebhook();
     if (!existing) {
       const r = await createJob();
       if (r.kind === "dedupe") {
@@ -269,9 +315,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, jobId: existing.id, upsert: "updated" });
   }
 
-  const existing = await prisma.job.findFirst({
-    where: { prolineJobId: e.prolineJobId },
-  });
+  const existing = await findExistingJobForWebhook();
   if (!existing) {
     return NextResponse.json({ error: "Job not found for prolineJobId" }, { status: 404 });
   }
