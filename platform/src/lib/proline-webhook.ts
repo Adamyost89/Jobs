@@ -109,6 +109,12 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
     body.salespersonName = an.trim();
   }
 
+  // For ProLine-native project webhooks, stage is the business state users want visible in app status.
+  const stage = body.stage;
+  if (typeof stage === "string" && stage.trim()) {
+    body.status = stage.trim();
+  }
+
   if ((body.paidDate === undefined || body.paidDate === null || body.paidDate === "") && typeof body.paid_date === "string") {
     body.paidDate = body.paid_date;
   }

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { normalizeStatus } from "@/lib/status";
 import { allocateNextJobNumber, recalculateJobAndCommissions } from "@/lib/job-workflow";
 import { normalizeProlineWebhookBody } from "@/lib/proline-webhook";
 import {
@@ -11,6 +10,11 @@ import {
 
 function asDecimal(n: number): Prisma.Decimal {
   return new Prisma.Decimal(n.toFixed(2));
+}
+
+function statusFromWebhook(raw: string | undefined, fallback: string): string {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  return s || fallback;
 }
 
 function invoiceDeltaMarkerType(invoiceId: string): string {
@@ -122,7 +126,7 @@ export async function POST(req: Request) {
       data.contractAmount = c;
       data.projectRevenue = c;
     }
-    if (e.status !== undefined) data.status = normalizeStatus(e.status);
+    if (e.status !== undefined) data.status = statusFromWebhook(e.status, "UNKNOWN");
     if (e.cost !== undefined) data.cost = asDecimal(e.cost);
     if (e.amountPaid !== undefined) {
       const paid = Math.max(0, e.amountPaid);
@@ -186,7 +190,7 @@ export async function POST(req: Request) {
         amountPaid: e.amountPaid !== undefined ? asDecimal(Math.max(0, e.amountPaid)) : null,
         salespersonId,
         prolineJobId: e.prolineJobId,
-        status: normalizeStatus(e.status ?? ""),
+        status: statusFromWebhook(e.status, "UNKNOWN"),
         paidInFull: e.paidInFull ?? false,
         paidDate: e.paidDate ? new Date(e.paidDate) : null,
       },
