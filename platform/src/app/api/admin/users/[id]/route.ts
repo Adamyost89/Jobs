@@ -34,7 +34,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     p.salespersonId !== undefined ? p.salespersonId : nextRole === Role.SALESMAN ? target.salespersonId : null;
 
   if (nextRole === Role.SALESMAN && !nextSpId) {
-    return NextResponse.json({ error: "Salesman users must be linked to a salesperson" }, { status: 400 });
+    return NextResponse.json({ error: "Account manager users must be linked to a salesperson" }, { status: 400 });
   }
 
   if (nextSpId) {

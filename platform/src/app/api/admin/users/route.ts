@@ -48,7 +48,7 @@ export async function POST(req: Request) {
   const { email, password, role, salespersonId } = parsed.data;
 
   if (role === Role.SALESMAN && !salespersonId) {
-    return NextResponse.json({ error: "Salesman users must be linked to a salesperson" }, { status: 400 });
+    return NextResponse.json({ error: "Account manager users must be linked to a salesperson" }, { status: 400 });
   }
   if (salespersonId) {
     const sp = await prisma.salesperson.findUnique({ where: { id: salespersonId } });

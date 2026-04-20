@@ -7,10 +7,12 @@ import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { JobCostEditor } from "@/components/JobCostEditor";
 import { JobsDashboardPrefsForm } from "@/components/JobsDashboardPrefsForm";
 import { JobPaidInFullToggle } from "@/components/JobPaidInFullToggle";
-import { formatGpPercent, formatJobGpDisplay, jobRowHighlightClass } from "@/lib/job-row-highlight";
+import { formatGpPercent, formatJobGpDisplay } from "@/lib/job-row-highlight";
 import type { JobLike } from "@/lib/job-row-highlight";
+import { hasDisplayableGp } from "@/lib/job-workflow";
 import {
   DEFAULT_JOBS_TABLE_PREFS,
+  type HlColors,
   JOB_TABLE_COLUMN_LABELS,
   type JobTableColumnId,
   type JobsTablePrefsV1,
@@ -58,28 +60,17 @@ function toJobLike(row: JobsTableRowDTO): JobLike {
   };
 }
 
-function highlightRulesFromPrefs(p: JobsTablePrefsV1) {
+function rowHighlightStyle(c: HlColors): CSSProperties {
   return {
-    strongGpPct: p.highlights.strongGpPct,
-    mediumGpPct: p.highlights.mediumGpPct,
-    thinGpPct: p.highlights.thinGpPct,
-    completeMinGpPct: p.highlights.completeMinGpPct,
-    minRevenue: p.highlights.minRevenue,
+    boxShadow: `inset 3px 0 0 0 ${c.border}`,
+    background: c.rowBg,
   };
 }
 
-function hlVarsStyle(h: JobsTablePrefsV1["highlights"]): CSSProperties {
-  const { colors: c } = h;
-  return {
-    ["--jobs-hl-good-border" as string]: c.good.border,
-    ["--jobs-hl-good-rowbg" as string]: c.good.rowBg,
-    ["--jobs-hl-mid-border" as string]: c.medium.border,
-    ["--jobs-hl-mid-rowbg" as string]: c.medium.rowBg,
-    ["--jobs-hl-bad-border" as string]: c.bad.border,
-    ["--jobs-hl-bad-rowbg" as string]: c.bad.rowBg,
-    ["--jobs-hl-warn-border" as string]: c.warn.border,
-    ["--jobs-hl-warn-rowbg" as string]: c.warn.rowBg,
-  };
+function rowRevenue(row: JobsTableRowDTO): number {
+  if (row.projectRevenue > 0) return row.projectRevenue;
+  if (row.invoicedTotal > 0) return row.invoicedTotal;
+  return row.contractAmount + row.changeOrders;
 }
 
 function statusClass(s: string) {
@@ -133,8 +124,23 @@ export function JobsTableSection({
       maximumFractionDigits: 2,
     });
 
-  const hlRules = useMemo(() => highlightRulesFromPrefs(prefs), [prefs]);
   const h = prefs.highlights;
+  const positiveBands = useMemo(
+    () =>
+      [
+        { id: "good", label: h.labels.good, minGpPct: h.strongGpPct, colors: h.colors.good },
+        { id: "medium", label: h.labels.medium, minGpPct: h.mediumGpPct, colors: h.colors.medium },
+        ...h.extraBands.map((band) => ({
+          id: band.id,
+          label: band.label,
+          minGpPct: band.minGpPct,
+          colors: band.colors,
+        })),
+      ]
+        .sort((a, b) => b.minGpPct - a.minGpPct)
+        .filter((band, i, arr) => arr.findIndex((x) => x.id === band.id) === i),
+    [h]
+  );
 
   const deleteJob = useCallback(
     async (row: JobsTableRowDTO) => {
@@ -164,14 +170,6 @@ export function JobsTableSection({
     [canEdit, deletingId, router]
   );
 
-  const legendGood = {
-    background: h.colors.good.legendBg,
-    color: h.colors.good.legendText,
-  };
-  const legendMid = {
-    background: h.colors.medium.legendBg,
-    color: h.colors.medium.legendText,
-  };
   const legendBad = {
     background: h.colors.bad.legendBg,
     color: h.colors.bad.legendText,
@@ -180,6 +178,29 @@ export function JobsTableSection({
     background: h.colors.warn.legendBg,
     color: h.colors.warn.legendText,
   };
+
+  function rowStyleForHighlight(row: JobsTableRowDTO): CSSProperties | undefined {
+    const jl = toJobLike(row);
+    if (!hasDisplayableGp(jl)) return undefined;
+
+    const status = row.status.toUpperCase();
+    const gpPct = row.gpPercent;
+    const rev = rowRevenue(row);
+
+    if (status.includes("CANCEL")) return rowHighlightStyle(h.colors.warn);
+    if (rev > h.minRevenue && (row.gp < 0 || (gpPct > 0 && gpPct < h.thinGpPct))) {
+      return rowHighlightStyle(h.colors.bad);
+    }
+    if (rev > h.minRevenue) {
+      const matchedBand = positiveBands.find((band) => gpPct >= band.minGpPct);
+      if (matchedBand) return rowHighlightStyle(matchedBand.colors);
+    }
+    if (status.includes("COMPLETE") && gpPct >= h.completeMinGpPct) return rowHighlightStyle(h.colors.good);
+    if (status.includes("IN_BILLING") && gpPct > 0 && gpPct < h.thinGpPct) {
+      return rowHighlightStyle(h.colors.warn);
+    }
+    return undefined;
+  }
 
   function renderTh(id: JobTableColumnId) {
     const label = JOB_TABLE_COLUMN_LABELS[id];
@@ -315,7 +336,7 @@ export function JobsTableSection({
   }
 
   return (
-    <div className="jobs-hl-vars" style={hlVarsStyle(h)}>
+    <div className="jobs-hl-vars">
       {canSeeGp ? <JobsDashboardPrefsForm prefs={prefs} onChange={persist} variant="jobs" /> : null}
 
       {canSeeGp ? (
@@ -332,13 +353,14 @@ export function JobsTableSection({
           ) : null}
           <br />
           <strong style={{ color: "var(--text)" }}>Row colors</strong> (only when GP applies):{" "}
-          <span className="row-legend" style={legendGood}>
-            {h.labels.good} (GP% ≥{h.strongGpPct}%)
-          </span>{" "}
-          ·{" "}
-          <span className="row-legend" style={legendMid}>
-            {h.labels.medium} (GP% ≥{h.mediumGpPct}%)
-          </span>{" "}
+          {positiveBands.map((band, i) => (
+            <span key={band.id}>
+              {i > 0 ? <> · </> : null}
+              <span className="row-legend" style={{ background: band.colors.legendBg, color: band.colors.legendText }}>
+                {band.label} (GP% ≥{band.minGpPct}%)
+              </span>
+            </span>
+          ))}{" "}
           ·{" "}
           <span className="row-legend" style={legendBad}>
             {h.labels.bad} (GP% &lt;{h.thinGpPct}% or loss)
@@ -369,9 +391,9 @@ export function JobsTableSection({
             </thead>
             <tbody>
               {visibleRows.map((row) => {
-                const hl = canSeeGp ? jobRowHighlightClass(toJobLike(row), hlRules) : "";
+                const rowStyle = canSeeGp ? rowStyleForHighlight(row) : undefined;
                 return (
-                  <tr key={row.id} className={hl}>
+                  <tr key={row.id} style={rowStyle}>
                     {cols.map((id) => renderTd(row, id))}
                     {canEdit ? (
                       <td className="cell-nowrap">

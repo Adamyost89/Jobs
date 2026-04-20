@@ -57,7 +57,7 @@ export default async function ReportsPage() {
           omitted; add <code>?year=all</code> for lifetime totals (includes archive years).
         </p>
         <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>
-          <Link href="/api/reports/salesman">/api/reports/salesman</Link> (salesman) ·{" "}
+          <Link href="/api/reports/salesman">/api/reports/salesman</Link> (account manager) ·{" "}
           <Link href="/api/reports/salesman?year=all">…?year=all</Link>
           {" · "}
           <Link href="/api/reports/company">/api/reports/company</Link> (role-filtered) ·{" "}

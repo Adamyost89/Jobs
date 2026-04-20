@@ -12,6 +12,7 @@ export default async function DashboardLayout({
   if (!user) redirect("/login");
 
   const isHr = user.role === Role.HR;
+  const roleLabel = user.role === Role.SALESMAN ? "ACCOUNT MANAGER" : user.role;
   const links: NavItem[] = isHr
     ? [{ href: "/dashboard/hr/commissions", label: "Commission payroll" }]
     : [
@@ -23,7 +24,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="dash-shell">
-      <DashboardTopNav links={links} email={user.email} roleLabel={user.role} />
+      <DashboardTopNav links={links} email={user.email} roleLabel={roleLabel} />
       <main className="dash-main">{children}</main>
     </div>
   );

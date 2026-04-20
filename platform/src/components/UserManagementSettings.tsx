@@ -100,7 +100,7 @@ export function UserManagementSettings({
     <div style={{ display: "grid", gap: "1rem" }}>
       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
         Create logins, assign <strong>HR</strong> for payroll-only access, <strong>Admin</strong> for day-to-day ops,{" "}
-        <strong>Salesman</strong> linked to a rep name, or <strong>Super admin</strong> for settings and user control.
+        <strong>Account manager</strong> linked to a rep name, or <strong>Super admin</strong> for settings and user control.
       </p>
 
       <div className="card" style={{ padding: "1rem", background: "rgba(0,0,0,0.2)" }}>
@@ -119,7 +119,7 @@ export function UserManagementSettings({
             <select className="input" value={role} onChange={(e) => setRole(e.target.value as Role)}>
               <option value={Role.HR}>HR</option>
               <option value={Role.ADMIN}>Admin</option>
-              <option value={Role.SALESMAN}>Salesman</option>
+              <option value={Role.SALESMAN}>Account manager</option>
               <option value={Role.SUPER_ADMIN}>Super admin</option>
             </select>
           </label>
@@ -193,7 +193,7 @@ function UserRow({
         <select className="input" style={{ minWidth: 130 }} value={role} onChange={(e) => setRole(e.target.value as Role)}>
           <option value={Role.HR}>HR</option>
           <option value={Role.ADMIN}>Admin</option>
-          <option value={Role.SALESMAN}>Salesman</option>
+          <option value={Role.SALESMAN}>Account manager</option>
           <option value={Role.SUPER_ADMIN}>Super admin</option>
         </select>
       </td>

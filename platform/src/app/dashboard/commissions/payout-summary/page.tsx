@@ -2,14 +2,9 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canViewAllJobs } from "@/lib/rbac";
 import { formatDateInEastern } from "@/lib/payout-display";
-import { loadPayoutSummary } from "@/lib/payout-summary";
+import { distinctPayoutYearsForSelect, loadPayoutSummary } from "@/lib/payout-summary";
 import { PayPeriodAllRepsTable } from "@/components/PayPeriodAllRepsTable";
-import {
-  defaultDashboardYear,
-  distinctJobYearsForSelect,
-  parseWorkYearQuery,
-  preferredDashboardJobYear,
-} from "@/lib/work-year";
+import { defaultDashboardYear, parseWorkYearQuery } from "@/lib/work-year";
 import Link from "next/link";
 
 type Search = { year?: string };
@@ -29,13 +24,14 @@ export default async function PayoutSummaryPage({
 
   const sp = await searchParams;
   const yearParamRaw = pickString(sp.year);
-  const preferredY = await preferredDashboardJobYear(prisma);
+  const preferredY = defaultDashboardYear();
   const { yearInt, yearSelectDefault } = parseWorkYearQuery(yearParamRaw, {
     defaultYearInt: preferredY,
     defaultYearSelect: String(preferredY),
   });
-  const curY = defaultDashboardYear();
-  const yearOptsSet = new Set(await distinctJobYearsForSelect(prisma));
+  const curY = preferredY;
+  const salespersonId = !canViewAllJobs(user) ? user.salespersonId : null;
+  const yearOptsSet = new Set(await distinctPayoutYearsForSelect(prisma, { salespersonId }));
   if (yearSelectDefault !== "all") {
     const n = parseInt(yearSelectDefault, 10);
     if (!Number.isNaN(n)) yearOptsSet.add(n);
@@ -44,7 +40,7 @@ export default async function PayoutSummaryPage({
 
   const { byWindow, byRep } = await loadPayoutSummary(prisma, {
     yearInt,
-    salespersonId: !canViewAllJobs(user) ? user.salespersonId : null,
+    salespersonId,
   });
 
   const payPeriodAllRepsRows = byWindow.map((w) => ({
@@ -84,7 +80,7 @@ export default async function PayoutSummaryPage({
       <form method="get" className="card" style={{ padding: "1rem 1.15rem" }}>
         <div className="filter-bar">
           <label>
-            Job year (for payouts tied to jobs)
+            Payout year (posted date)
             <select name="year" defaultValue={yearSelectDefault} style={{ minWidth: 160 }}>
               {yearOpts.map((y) => (
                 <option key={y} value={String(y)}>
@@ -107,9 +103,8 @@ export default async function PayoutSummaryPage({
 
       <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)", lineHeight: 1.5 }}>
         Totals are from <strong>posted commission checks</strong> in the app (same as the payment history on each job).
-        Dates use <strong>Eastern</strong> time. Default job year is <strong>{preferredY}</strong> (calendar {curY}) — change
-        the filter to match
-        the year you&apos;re closing payroll for.
+        Dates use <strong>Eastern</strong> time. Default payout year is <strong>{preferredY}</strong> (calendar {curY}) —
+        change the filter to match the year you&apos;re closing payroll for.
       </p>
 
       {byWindow.length === 0 ? (

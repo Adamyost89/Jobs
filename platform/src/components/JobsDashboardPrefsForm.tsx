@@ -5,6 +5,8 @@ import {
   DEFAULT_JOBS_TABLE_PREFS,
   JOB_TABLE_COLUMN_IDS,
   JOB_TABLE_COLUMN_LABELS,
+  type ExtraGpBand,
+  type HlColors,
   type JobTableColumnId,
   type JobsTablePrefsV1,
 } from "@/lib/jobs-table-preferences";
@@ -47,6 +49,51 @@ export function JobsDashboardPrefsForm({
 
   function resetPrefs() {
     onChange(JSON.parse(JSON.stringify(DEFAULT_JOBS_TABLE_PREFS)) as JobsTablePrefsV1);
+  }
+
+  function updateExtraBand(id: string, fn: (band: ExtraGpBand) => ExtraGpBand) {
+    onChange({
+      ...prefs,
+      highlights: {
+        ...h,
+        extraBands: h.extraBands.map((band) => (band.id === id ? fn(band) : band)),
+      },
+    });
+  }
+
+  function removeExtraBand(id: string) {
+    onChange({
+      ...prefs,
+      highlights: {
+        ...h,
+        extraBands: h.extraBands.filter((band) => band.id !== id),
+      },
+    });
+  }
+
+  function addExtraBand() {
+    const n = h.extraBands.length + 1;
+    const baseColors: HlColors = {
+      border: "#a78bfa",
+      rowBg: "rgba(167, 139, 250, 0.08)",
+      legendBg: "rgba(167, 139, 250, 0.22)",
+      legendText: "#ddd6fe",
+    };
+    onChange({
+      ...prefs,
+      highlights: {
+        ...h,
+        extraBands: [
+          ...h.extraBands,
+          {
+            id: `band-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            label: `Extra band ${n}`,
+            minGpPct: Math.max(h.thinGpPct, h.mediumGpPct),
+            colors: baseColors,
+          },
+        ],
+      },
+    });
   }
 
   const shellClass = variant === "settings" ? undefined : "card";
@@ -313,6 +360,124 @@ export function JobsDashboardPrefsForm({
                 </fieldset>
               );
             })}
+          </div>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 650, marginBottom: "0.4rem", fontSize: "0.9rem" }}>Additional GP bands</div>
+          <p style={{ margin: "0 0 0.5rem", color: "var(--muted)", fontSize: "0.8rem", maxWidth: "34rem" }}>
+            Add custom positive GP% bands with their own labels and colors. Higher thresholds take precedence.
+          </p>
+          <div style={{ display: "grid", gap: "0.65rem", maxWidth: "32rem" }}>
+            {h.extraBands.map((band) => (
+              <fieldset
+                key={band.id}
+                style={{
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 8,
+                  padding: "0.5rem 0.65rem",
+                  margin: 0,
+                }}
+              >
+                <legend style={{ padding: "0 0.35rem", fontSize: "0.82rem" }}>{band.label}</legend>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
+                  <label style={{ fontSize: "0.78rem" }}>
+                    Label text
+                    <input
+                      type="text"
+                      value={band.label}
+                      onChange={(e) =>
+                        updateExtraBand(band.id, (prev) => ({ ...prev, label: e.target.value }))
+                      }
+                      style={{ width: "100%", marginTop: 2 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: "0.78rem" }}>
+                    Min GP%
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={band.minGpPct}
+                      onChange={(e) =>
+                        updateExtraBand(band.id, (prev) => ({
+                          ...prev,
+                          minGpPct: Math.max(h.thinGpPct, Number(e.target.value) || 0),
+                        }))
+                      }
+                      style={{ width: "100%", marginTop: 2 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: "0.78rem" }}>
+                    Left border
+                    <input
+                      type="color"
+                      value={hexFromCssColor(band.colors.border)}
+                      onChange={(e) =>
+                        updateExtraBand(band.id, (prev) => ({
+                          ...prev,
+                          colors: { ...prev.colors, border: e.target.value },
+                        }))
+                      }
+                      style={{ width: "100%", height: 28, marginTop: 2 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: "0.78rem" }}>
+                    Row tint (CSS)
+                    <input
+                      type="text"
+                      value={band.colors.rowBg}
+                      onChange={(e) =>
+                        updateExtraBand(band.id, (prev) => ({
+                          ...prev,
+                          colors: { ...prev.colors, rowBg: e.target.value },
+                        }))
+                      }
+                      style={{ width: "100%", marginTop: 2 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: "0.78rem" }}>
+                    Legend chip bg
+                    <input
+                      type="text"
+                      value={band.colors.legendBg}
+                      onChange={(e) =>
+                        updateExtraBand(band.id, (prev) => ({
+                          ...prev,
+                          colors: { ...prev.colors, legendBg: e.target.value },
+                        }))
+                      }
+                      style={{ width: "100%", marginTop: 2 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: "0.78rem" }}>
+                    Legend text
+                    <input
+                      type="color"
+                      value={hexFromCssColor(band.colors.legendText)}
+                      onChange={(e) =>
+                        updateExtraBand(band.id, (prev) => ({
+                          ...prev,
+                          colors: { ...prev.colors, legendText: e.target.value },
+                        }))
+                      }
+                      style={{ width: "100%", height: 28, marginTop: 2 }}
+                    />
+                  </label>
+                </div>
+                <div style={{ marginTop: "0.5rem" }}>
+                  <button type="button" className="btn secondary" onClick={() => removeExtraBand(band.id)}>
+                    Remove band
+                  </button>
+                </div>
+              </fieldset>
+            ))}
+            <div>
+              <button type="button" className="btn secondary" onClick={addExtraBand}>
+                Add GP band
+              </button>
+            </div>
           </div>
         </div>
 

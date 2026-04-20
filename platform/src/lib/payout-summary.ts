@@ -32,17 +32,37 @@ export type PayoutSummaryByRep = {
   lastPosted: Date;
 };
 
+export async function distinctPayoutYearsForSelect(
+  prisma: PrismaClient,
+  opts?: { salespersonId?: string | null }
+): Promise<number[]> {
+  const rows = await prisma.commissionPayout.findMany({
+    where: opts?.salespersonId ? { salespersonId: opts.salespersonId } : undefined,
+    select: { createdAt: true },
+    orderBy: { createdAt: "desc" },
+    take: 10000,
+  });
+  const years = new Set<number>();
+  for (const r of rows) years.add(r.createdAt.getUTCFullYear());
+  return [...years].sort((a, b) => b - a);
+}
+
 export async function loadPayoutSummary(
   prisma: PrismaClient,
   opts: {
     yearInt: number | undefined;
+    /** When set, filter by payout posted year (createdAt). */
+    payoutYear?: number | undefined;
     /** When set, only payouts for this salesperson. */
     salespersonId?: string | null;
   }
 ): Promise<{ byWindow: PayoutSummaryWindow[]; byRep: PayoutSummaryByRep[] }> {
   const where: Prisma.CommissionPayoutWhereInput = {};
-  if (opts.yearInt !== undefined) {
-    where.job = { year: opts.yearInt };
+  const year = opts.payoutYear ?? opts.yearInt;
+  if (year !== undefined) {
+    const start = new Date(Date.UTC(year, 0, 1, 0, 0, 0, 0));
+    const end = new Date(Date.UTC(year + 1, 0, 1, 0, 0, 0, 0));
+    where.createdAt = { gte: start, lt: end };
   }
   if (opts.salespersonId) {
     where.salespersonId = opts.salespersonId;

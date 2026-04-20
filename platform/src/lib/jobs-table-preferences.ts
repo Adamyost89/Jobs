@@ -53,6 +53,13 @@ export type HlColors = {
   legendText: string;
 };
 
+export type ExtraGpBand = {
+  id: string;
+  label: string;
+  minGpPct: number;
+  colors: HlColors;
+};
+
 export type JobsTableHighlightPrefs = {
   strongGpPct: number;
   mediumGpPct: number;
@@ -73,6 +80,7 @@ export type JobsTableHighlightPrefs = {
     bad: HlColors;
     warn: HlColors;
   };
+  extraBands: ExtraGpBand[];
 };
 
 export type JobsTablePrefsV1 = {
@@ -126,6 +134,7 @@ export const DEFAULT_JOBS_TABLE_PREFS: JobsTablePrefsV1 = {
       warn: "Cancelled / billing risk",
     },
     colors: DEFAULT_COLORS,
+    extraBands: [],
   },
 };
 
@@ -146,6 +155,30 @@ function parseHlLabel(v: unknown, fallback: string): string {
   if (typeof v !== "string") return fallback;
   const trimmed = v.trim();
   return trimmed.length > 0 ? trimmed : fallback;
+}
+
+function parseBandId(v: unknown, i: number): string {
+  if (typeof v === "string") {
+    const trimmed = v.trim();
+    if (trimmed) return trimmed.slice(0, 64);
+  }
+  return `band-${i + 1}`;
+}
+
+function parseExtraBands(v: unknown, fallbackColor: HlColors): ExtraGpBand[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .slice(0, 12)
+    .map((item, i) => {
+      if (!isRecord(item)) return null;
+      return {
+        id: parseBandId(item.id, i),
+        label: parseHlLabel(item.label, `Band ${i + 1}`),
+        minGpPct: clamp(Number(item.minGpPct), 0, 100),
+        colors: parseHlColors(item.colors, fallbackColor),
+      } satisfies ExtraGpBand;
+    })
+    .filter((b): b is ExtraGpBand => Boolean(b));
 }
 
 function clamp(n: number, lo: number, hi: number): number {
@@ -193,6 +226,7 @@ export function normalizeJobsTablePrefs(raw: unknown): JobsTablePrefsV1 {
       bad: parseHlColors(colorsRaw.bad, base.highlights.colors.bad),
       warn: parseHlColors(colorsRaw.warn, base.highlights.colors.warn),
     },
+    extraBands: parseExtraBands(hlRaw.extraBands, base.highlights.colors.medium),
   };
 
   if (highlights.thinGpPct > highlights.strongGpPct) {
@@ -201,6 +235,10 @@ export function normalizeJobsTablePrefs(raw: unknown): JobsTablePrefsV1 {
     highlights.strongGpPct = t;
   }
   highlights.mediumGpPct = clamp(highlights.mediumGpPct, highlights.thinGpPct, highlights.strongGpPct);
+  highlights.extraBands = highlights.extraBands.map((band) => ({
+    ...band,
+    minGpPct: clamp(band.minGpPct, highlights.thinGpPct, 100),
+  }));
 
   return { version: 1, columnOrder, hiddenColumns, highlights };
 }
