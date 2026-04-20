@@ -200,6 +200,7 @@ export default async function JobsPage({
       name: j.name,
       salespersonName: j.salesperson?.name ?? null,
       status: j.status,
+      prolineStage: j.prolineStage,
       contractAmount: j.contractAmount.toNumber(),
       changeOrders: j.changeOrders.toNumber(),
       invoicedTotal: j.invoicedTotal.toNumber(),

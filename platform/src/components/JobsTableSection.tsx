@@ -30,6 +30,8 @@ export type JobsTableRowDTO = {
   name: string | null;
   salespersonName: string | null;
   status: string;
+  /** ProLine pipeline stage; when set, shown in the Status column instead of `status`. */
+  prolineStage?: string | null;
   contractAmount: number;
   changeOrders: number;
   invoicedTotal: number;
@@ -79,6 +81,12 @@ function statusClass(s: string) {
   if (u.includes("CANCEL")) return "status-pill status-pill--bad";
   if (u.includes("COMPLETE") || u.includes("SOLD")) return "status-pill status-pill--done";
   return "status-pill status-pill--active";
+}
+
+function statusColumnLabel(row: JobsTableRowDTO): string {
+  const stage = row.prolineStage?.trim();
+  if (stage) return stage;
+  return row.status.replace(/_/g, " ");
 }
 
 export function JobsTableSection({
@@ -266,7 +274,7 @@ export function JobsTableSection({
       case "status":
         return (
           <td key={id}>
-            <span className={statusClass(row.status)}>{row.status.replace(/_/g, " ")}</span>
+            <span className={statusClass(row.status)}>{statusColumnLabel(row)}</span>
           </td>
         );
       case "contract":

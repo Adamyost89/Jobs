@@ -6,10 +6,12 @@ import {
   type ProlineApiEnv,
 } from "@/lib/proline-api-client";
 import { allocateNextJobNumber, recalculateJobAndCommissions } from "@/lib/job-workflow";
+import { isAllowedProlineLifecycleStatus } from "@/lib/proline-lifecycle-status";
 import { normalizeStatus } from "@/lib/status";
 import {
   mapProlineUserIdToSalespersonName,
   pickProlineProjectIdFromRecord,
+  pickProlineStageFromRecord,
 } from "@/lib/proline-webhook";
 import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 
@@ -60,6 +62,7 @@ export type SyncProlineJobsResult = {
   created: number;
   updated: number;
   skippedNoId: number;
+  skippedLifecycleStatus: number;
   errors: string[];
   lastStatus?: number;
   lastUrl?: string;
@@ -95,6 +98,7 @@ export async function syncProlineJobsFromApi(
     created: 0,
     updated: 0,
     skippedNoId: 0,
+    skippedLifecycleStatus: 0,
     errors: [],
   };
 
@@ -133,7 +137,12 @@ export async function syncProlineJobsFromApi(
       const leadNumber =
         pickStr(flat, ["project_number", "leadNumber", "lead_number"]) ?? null;
       const name = pickStr(flat, ["project_name", "name"]) ?? null;
-      const statusStr = pickStr(flat, ["status", "stage"]) ?? "";
+      const lifecycleStr = pickStr(flat, ["status", "project_status", "job_status"]) ?? "";
+      if (!isAllowedProlineLifecycleStatus(lifecycleStr)) {
+        result.skippedLifecycleStatus += 1;
+        continue;
+      }
+      const stageStr = pickProlineStageFromRecord(flat);
       const contractAmount = pickOptionalMoney(flat, [
         "approved_total",
         "contract_amount",
@@ -160,7 +169,8 @@ export async function syncProlineJobsFromApi(
             projectRevenue: contract,
             salespersonId,
             prolineJobId,
-            status: normalizeStatus(statusStr),
+            status: normalizeStatus(lifecycleStr),
+            prolineStage: stageStr ?? null,
             sourceSheet: "proline_api",
           },
         });
@@ -185,7 +195,8 @@ export async function syncProlineJobsFromApi(
         data.contractAmount = d;
         data.projectRevenue = d;
       }
-      if (statusStr) data.status = normalizeStatus(statusStr);
+      data.status = normalizeStatus(lifecycleStr);
+      if (stageStr) data.prolineStage = stageStr;
       if (salespersonId) data.salesperson = { connect: { id: salespersonId } };
 
       await db.job.update({ where: { id: existing.id }, data });

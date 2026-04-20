@@ -54,6 +54,7 @@ export async function POST(req: Request) {
         created: result.created,
         updated: result.updated,
         skippedNoId: result.skippedNoId,
+        skippedLifecycleStatus: result.skippedLifecycleStatus,
         lastStatus: result.lastStatus,
         errorCount: result.errors.length,
         errors: result.errors.slice(0, 5),

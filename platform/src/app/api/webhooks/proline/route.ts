@@ -8,14 +8,14 @@ import {
   sendProlineNameWritebackViaZapier,
 } from "@/lib/proline-name-writeback";
 import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
+import {
+  isAllowedProlineLifecycleStatus,
+  jobQualifiesForProlineAutomation,
+} from "@/lib/proline-lifecycle-status";
+import { normalizeStatus } from "@/lib/status";
 
 function asDecimal(n: number): Prisma.Decimal {
   return new Prisma.Decimal(n.toFixed(2));
-}
-
-function statusFromWebhook(raw: string | undefined, fallback: string): string {
-  const s = typeof raw === "string" ? raw.trim() : "";
-  return s || fallback;
 }
 
 function invoiceDeltaMarkerType(invoiceId: string): string {
@@ -79,15 +79,36 @@ export async function POST(req: Request) {
     prolineJobId: e.prolineJobId,
     leadNumber: e.leadNumber ?? null,
     status: e.status ?? null,
+    prolineStage: e.prolineStage ?? null,
     hasContract: e.contractAmount !== undefined,
     hasCost: e.cost !== undefined,
   });
+
+  function incomingLifecycleFromEvent(): string | undefined {
+    if (e.status === undefined || e.status === null) return undefined;
+    const t = String(e.status).trim();
+    return t === "" ? undefined : t;
+  }
+
+  function skipProlineCreate(): boolean {
+    const incoming = incomingLifecycleFromEvent();
+    if (incoming === undefined) return true;
+    return !isAllowedProlineLifecycleStatus(incoming);
+  }
+
+  function skipProlineUpdate(existing: { status: string }): boolean {
+    const incoming = incomingLifecycleFromEvent();
+    if (incoming !== undefined && !isAllowedProlineLifecycleStatus(incoming)) return true;
+    if (incoming === undefined && !jobQualifiesForProlineAutomation(existing.status)) return true;
+    return false;
+  }
 
   async function findExistingJobForWebhook(): Promise<{
     id: string;
     jobNumber: string;
     leadNumber: string | null;
     prolineJobId: string | null;
+    status: string;
     invoicedTotal: Prisma.Decimal;
     amountPaid: Prisma.Decimal | null;
   } | null> {
@@ -108,6 +129,7 @@ export async function POST(req: Request) {
           jobNumber: true,
           leadNumber: true,
           prolineJobId: true,
+          status: true,
           invoicedTotal: true,
           amountPaid: true,
           updatedAt: true,
@@ -148,6 +170,7 @@ export async function POST(req: Request) {
           jobNumber: true,
           leadNumber: true,
           prolineJobId: true,
+          status: true,
           invoicedTotal: true,
           amountPaid: true,
           updatedAt: true,
@@ -223,6 +246,7 @@ export async function POST(req: Request) {
   async function computeUpdateForExistingJob(existing: {
     id: string;
     leadNumber: string | null;
+    status: string;
     invoicedTotal: Prisma.Decimal;
     amountPaid: Prisma.Decimal | null;
   }): Promise<{
@@ -252,7 +276,14 @@ export async function POST(req: Request) {
       data.contractAmount = c;
       data.projectRevenue = c;
     }
-    if (e.status !== undefined) data.status = statusFromWebhook(e.status, "UNKNOWN");
+    {
+      const incoming = incomingLifecycleFromEvent();
+      if (incoming !== undefined) data.status = normalizeStatus(incoming);
+    }
+    if (e.prolineStage !== undefined) {
+      const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
+      data.prolineStage = s === "" ? null : s;
+    }
     if (e.cost !== undefined) data.cost = asDecimal(e.cost);
     if (e.amountPaid !== undefined) {
       const paid = Math.max(0, e.amountPaid);
@@ -295,10 +326,36 @@ export async function POST(req: Request) {
     return { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate };
   }
 
-  async function createJob() {
+  async function createJob(): Promise<
+    | { kind: "created"; job: { id: string; jobNumber: string } }
+    | {
+        kind: "dedupe";
+        job: {
+          id: string;
+          jobNumber: string;
+          leadNumber: string | null;
+          prolineJobId: string | null;
+          status: string;
+          invoicedTotal: Prisma.Decimal;
+          amountPaid: Prisma.Decimal | null;
+        };
+      }
+    | { kind: "skipped_status" }
+  > {
     const dup = await findExistingJobForWebhook();
     if (dup) {
       return { kind: "dedupe" as const, job: dup };
+    }
+    if (skipProlineCreate()) {
+      logProlineWebhook("skip_create_lifecycle_status", {
+        prolineJobId: e.prolineJobId,
+        incomingStatus: incomingLifecycleFromEvent() ?? null,
+      });
+      return { kind: "skipped_status" as const };
+    }
+    const lifecycle = incomingLifecycleFromEvent();
+    if (!lifecycle) {
+      return { kind: "skipped_status" as const };
     }
     const jobNumber = await allocateNextJobNumber(year);
     let salespersonId: string | null = null;
@@ -321,7 +378,8 @@ export async function POST(req: Request) {
         amountPaid: e.amountPaid !== undefined ? asDecimal(Math.max(0, e.amountPaid)) : null,
         salespersonId,
         prolineJobId: e.prolineJobId,
-        status: statusFromWebhook(e.status, "UNKNOWN"),
+        status: normalizeStatus(lifecycle),
+        prolineStage: e.prolineStage ?? null,
         paidInFull: e.paidInFull ?? false,
         paidDate: e.paidDate ? new Date(e.paidDate) : null,
       },
@@ -341,6 +399,14 @@ export async function POST(req: Request) {
 
   if (e.internalType === "job.signed") {
     const r = await createJob();
+    if (r.kind === "skipped_status") {
+      return NextResponse.json({
+        ok: true,
+        skipped: "proline_lifecycle_status",
+        message:
+          "Job create skipped: ProLine job status must be Open, Won, Complete, or Closed. Pipeline stage is not used.",
+      });
+    }
     if (r.kind === "dedupe") {
       await ensureRequiredNameWriteback(r.job, e.name);
       return NextResponse.json({
@@ -356,6 +422,15 @@ export async function POST(req: Request) {
     const existing = await findExistingJobForWebhook();
     if (!existing) {
       const r = await createJob();
+      if (r.kind === "skipped_status") {
+        return NextResponse.json({
+          ok: true,
+          skipped: "proline_lifecycle_status",
+          upsert: "skipped_create",
+          message:
+            "Job create skipped: ProLine job status must be Open, Won, Complete, or Closed. Pipeline stage is not used.",
+        });
+      }
       if (r.kind === "dedupe") {
         await ensureRequiredNameWriteback(r.job, e.name);
         return NextResponse.json({
@@ -365,6 +440,22 @@ export async function POST(req: Request) {
         });
       }
       return NextResponse.json({ jobNumber: r.job.jobNumber, jobId: r.job.id, upsert: "created" });
+    }
+    if (skipProlineUpdate(existing)) {
+      logProlineWebhook("skip_upsert_update_lifecycle_status", {
+        jobId: existing.id,
+        jobNumber: existing.jobNumber,
+        incomingStatus: incomingLifecycleFromEvent() ?? null,
+        existingStatus: existing.status,
+      });
+      return NextResponse.json({
+        ok: true,
+        skipped: "proline_lifecycle_status",
+        jobId: existing.id,
+        upsert: "skipped_update",
+        message:
+          "Job update skipped: requires Open/Won/Complete/Closed (or an existing job already in that lifecycle).",
+      });
     }
     const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate } = await computeUpdateForExistingJob(existing);
     logProlineWebhook("upsert_update", {
@@ -414,6 +505,22 @@ export async function POST(req: Request) {
       { error: "Job not found for project_id or project_number (leadNumber)" },
       { status: 404 }
     );
+  }
+
+  if (skipProlineUpdate(existing)) {
+    logProlineWebhook("skip_typed_update_lifecycle_status", {
+      internalType: e.internalType,
+      jobId: existing.id,
+      incomingStatus: incomingLifecycleFromEvent() ?? null,
+      existingStatus: existing.status,
+    });
+    return NextResponse.json({
+      ok: true,
+      skipped: "proline_lifecycle_status",
+      jobId: existing.id,
+      message:
+        "Update skipped: requires Open/Won/Complete/Closed (or an existing job already in that lifecycle).",
+    });
   }
 
   const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate } = await computeUpdateForExistingJob(existing);

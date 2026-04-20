@@ -79,6 +79,8 @@ model Job {
   /** “Comm Owed” checkbox (modern column T). */
   commOwedFlag     Boolean   @default(false)
   status           String    @default("UNKNOWN")
+  /** ProLine pipeline stage (shown in Jobs “Status” column when set; separate from lifecycle `status`). */
+  prolineStage     String?
   drewParticipation String?
   paidDate         DateTime?
   salespersonId  String?

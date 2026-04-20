@@ -39,6 +39,8 @@ export type NormalizedProlineEvent = {
   invoiceId?: string;
   invoiceNumber?: string;
   status?: string;
+  /** Pipeline stage for display; automation uses `status` only. */
+  prolineStage?: string;
   paidInFull?: boolean;
   paidDate?: string | null;
   cost?: number;
@@ -64,6 +66,16 @@ export function pickProlineProjectIdFromRecord(body: Record<string, unknown>): s
     if (typeof v === "number" && Number.isFinite(v)) return String(v);
   }
   return null;
+}
+
+/** ProLine pipeline stage (distinct from lifecycle `status`); shown in-app when set. */
+export function pickProlineStageFromRecord(body: Record<string, unknown>): string | undefined {
+  const keys = ["stage", "pipeline_stage", "project_stage"];
+  for (const k of keys) {
+    const v = body[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return undefined;
 }
 
 /** Map native ProLine project webhook fields into our canonical keys (when missing). */
@@ -110,11 +122,7 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
     body.salespersonName = an.trim();
   }
 
-  // For ProLine-native project webhooks, stage is the business state users want visible in app status.
-  const stage = body.stage;
-  if (typeof stage === "string" && stage.trim()) {
-    body.status = stage.trim();
-  }
+  // Stage is stored separately from lifecycle `status` (never copy stage into `status`).
 
   if ((body.paidDate === undefined || body.paidDate === null || body.paidDate === "") && typeof body.paid_date === "string") {
     body.paidDate = body.paid_date;
@@ -295,6 +303,7 @@ export function normalizeProlineWebhookBody(
       invoiceId: typeof body.invoiceId === "string" ? body.invoiceId : undefined,
       invoiceNumber: typeof body.invoiceNumber === "string" ? body.invoiceNumber : undefined,
       status: typeof body.status === "string" ? body.status : undefined,
+      prolineStage: pickProlineStageFromRecord(body),
       paidInFull: typeof body.paidInFull === "boolean" ? body.paidInFull : undefined,
       paidDate: (body.paidDate as string | null | undefined) ?? null,
       cost: typeof body.cost === "number" ? body.cost : undefined,
