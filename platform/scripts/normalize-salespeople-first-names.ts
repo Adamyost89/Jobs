@@ -3,11 +3,20 @@
  * rows, rename any lone full-name rows, rewrite `CommissionPlan.config` name keys, and align
  * `BilledProjectLine.ownerName`.
  *
- * Run from `platform/` with DATABASE_URL set:
- *   npx tsx scripts/normalize-salespeople-first-names.ts
+ * Run from `platform/` with `DATABASE_URL` set (same as the running app).
  *
- * Dry run (no writes):
- *   DRY_RUN=1 npx tsx scripts/normalize-salespeople-first-names.ts
+ * Linux / bash — dry run (no writes):
+ *   DRY_RUN=1 npm run normalize:salespeople-first-names
+ *
+ * Apply for real:
+ *   unset DRY_RUN
+ *   npm run normalize:salespeople-first-names
+ *
+ * Docker: if `DATABASE_URL` uses hostname `db` (Compose service name), that host only resolves
+ * **inside** the stack network. Run the script from the app container, not from the bare host, e.g.:
+ *   docker compose exec <your-nextjs-or-node-service> sh -lc 'cd /opt/elevated-sheets/platform && DRY_RUN=1 npm run normalize:salespeople-first-names'
+ *
+ * (PowerShell on Windows uses `$env:DRY_RUN = "1"` instead of `DRY_RUN=1`.)
  */
 import { Prisma, type PrismaClient, SalespersonKind } from "@prisma/client";
 import { prisma } from "../src/lib/db";
@@ -220,13 +229,47 @@ function rewriteCommissionPlanConfig(
   return { ...cfg, people, peopleOrder };
 }
 
+function printDbConnectionHint(err: unknown): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (!msg.includes("Can't reach database server") && !msg.includes("P1001")) return;
+  const url = process.env.DATABASE_URL ?? "";
+  const host = (() => {
+    try {
+      const u = new URL(url.replace(/^postgresql:\/\//, "http://"));
+      return u.hostname || "(unknown host)";
+    } catch {
+      return "(could not parse DATABASE_URL)";
+    }
+  })();
+  console.error(`
+Could not connect to Postgres (${host}).
+
+If DATABASE_URL uses a Docker-only hostname (often "db"), run this script inside the **app**
+container on the same Compose network, for example:
+
+  docker compose exec <app-service> sh -lc 'cd /opt/elevated-sheets/platform && DRY_RUN=1 npm run normalize:salespeople-first-names'
+
+Or point DATABASE_URL at a host/port reachable from where you run the command (e.g. localhost
+with the DB port published).
+
+Shell reminder (bash): dry run is \`DRY_RUN=1 npm run ...\`, not PowerShell \`$env:DRY_RUN\`.
+`);
+}
+
 async function main() {
   const dryRun = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
 
-  const initial = await prisma.salesperson.findMany({
-    orderBy: { name: "asc" },
-  });
-  const plans = await prisma.commissionPlan.findMany({ select: { id: true, year: true, config: true } });
+  let initial: SpRow[];
+  let plans: { id: string; year: number; config: unknown }[];
+  try {
+    initial = await prisma.salesperson.findMany({
+      orderBy: { name: "asc" },
+    });
+    plans = await prisma.commissionPlan.findMany({ select: { id: true, year: true, config: true } });
+  } catch (e) {
+    printDbConnectionHint(e);
+    throw e;
+  }
 
   const groups = new Map<string, SpRow[]>();
   for (const r of initial) {
