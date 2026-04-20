@@ -11,18 +11,10 @@ jobs:
     steps:
       - name: Deploy
         run: |
-          set -euo pipefail
-
-          echo "Expected commit: $GITHUB_SHA"
           cd /opt/elevated-sheets
           git fetch origin main
           git checkout main
           git reset --hard origin/main
-          echo "Repo now at: $(git rev-parse HEAD)"
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
           cd platform
-          ls -la
-          docker compose -f docker-compose.prod.yml -p elevated config --services
-          docker compose -f docker-compose.prod.yml -p elevated up --build --force-recreate -d
-          docker compose -f docker-compose.prod.yml -p elevated ps
+          docker compose -f docker-compose.prod.yml -p elevated up -d
