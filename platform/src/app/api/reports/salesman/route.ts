@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import type { Prisma } from "@prisma/client";
-import { preferredDashboardJobYear } from "@/lib/work-year";
+import { defaultDashboardYear } from "@/lib/work-year";
 
 function jobYearFilterFromQuery(
   yearParam: string | undefined,
@@ -25,7 +24,7 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const preferred = await preferredDashboardJobYear(prisma);
+  const preferred = defaultDashboardYear();
   const { jobWhere: yearSlice, label: yearLabel } = jobYearFilterFromQuery(
     url.searchParams.get("year") ?? undefined,
     preferred

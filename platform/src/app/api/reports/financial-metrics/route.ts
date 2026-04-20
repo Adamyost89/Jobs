@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { preferredDashboardJobYear } from "@/lib/work-year";
+import { defaultDashboardYear } from "@/lib/work-year";
 import { getFinancialMetricsAnalytics } from "@/lib/report-financial-metrics";
 
 function parseYear(v: string | null, fallback: number): number {
@@ -15,7 +14,7 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(request.url);
-  const def = await preferredDashboardJobYear(prisma);
+  const def = defaultDashboardYear();
   const summaryYear = parseYear(url.searchParams.get("summaryYear"), def);
   const jobId = url.searchParams.get("jobId")?.trim() || null;
   const jobNumber = url.searchParams.get("jobNumber")?.trim() || null;
