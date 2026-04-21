@@ -181,6 +181,7 @@ export default async function DashboardHome({
             monthlyYear={workYear}
             monthlyTopRepNames={monthly.monthlyTopRepNames}
             monthlyStacked={monthly.monthlyStacked}
+            monthlySignedCounts={monthly.monthlySignedCounts}
             salespersonIdByRepName={monthly.salespersonIdByRepName}
           />
         </div>

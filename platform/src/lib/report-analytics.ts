@@ -44,6 +44,8 @@ export type SignedContractsAnalytics = {
   repSummaries: RepSummaryRow[];
   /** Rows Jan–Dec with dollars (contract + change orders) per rep + Other */
   monthlyStacked: { monthLabel: string; [key: string]: string | number }[];
+  /** Total number of signed jobs per monthly row label (Jan–Dec plus optional Undated). */
+  monthlySignedCounts: { monthLabel: string; count: number }[];
   monthlyTopRepNames: string[];
   /** IANA zone used to map each `contractSignedAt` instant to a calendar month on the chart */
   monthlyChartTimeZone: string;
@@ -224,6 +226,8 @@ export async function getSignedContractsAnalytics(
   const repTotals = new Map<string, number>();
   const monthRep = new Map<number, Map<string, number>>();
   for (let m = 1; m <= 12; m++) monthRep.set(m, new Map());
+  const monthCounts = new Map<number, number>();
+  for (let m = 1; m <= 12; m++) monthCounts.set(m, 0);
   const undatedRep = new Map<string, number>();
   const salespersonIdByRepName: Record<string, string> = {};
 
@@ -241,6 +245,7 @@ export async function getSignedContractsAnalytics(
     if (j.contractSignedAt) {
       jobsWithSignDateForMonth += 1;
       const month = signedCalendarMonthForChart(j.contractSignedAt);
+      monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
       const inner = monthRep.get(month)!;
       inner.set(name, (inner.get(name) ?? 0) + dollars);
     } else {
@@ -256,9 +261,11 @@ export async function getSignedContractsAnalytics(
   const topSet = new Set(monthlyTopRepNames);
 
   const monthlyStacked: { monthLabel: string; [key: string]: string | number }[] = [];
+  const monthlySignedCounts: { monthLabel: string; count: number }[] = [];
   for (let m = 1; m <= 12; m++) {
+    const monthLabel = CONTRACT_SIGN_MONTH_LABELS[m - 1];
     const row: { monthLabel: string; [key: string]: string | number } = {
-      monthLabel: CONTRACT_SIGN_MONTH_LABELS[m - 1],
+      monthLabel,
     };
     let other = 0;
     const inner = monthRep.get(m)!;
@@ -271,6 +278,7 @@ export async function getSignedContractsAnalytics(
       if (row[n] === undefined) row[n] = 0;
     }
     monthlyStacked.push(row);
+    monthlySignedCounts.push({ monthLabel, count: monthCounts.get(m) ?? 0 });
   }
 
   if (undatedSignedRevenue > 0.005) {
@@ -285,6 +293,7 @@ export async function getSignedContractsAnalytics(
       if (row[n] === undefined) row[n] = 0;
     }
     monthlyStacked.push(row);
+    monthlySignedCounts.push({ monthLabel: "Undated", count: jobsUndatedNoSignDate });
   }
 
   const availableYears = [...yearMap.keys()].sort((a, b) => a - b);
@@ -297,6 +306,7 @@ export async function getSignedContractsAnalytics(
     yearlyTrend,
     repSummaries,
     monthlyStacked,
+    monthlySignedCounts,
     monthlyTopRepNames,
     monthlyChartTimeZone: CONTRACT_SIGN_CHART_TIMEZONE,
     jobsWithSignDateForMonth,

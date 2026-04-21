@@ -10,15 +10,18 @@ export function SignedMonthlyDrillGrid({
   monthlyYear,
   monthlyTopRepNames,
   monthlyStacked,
+  monthlySignedCounts,
   salespersonIdByRepName,
 }: {
   monthlyYear: number;
   monthlyTopRepNames: string[];
   monthlyStacked: StackedRow[];
+  monthlySignedCounts: { monthLabel: string; count: number }[];
   salespersonIdByRepName: Record<string, string>;
 }) {
   const money = (n: number) =>
     n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const countByMonthLabel = new Map(monthlySignedCounts.map((row) => [row.monthLabel, row.count]));
 
   function cellHref(repKey: string, row: StackedRow): string {
     const slice = chartMonthLabelToDrill(row.monthLabel);
@@ -45,6 +48,7 @@ export function SignedMonthlyDrillGrid({
       <thead>
         <tr>
           <th>Month</th>
+          <th className="cell-num">Signed #</th>
           {monthlyTopRepNames.map((n) => (
             <th key={n} className="cell-num">
               {n}
@@ -59,6 +63,11 @@ export function SignedMonthlyDrillGrid({
             <td className="cell-strong">
               <Link href={rowMonthHref(row)} className="signed-month-drill-link">
                 {row.monthLabel}
+              </Link>
+            </td>
+            <td className="cell-num">
+              <Link href={rowMonthHref(row)} className="signed-month-drill-link">
+                {Number(countByMonthLabel.get(String(row.monthLabel)) ?? 0)}
               </Link>
             </td>
             {monthlyTopRepNames.map((n) => (
