@@ -43,7 +43,7 @@ export function PayCommissionForm({
       <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.25 }}>
         Post check for period:
       </p>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
         <input
           value={payPeriod}
           onChange={(e) => setPayPeriod(e.target.value)}

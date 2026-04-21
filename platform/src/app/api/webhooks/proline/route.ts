@@ -112,6 +112,7 @@ export async function POST(req: Request) {
     jobNumber: string;
     leadNumber: string | null;
     prolineJobId: string | null;
+    contractAmount: Prisma.Decimal;
     status: string;
     invoicedTotal: Prisma.Decimal;
     amountPaid: Prisma.Decimal | null;
@@ -133,6 +134,7 @@ export async function POST(req: Request) {
           jobNumber: true,
           leadNumber: true,
           prolineJobId: true,
+          contractAmount: true,
           status: true,
           invoicedTotal: true,
           amountPaid: true,
@@ -174,6 +176,7 @@ export async function POST(req: Request) {
           jobNumber: true,
           leadNumber: true,
           prolineJobId: true,
+          contractAmount: true,
           status: true,
           invoicedTotal: true,
           amountPaid: true,
@@ -339,6 +342,7 @@ export async function POST(req: Request) {
           jobNumber: string;
           leadNumber: string | null;
           prolineJobId: string | null;
+          contractAmount: Prisma.Decimal;
           status: string;
           invoicedTotal: Prisma.Decimal;
           amountPaid: Prisma.Decimal | null;
@@ -399,6 +403,147 @@ export async function POST(req: Request) {
     await recalculateJobAndCommissions(job.id);
     await ensureRequiredNameWriteback(job, e.name);
     return { kind: "created" as const, job };
+  }
+
+  function isQuoteApprovedWebhook(): boolean {
+    if (e.internalType !== "job.updated") return false;
+    const raw = e.raw;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+    const body = raw as Record<string, unknown>;
+    const trigger = typeof body.trigger === "string" ? body.trigger.trim().toLowerCase() : "";
+    return (
+      trigger.includes("quote") ||
+      body.quote_id !== undefined ||
+      body.quote_name !== undefined ||
+      body.approved_total !== undefined ||
+      body.approved_date !== undefined
+    );
+  }
+
+  function approvedDateFromEvent(): Date | null {
+    if (!e.approvedDate) return null;
+    const t = String(e.approvedDate).trim();
+    if (!t) return null;
+    const d = new Date(t);
+    if (Number.isNaN(d.getTime())) return null;
+    return d;
+  }
+
+  function approvedAmountFromEvent(): Prisma.Decimal {
+    return asDecimal(Math.max(0, e.contractAmount ?? 0));
+  }
+
+  async function createQuoteApprovedJob(approvedDate: Date): Promise<{ id: string; jobNumber: string }> {
+    const jobNumber = await allocateNextJobNumber(year);
+    let salespersonId: string | null = null;
+    if (e.salespersonName) {
+      const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {
+        preferFirstToken: false,
+      });
+      salespersonId = sp?.id ?? null;
+    }
+    const contract = approvedAmountFromEvent();
+    const statusRaw = incomingLifecycleFromEvent();
+    const job = await prisma.job.create({
+      data: {
+        jobNumber,
+        year,
+        leadNumber: e.leadNumber ?? null,
+        name: e.name ?? null,
+        contractSignedAt: approvedDate,
+        contractAmount: contract,
+        projectRevenue: contract,
+        cost: asDecimal(Math.max(0, e.cost ?? 0)),
+        amountPaid: e.amountPaid !== undefined ? asDecimal(Math.max(0, e.amountPaid)) : null,
+        salespersonId,
+        prolineJobId: e.prolineJobId,
+        status: normalizeStatus(statusRaw ?? "UNKNOWN"),
+        prolineStage: e.prolineStage ?? null,
+        paidInFull: e.paidInFull ?? false,
+        paidDate: e.paidDate ? new Date(e.paidDate) : null,
+      },
+    });
+    await prisma.jobEvent.create({
+      data: {
+        jobId: job.id,
+        type: "PROLINE_QUOTE_APPROVED",
+        source: "proline",
+        payload: e.raw as object,
+      },
+    });
+    await recalculateJobAndCommissions(job.id);
+    await ensureRequiredNameWriteback(job, e.name);
+    return job;
+  }
+
+  if (isQuoteApprovedWebhook()) {
+    const existing = await findExistingJobForWebhook();
+    const approvedDate = approvedDateFromEvent();
+    if (!approvedDate) {
+      return NextResponse.json({
+        ok: true,
+        skipped: "quote_not_approved_yet",
+        message: "Quote webhook received without approved_date; no job created or contract update applied.",
+      });
+    }
+
+    if (!existing) {
+      const job = await createQuoteApprovedJob(approvedDate);
+      return NextResponse.json({
+        ok: true,
+        jobId: job.id,
+        jobNumber: job.jobNumber,
+        quoteApproved: "created",
+      });
+    }
+
+    const nextContractAmount = existing.contractAmount.plus(approvedAmountFromEvent());
+    const data: Prisma.JobUpdateInput = {
+      contractAmount: nextContractAmount,
+      projectRevenue: nextContractAmount,
+    };
+    if (e.name !== undefined) data.name = e.name;
+    if (e.prolineJobId) data.prolineJobId = e.prolineJobId;
+    if (e.leadNumber !== undefined) {
+      const incomingLead = e.leadNumber?.trim() || null;
+      const existingLead = existing.leadNumber?.trim() || null;
+      if (!existingLead || existingLead === incomingLead) {
+        data.leadNumber = incomingLead;
+      } else if (incomingLead && existingLead !== incomingLead) {
+        logProlineWebhook("lead_conflict_preserve_existing", {
+          jobId: existing.id,
+          existingLead,
+          incomingLead,
+        });
+      }
+    }
+    if (e.prolineStage !== undefined) {
+      const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
+      data.prolineStage = s === "" ? null : s;
+    }
+    if (e.salespersonName) {
+      const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {
+        preferFirstToken: false,
+      });
+      if (sp?.id) data.salesperson = { connect: { id: sp.id } };
+    }
+
+    await prisma.job.update({ where: { id: existing.id }, data });
+    await prisma.jobEvent.create({
+      data: {
+        jobId: existing.id,
+        type: "PROLINE_QUOTE_APPROVED",
+        source: "proline",
+        payload: e.raw as object,
+      },
+    });
+    await ensureRequiredNameWriteback(existing, e.name);
+    await recalculateJobAndCommissions(existing.id);
+    return NextResponse.json({
+      ok: true,
+      jobId: existing.id,
+      quoteApproved: "updated_existing",
+    });
   }
 
   if (e.internalType === "job.signed") {

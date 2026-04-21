@@ -35,6 +35,7 @@ export type NormalizedProlineEvent = {
   leadNumber?: string | null;
   name?: string | null;
   contractAmount?: number;
+  approvedDate?: string | null;
   amountPaid?: number;
   invoicedDelta?: number;
   invoiceId?: string;
@@ -94,9 +95,11 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
   if (typeof body.leadNumber === "string") body.leadNumber = body.leadNumber.trim();
 
   if (body.contractAmount === undefined) {
+    const at = numberFromUnknown(body.approved_total);
     const av = body.approved_value;
     const qv = body.quoted_value;
-    if (typeof av === "number" && Number.isFinite(av)) body.contractAmount = av;
+    if (at !== undefined) body.contractAmount = at;
+    else if (typeof av === "number" && Number.isFinite(av)) body.contractAmount = av;
     else if (typeof qv === "number" && Number.isFinite(qv)) body.contractAmount = qv;
   }
 
@@ -127,6 +130,12 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
 
   if ((body.paidDate === undefined || body.paidDate === null || body.paidDate === "") && typeof body.paid_date === "string") {
     body.paidDate = body.paid_date;
+  }
+  if (
+    (body.approvedDate === undefined || body.approvedDate === null || body.approvedDate === "") &&
+    typeof body.approved_date === "string"
+  ) {
+    body.approvedDate = body.approved_date;
   }
 
   if ((body.invoiceId === undefined || body.invoiceId === null || body.invoiceId === "") && body.invoice_id !== undefined) {
@@ -310,6 +319,7 @@ export function normalizeProlineWebhookBody(
       prolineStage: pickProlineStageFromRecord(body),
       paidInFull: typeof body.paidInFull === "boolean" ? body.paidInFull : undefined,
       paidDate: (body.paidDate as string | null | undefined) ?? null,
+      approvedDate: (body.approvedDate as string | null | undefined) ?? null,
       cost: typeof body.cost === "number" ? body.cost : undefined,
       salespersonName,
       raw: json,
