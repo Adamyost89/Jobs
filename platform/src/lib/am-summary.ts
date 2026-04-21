@@ -8,6 +8,7 @@ export type AmSummaryRow = {
   contractAmt: number;
   changeOrders: number;
   total: number;
+  paid: number;
   gp: number;
   openJobs: number;
   avgPerContract: number;
@@ -77,6 +78,7 @@ export async function loadAmSummaryForYear(
     contractAmt: number;
     changeOrders: number;
     total: number;
+    paid: number;
     gp: number;
     openJobs: number;
     jobsForRetail: { contractAmount: { toNumber: () => number }; pct: { toNumber: () => number } | null }[];
@@ -98,6 +100,7 @@ export async function loadAmSummaryForYear(
         contractAmt: 0,
         changeOrders: 0,
         total: 0,
+        paid: 0,
         gp: 0,
         openJobs: 0,
         jobsForRetail: [],
@@ -110,11 +113,13 @@ export async function loadAmSummaryForYear(
 
     const c = num(j.contractAmount);
     const co = num(j.changeOrders);
+    const paid = num(j.amountPaid);
     const g = num(j.gp);
     row.jobCount += 1;
     row.contractAmt += c;
     row.changeOrders += co;
     row.total += c + co;
+    row.paid += paid;
     row.gp += g;
     if (!j.paidInFull) row.openJobs += 1;
     const { retailPercent, insurancePercent } = j as JobSheetPct;
@@ -131,6 +136,7 @@ export async function loadAmSummaryForYear(
       contractAmt: r.contractAmt,
       changeOrders: r.changeOrders,
       total: r.total,
+      paid: r.paid,
       gp: r.gp,
       openJobs: r.openJobs,
       avgPerContract: r.jobCount > 0 ? r.total / r.jobCount : 0,
@@ -145,6 +151,7 @@ export async function loadAmSummaryForYear(
     contractAmt: 0,
     changeOrders: 0,
     total: 0,
+    paid: 0,
     gp: 0,
     openJobs: 0,
     avgPerContract: 0,
@@ -157,6 +164,7 @@ export async function loadAmSummaryForYear(
     grand.contractAmt += r.contractAmt;
     grand.changeOrders += r.changeOrders;
     grand.total += r.total;
+    grand.paid += r.paid;
     grand.gp += r.gp;
     grand.openJobs += r.openJobs;
   }
