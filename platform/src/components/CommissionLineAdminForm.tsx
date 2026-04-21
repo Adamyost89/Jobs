@@ -64,11 +64,9 @@ export function CommissionLineAdminForm({
   }
 
   return (
-    <div style={{ display: "grid", gap: "0.45rem", maxWidth: 240 }}>
-      <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.45 }}>
-        Wrong person/amount for this line (for example, {salespersonName})? <strong>Adjust amount &amp; lock</strong>{" "}
-        saves the remaining owed you enter and freezes recalc. <strong>Clear lock &amp; recalc</strong> re-applies normal
-        rules.
+    <div style={{ display: "grid", gap: "0.35rem", maxWidth: 220 }}>
+      <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.25 }}>
+        Admin correction for {salespersonName}:
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", fontSize: "0.72rem", color: "var(--muted)" }}>
@@ -112,12 +110,6 @@ export function CommissionLineAdminForm({
           </button>
         ) : null}
       </div>
-      {displayOwed > 0.005 && !initialOverride ? (
-        <span style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
-          Still owed {displayOwed.toLocaleString(undefined, { style: "currency", currency: "USD" })} - this only updates
-          this commission row.
-        </span>
-      ) : null}
       {msg ? (
         <span style={{ fontSize: "0.78rem", color: "#f87171" }} role="alert">
           {msg}

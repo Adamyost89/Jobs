@@ -39,9 +39,9 @@ export function PayCommissionForm({
   const periodMismatch = payPeriod.trim() !== suggestedPayPeriod.trim();
 
   return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <p style={{ margin: 0, fontSize: "0.76rem", color: "var(--muted)", lineHeight: 1.4, maxWidth: 220 }}>
-        Uses this pay period label for the check. Change only when correcting an older run.
+    <div style={{ display: "grid", gap: 6 }}>
+      <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.25 }}>
+        Post check for period:
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input
