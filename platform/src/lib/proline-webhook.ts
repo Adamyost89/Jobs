@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseProlineNameAliasMap, resolveProlineDisplayName } from "@/lib/proline-name-alias";
 
 const legacyType = z.enum(["job.signed", "job.updated", "invoice", "payment"]);
 
@@ -230,7 +231,7 @@ const looseSchema = z
 
 export function normalizeProlineWebhookBody(
   json: unknown,
-  env: { PROLINE_USER_MAP?: string }
+  env: { PROLINE_USER_MAP?: string; PROLINE_NAME_ALIASES?: unknown }
 ): { ok: true; event: NormalizedProlineEvent } | { ok: false; error: z.ZodError | string } {
   const flattened = flattenProlineWebhookJson(json);
   const parsed = looseSchema.safeParse(flattened);
@@ -244,9 +245,12 @@ export function normalizeProlineWebhookBody(
     return { ok: false, error: "Missing project id (prolineJobId / projectId / id)" };
   }
 
-  const fromMap = mapProlineUserIdToSalespersonName(body.prolineUserId, env.PROLINE_USER_MAP);
-  const salespersonName =
-    (typeof body.salespersonName === "string" ? body.salespersonName : undefined) ?? fromMap;
+  const salespersonName = resolveProlineDisplayName({
+    salespersonName: body.salespersonName,
+    prolineUserId: body.prolineUserId,
+    aliases: parseProlineNameAliasMap(env.PROLINE_NAME_ALIASES),
+    userMapJson: env.PROLINE_USER_MAP,
+  });
 
   const trig = normalizeTrigger(typeof body.trigger === "string" ? body.trigger : undefined);
   let internalType: NormalizedProlineEvent["internalType"];

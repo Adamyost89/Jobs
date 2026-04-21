@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { syncProlineJobsFromApi } from "@/lib/proline-api-job-sync";
+import { parseProlineNameAliasMap } from "@/lib/proline-name-alias";
 
 export const maxDuration = 300;
 
@@ -38,11 +39,16 @@ export async function POST(req: Request) {
   }
 
   try {
+    const cfgRows = await prisma.$queryRaw<Array<{ prolineNameAliases: unknown }>>(
+      Prisma.sql`SELECT "prolineNameAliases" FROM "SystemConfig" WHERE "id" = 'singleton' LIMIT 1`
+    );
+    const prolineNameAliases = parseProlineNameAliasMap(cfgRows[0]?.prolineNameAliases);
     const result = await syncProlineJobsFromApi(prisma, {
       dryRun: body.dryRun === true,
       maxPages: body.maxPages ?? 200,
       defaultYear,
       userMapJson: process.env.PROLINE_USER_MAP,
+      prolineNameAliases,
     });
     console.info(
       "[proline/sync-jobs]",

@@ -60,8 +60,12 @@ export async function POST(req: Request) {
   }
 
   const json = await req.json().catch(() => null);
+  const cfgRows = await prisma.$queryRaw<Array<{ prolineNameAliases: unknown }>>(
+    Prisma.sql`SELECT "prolineNameAliases" FROM "SystemConfig" WHERE "id" = 'singleton' LIMIT 1`
+  );
   const normalized = normalizeProlineWebhookBody(json, {
     PROLINE_USER_MAP: process.env.PROLINE_USER_MAP,
+    PROLINE_NAME_ALIASES: cfgRows[0]?.prolineNameAliases,
   });
 
   if (!normalized.ok) {
@@ -294,7 +298,7 @@ export async function POST(req: Request) {
 
     if (e.salespersonName) {
       const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {
-        preferFirstToken: true,
+        preferFirstToken: false,
       });
       if (sp?.id) data.salesperson = { connect: { id: sp.id } };
     }
@@ -361,7 +365,7 @@ export async function POST(req: Request) {
     let salespersonId: string | null = null;
     if (e.salespersonName) {
       const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {
-        preferFirstToken: true,
+        preferFirstToken: false,
       });
       salespersonId = sp?.id ?? null;
     }

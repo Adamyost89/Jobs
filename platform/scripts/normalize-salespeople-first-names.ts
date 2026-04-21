@@ -29,6 +29,7 @@ import { prisma } from "../src/lib/db";
 import { recalculateJobAndCommissions } from "../src/lib/job-workflow";
 import { isCommissionPlanConfigV1, type CommissionPlanConfigV1 } from "../src/lib/commission-plan-types";
 import { firstTokenName, normalizeSalespersonName } from "../src/lib/salesperson-name";
+import { aliasFromMap, parseProlineNameAliasMap, type ProlineNameAliasMap } from "../src/lib/proline-name-alias";
 
 type SpRow = { id: string; name: string; active: boolean; kind: SalespersonKind };
 
@@ -82,7 +83,12 @@ function displayNameForGroup(rows: SpRow[], canonical: SpRow): string {
   return firstTokenName(canonical.name);
 }
 
-async function buildNameRemap(tx: DbTx, initial: SpRow[], plans: { config: unknown }[]): Promise<Map<string, string>> {
+async function buildNameRemap(
+  tx: DbTx,
+  initial: SpRow[],
+  plans: { config: unknown }[],
+  aliases: ProlineNameAliasMap
+): Promise<Map<string, string>> {
   const remap = new Map<string, string>();
   for (const r of initial) {
     remap.set(r.name, r.name);
@@ -114,6 +120,11 @@ async function buildNameRemap(tx: DbTx, initial: SpRow[], plans: { config: unkno
     remap.set(r.name, fn);
   }
 
+  for (const r of initial) {
+    const explicitAlias = aliasFromMap(aliases, r.name);
+    if (explicitAlias) remap.set(r.name, explicitAlias);
+  }
+
   const extraNames = new Set<string>();
   for (const p of plans) {
     const c = p.config;
@@ -127,8 +138,12 @@ async function buildNameRemap(tx: DbTx, initial: SpRow[], plans: { config: unkno
   }
   for (const n of extraNames) {
     if (!remap.has(n)) {
-      remap.set(n, firstTokenName(n));
+      remap.set(n, aliasFromMap(aliases, n) ?? firstTokenName(n));
     }
+  }
+
+  for (const [k, v] of [...remap.entries()]) {
+    remap.set(k, aliasFromMap(aliases, v) ?? v);
   }
 
   return remap;
@@ -284,7 +299,11 @@ async function main() {
     groups.set(g, arr);
   }
 
-  const nameRemap = await buildNameRemap(prisma, initial, plans);
+  const cfgRows = await prisma.$queryRaw<Array<{ prolineNameAliases: unknown }>>(
+    Prisma.sql`SELECT "prolineNameAliases" FROM "SystemConfig" WHERE "id" = 'singleton' LIMIT 1`
+  );
+  const aliases = parseProlineNameAliasMap(cfgRows[0]?.prolineNameAliases);
+  const nameRemap = await buildNameRemap(prisma, initial, plans, aliases);
 
   const ops: string[] = [];
   for (const [, rows] of groups) {
@@ -330,6 +349,7 @@ async function main() {
   console.log(`\nBilledProjectLine ownerName variants to normalize: ${ownerChanges.length}`);
   for (const o of ownerChanges.slice(0, 30)) console.log(`  "${o.from}" -> "${o.to}"`);
   if (ownerChanges.length > 30) console.log(`  ... and ${ownerChanges.length - 30} more`);
+  console.log(`\nConfigured ProLine aliases loaded: ${Object.keys(aliases).length}`);
 
   if (dryRun) {
     await prisma.$disconnect();

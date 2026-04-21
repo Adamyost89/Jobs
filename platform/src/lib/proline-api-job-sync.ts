@@ -9,11 +9,11 @@ import { allocateNextJobNumber, recalculateJobAndCommissions } from "@/lib/job-w
 import { isAllowedProlineLifecycleStatus } from "@/lib/proline-lifecycle-status";
 import { normalizeStatus } from "@/lib/status";
 import {
-  mapProlineUserIdToSalespersonName,
   pickProlineProjectIdFromRecord,
   pickProlineStageFromRecord,
 } from "@/lib/proline-webhook";
 import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
+import { resolveProlineDisplayName, type ProlineNameAliasMap } from "@/lib/proline-name-alias";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
@@ -54,6 +54,7 @@ export type SyncProlineJobsOpts = {
   maxPages: number;
   defaultYear: number;
   userMapJson?: string;
+  prolineNameAliases?: ProlineNameAliasMap;
 };
 
 export type SyncProlineJobsResult = {
@@ -71,19 +72,21 @@ export type SyncProlineJobsResult = {
 async function resolveSalespersonId(
   db: PrismaClient,
   flat: Record<string, unknown>,
-  userMapJson: string | undefined
+  userMapJson: string | undefined,
+  prolineNameAliases: ProlineNameAliasMap
 ): Promise<string | null> {
-  const explicitName = pickStr(flat, ["salespersonName", "assigned_to_name", "main_assignee_name"]);
-  if (explicitName) {
-    const sp = await resolveOrCreateSalespersonByName(db, explicitName, { preferFirstToken: true });
-    return sp?.id ?? null;
-  }
   const uid =
     pickStr(flat, ["assigned_to_id", "prolineUserId", "main_assignee_id"]) ||
     (typeof flat.assigned_to_id === "string" ? flat.assigned_to_id : undefined);
-  const mapped = mapProlineUserIdToSalespersonName(uid, userMapJson);
-  if (!mapped) return null;
-  const sp = await resolveOrCreateSalespersonByName(db, mapped, { preferFirstToken: true });
+  const explicitName = pickStr(flat, ["salespersonName", "assigned_to_name", "main_assignee_name"]);
+  const resolved = resolveProlineDisplayName({
+    salespersonName: explicitName,
+    prolineUserId: uid,
+    aliases: prolineNameAliases,
+    userMapJson,
+  });
+  if (!resolved) return null;
+  const sp = await resolveOrCreateSalespersonByName(db, resolved, { preferFirstToken: false });
   return sp?.id ?? null;
 }
 
@@ -154,7 +157,12 @@ export async function syncProlineJobsFromApi(
       if (opts.dryRun) continue;
 
       const existing = await db.job.findFirst({ where: { prolineJobId } });
-      const salespersonId = await resolveSalespersonId(db, flat, opts.userMapJson);
+      const salespersonId = await resolveSalespersonId(
+        db,
+        flat,
+        opts.userMapJson,
+        opts.prolineNameAliases ?? {}
+      );
 
       if (!existing) {
         const jobNumber = await allocateNextJobNumber(opts.defaultYear);

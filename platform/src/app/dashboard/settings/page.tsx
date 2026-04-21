@@ -9,6 +9,7 @@ import { UserManagementSettings } from "@/components/UserManagementSettings";
 import { JobsDashboardPrefsSettingsCard } from "@/components/JobsDashboardPrefsSettingsCard";
 import { loadSalespeopleWithKindForAdmin } from "@/lib/salespeople-kind-db";
 import { ProLineConnectionAssistant } from "@/components/ProLineConnectionAssistant";
+import { ProlineNameAliasSettings } from "@/components/ProlineNameAliasSettings";
 
 export default async function SettingsPage() {
   const user = await getSession();
@@ -99,6 +100,12 @@ export default async function SettingsPage() {
           Test outbound ProLine list credentials (read-only). Use this if you are not sure about base URL or path.
         </p>
         <ProLineConnectionAssistant envLooksReady={envLooksReady} />
+        <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />
+        <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine name aliases</h3>
+        <p style={{ color: "var(--muted)", marginTop: 0 }}>
+          Control how ProLine names display in-app (for example full names to first names).
+        </p>
+        <ProlineNameAliasSettings />
       </div>
     </div>
   );
