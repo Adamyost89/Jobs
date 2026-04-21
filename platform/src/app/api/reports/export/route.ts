@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canRunFullReports } from "@/lib/rbac";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 function csvEscape(s: string) {
   if (s.includes(",") || s.includes('"') || s.includes("\n")) {
@@ -62,7 +63,7 @@ export async function GET(req: Request) {
         String(j.year),
         j.leadNumber ?? "",
         csvEscape(j.name ?? ""),
-        j.salesperson?.name ?? "",
+        j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "",
         j.status,
         j.contractAmount.toString(),
         j.changeOrders.toString(),

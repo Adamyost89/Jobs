@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canViewHrPayroll } from "@/lib/rbac";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 function csvEscape(s: string) {
   if (s.includes(",") || s.includes('"') || s.includes("\n")) {
@@ -41,7 +42,7 @@ export async function GET() {
     lines.push(
       [
         csvEscape(p.payPeriodLabel),
-        csvEscape(p.salesperson.name),
+        csvEscape(displaySalespersonName(p.salesperson.name)),
         p.amount.toString(),
         p.job?.jobNumber ?? "",
         p.job ? String(p.job.year) : "",

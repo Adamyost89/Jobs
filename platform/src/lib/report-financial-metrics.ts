@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/rbac";
 import { canRunFullReports } from "@/lib/rbac";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 export type FinancialYearlyPoint = {
   year: number;
@@ -233,7 +234,7 @@ export async function getFinancialMetricsAnalytics(
 
   for (const j of jobsSummary) {
     const sid = j.salespersonId;
-    const name = j.salesperson?.name ?? "Unassigned";
+    const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const c = num(j.contractAmount);
     const co = num(j.changeOrders);
     const inv = num(j.invoicedTotal);

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/rbac";
 import { canRunFullReports } from "@/lib/rbac";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 import {
   CONTRACT_SIGN_CHART_TIMEZONE,
   CONTRACT_SIGN_MONTH_LABELS,
@@ -152,7 +153,7 @@ export async function getSignedContractsAnalytics(
 
   for (const j of jobsSummary) {
     const sid = j.salespersonId;
-    const name = j.salesperson?.name ?? "Unassigned";
+    const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const c = num(j.contractAmount);
     const co = num(j.changeOrders);
     const g = num(j.gp);
@@ -228,7 +229,7 @@ export async function getSignedContractsAnalytics(
   let undatedSignedRevenue = 0;
 
   for (const j of jobsMonthly) {
-    const name = j.salesperson?.name ?? "Unassigned";
+    const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const sid = j.salesperson?.id;
     if (sid && !salespersonIdByRepName[name]) salespersonIdByRepName[name] = sid;
     const dollars = num(j.contractAmount) + num(j.changeOrders);

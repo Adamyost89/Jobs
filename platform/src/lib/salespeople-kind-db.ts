@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
+import { displaySalespersonName } from "./salesperson-name";
 
 export type SalesKind = "REP" | "MANAGER";
 
@@ -28,7 +29,7 @@ export async function loadSalespeopleWithKindForAdmin(): Promise<SalespersonAdmi
   );
   return rows.map((r) => ({
     id: r.id,
-    name: r.name,
+    name: displaySalespersonName(r.name),
     active: r.active,
     kind: parseKind(r.kind ?? "REP"),
   }));
@@ -66,7 +67,7 @@ async function fetchOneAdminRow(id: string): Promise<SalespersonAdminRow> {
   if (!r) throw new Error("Salesperson not found");
   return {
     id: r.id,
-    name: r.name,
+    name: displaySalespersonName(r.name),
     active: r.active,
     kind: parseKind(r.kind ?? "REP"),
   };

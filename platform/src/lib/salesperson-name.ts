@@ -16,6 +16,12 @@ export function firstTokenName(raw: string): string {
   return first;
 }
 
+export function displaySalespersonName(raw: unknown): string {
+  const normalized = normalizeSalespersonName(raw);
+  if (!normalized) return "";
+  return firstTokenName(normalized) || normalized;
+}
+
 /**
  * Prefer the existing first-name salesperson row when external systems send full names.
  * This keeps internal commission mappings stable even if ProLine/Excel sends "First Last".

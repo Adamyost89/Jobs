@@ -187,6 +187,8 @@ model SystemConfig {
   companyRevenueYtd Decimal? @db.Decimal(18, 2)
   /** ProLine alias map: incoming name/user id -> canonical display name. */
   prolineNameAliases Json @default("{}")
+  /** Shared status badge color overrides keyed by normalized status/stage labels. */
+  statusBadgeColors Json @default("{}")
 }
 
 /** Full raw grid for one Excel tab — captures every sheet so nothing is left only in .xlsx. */

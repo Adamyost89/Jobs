@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { signedCalendarMonthForChart } from "@/lib/contract-signed-month";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 /**
  * Jobs list query params (GET):
@@ -198,7 +199,7 @@ export default async function JobsPage({
       year: j.year,
       leadNumber: j.leadNumber,
       name: j.name,
-      salespersonName: j.salesperson?.name ?? null,
+      salespersonName: j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : null,
       status: j.status,
       prolineStage: j.prolineStage,
       contractAmount: j.contractAmount.toNumber(),
@@ -263,7 +264,7 @@ export default async function JobsPage({
                 <option value="">All</option>
                 {salespeople.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name}
+                    {displaySalespersonName(s.name)}
                   </option>
                 ))}
               </select>

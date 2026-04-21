@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 function requireSuperAdmin() {
   return getSession().then((u) => (u?.role === Role.SUPER_ADMIN ? u : null));
@@ -23,7 +24,7 @@ export async function GET() {
       email: u.email,
       role: u.role,
       salespersonId: u.salespersonId,
-      salespersonName: u.salesperson?.name ?? null,
+      salespersonName: u.salesperson?.name ? displaySalespersonName(u.salesperson.name) : null,
       createdAt: u.createdAt,
     })),
   });
@@ -74,7 +75,9 @@ export async function POST(req: Request) {
         email: created.email,
         role: created.role,
         salespersonId: created.salespersonId,
-        salespersonName: created.salesperson?.name ?? null,
+        salespersonName: created.salesperson?.name
+          ? displaySalespersonName(created.salesperson.name)
+          : null,
       },
     });
   } catch {

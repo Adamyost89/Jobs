@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 const patchSchema = z
   .object({
@@ -67,7 +68,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       email: updated.email,
       role: updated.role,
       salespersonId: updated.salespersonId,
-      salespersonName: updated.salesperson?.name ?? null,
+      salespersonName: updated.salesperson?.name
+        ? displaySalespersonName(updated.salesperson.name)
+        : null,
     },
   });
 }

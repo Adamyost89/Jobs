@@ -148,7 +148,7 @@ export function UserManagementSettings({
         </p>
       )}
 
-      <div style={{ overflowX: "auto" }}>
+      <div>
         <table className="table table-data">
           <thead>
             <tr>

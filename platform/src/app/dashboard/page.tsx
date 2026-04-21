@@ -99,7 +99,7 @@ export default async function DashboardHome({
         <Link href="/dashboard/advanced">Advanced</Link>
       </p>
 
-      <div className="card" style={{ overflowX: "auto", padding: "0.35rem 0 0.85rem" }}>
+      <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
         <h2 style={{ margin: "0.65rem 1rem 0.5rem", fontSize: "1.05rem" }}>By account manager</h2>
         <p style={{ margin: "0 1rem 0.5rem", fontSize: "0.8rem", color: "var(--muted)" }}>
           Click a rep row to open their jobs for {workYear}.
@@ -157,7 +157,7 @@ export default async function DashboardHome({
       </div>
 
       {monthly && (
-        <div className="card" style={{ overflowX: "auto", padding: "0.35rem 0 0.85rem" }}>
+        <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
           <h2 style={{ margin: "0.65rem 1rem 0.5rem", fontSize: "1.05rem" }}>Signed dollars by month ({workYear})</h2>
           {monthly.jobsUndatedNoSignDate > 0 ? (
             <p style={{ margin: "0 1rem 0.75rem", fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.45 }}>

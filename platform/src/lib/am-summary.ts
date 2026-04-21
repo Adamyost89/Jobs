@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 export type AmSummaryRow = {
   salespersonId: string | null;
@@ -86,7 +87,7 @@ export async function loadAmSummaryForYear(
 
   for (const j of jobs) {
     const sid = j.salespersonId;
-    const name = j.salesperson?.name ?? "Unassigned";
+    const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const key = sid ?? "__unassigned__";
     const row =
       map.get(key) ??

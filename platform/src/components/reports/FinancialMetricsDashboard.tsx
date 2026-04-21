@@ -311,7 +311,7 @@ export function FinancialMetricsDashboard({ defaultYear }: { defaultYear: number
                 open that rep&apos;s jobs for {summaryYear}.
               </p>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div>
               <table className="table table-data" style={{ minWidth: 880 }}>
                 <thead>
                   <tr>

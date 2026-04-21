@@ -7,6 +7,7 @@ import { canViewHrPayroll } from "@/lib/rbac";
 import { formatDateTimeInEastern } from "@/lib/payout-display";
 import { commissionDisplayAmounts } from "@/lib/commission-display";
 import { CommissionSubnav } from "@/components/CommissionSubnav";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 export default async function HrCommissionsPayrollPage() {
   const user = await getSession();
@@ -62,7 +63,7 @@ export default async function HrCommissionsPayrollPage() {
   let totalOwed = 0;
   for (const { c, displayOwed } of rowsWithDisplay) {
     totalOwed += displayOwed;
-    const k = c.salesperson.name;
+    const k = displaySalespersonName(c.salesperson.name);
     owedBySp.set(k, (owedBySp.get(k) ?? 0) + displayOwed);
   }
   const owedSpLines = [...owedBySp.entries()]
@@ -121,7 +122,7 @@ export default async function HrCommissionsPayrollPage() {
         {rowsWithDisplay.length === 0 ? (
           <p style={{ margin: 0, color: "var(--muted)" }}>Nothing outstanding after reconciling checks with the ledger.</p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div>
             <table className="table table-data">
               <thead>
                 <tr>
@@ -136,7 +137,7 @@ export default async function HrCommissionsPayrollPage() {
               <tbody>
                 {rowsWithDisplay.map(({ c, displayOwed }) => (
                   <tr key={c.id}>
-                    <td className="cell-nowrap">{c.salesperson.name}</td>
+                    <td className="cell-nowrap">{displaySalespersonName(c.salesperson.name)}</td>
                     <td className="job-cell-num">
                       <Link
                         href={jobsDrilldownUrl({ year: c.job.year, q: c.job.jobNumber })}
@@ -188,7 +189,7 @@ export default async function HrCommissionsPayrollPage() {
           const periodTotal = lines.reduce((s, p) => s + p.amount.toNumber(), 0);
           const bySp = new Map<string, number>();
           for (const p of lines) {
-            const n = p.salesperson.name;
+            const n = displaySalespersonName(p.salesperson.name);
             bySp.set(n, (bySp.get(n) ?? 0) + p.amount.toNumber());
           }
           const spSummary = [...bySp.entries()]
@@ -205,7 +206,7 @@ export default async function HrCommissionsPayrollPage() {
                 </div>
               </div>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>{spSummary}</p>
-              <div style={{ overflowX: "auto" }}>
+              <div>
                 <table className="table">
                   <thead>
                     <tr>
@@ -220,10 +221,14 @@ export default async function HrCommissionsPayrollPage() {
                   </thead>
                   <tbody>
                     {[...lines]
-                      .sort((a, b) => a.salesperson.name.localeCompare(b.salesperson.name))
+                      .sort((a, b) =>
+                        displaySalespersonName(a.salesperson.name).localeCompare(
+                          displaySalespersonName(b.salesperson.name)
+                        )
+                      )
                       .map((p) => (
                         <tr key={p.id}>
-                          <td>{p.salesperson.name}</td>
+                          <td>{displaySalespersonName(p.salesperson.name)}</td>
                           <td>${p.amount.toNumber().toFixed(2)}</td>
                           <td>
                             {p.job?.jobNumber ? (

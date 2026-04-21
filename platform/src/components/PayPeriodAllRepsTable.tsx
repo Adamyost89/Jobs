@@ -106,7 +106,7 @@ export function PayPeriodAllRepsTable({ rows }: { rows: PayPeriodAllRepsRow[] })
   };
 
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div>
       <table className="table table-data">
         <thead>
           <tr>
@@ -151,7 +151,7 @@ export function PayPeriodAllRepsTable({ rows }: { rows: PayPeriodAllRepsRow[] })
                         <p style={{ margin: "0 0 0.5rem", fontSize: "0.8rem", color: "var(--muted)" }}>
                           Posted payouts in this period grouped by salesperson (click the row above to collapse).
                         </p>
-                        <div style={{ overflowX: "auto" }}>
+                        <div>
                           <table className="table table-data" style={{ margin: 0, fontSize: "0.84rem" }}>
                             <thead>
                               <tr>

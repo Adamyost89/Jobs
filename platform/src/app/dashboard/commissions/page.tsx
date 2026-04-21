@@ -10,6 +10,7 @@ import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import type { Prisma } from "@prisma/client";
 import { commissionDisplayAmounts, roundMoney } from "@/lib/commission-display";
 import { jobNumberSortKey } from "@/lib/job-sort";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 export default async function CommissionsPage() {
   const user = await getSession();
@@ -153,7 +154,7 @@ export default async function CommissionsPage() {
         </p>
       ) : null}
 
-      <div className="card" style={{ overflowX: "auto", padding: "0.35rem 0 0.85rem" }}>
+      <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
         <table className="table table-data">
           <thead>
             <tr>
@@ -206,7 +207,7 @@ export default async function CommissionsPage() {
                       {sub && <div className="cell-sub">{sub}</div>}
                     </td>
                     <td className="cell-nowrap">
-                      {c.salesperson.name}
+                      {displaySalespersonName(c.salesperson.name)}
                       {!c.salesperson.active ? (
                         <span className="cell-muted" style={{ fontSize: "0.75rem", display: "block" }}>
                           Inactive · $0 owed
@@ -252,7 +253,7 @@ export default async function CommissionsPage() {
                           ledgerPaid={c.paidAmount.toNumber()}
                           displayOwed={displayOwed}
                           override={c.override}
-                          salespersonName={c.salesperson.name}
+                          salespersonName={displaySalespersonName(c.salesperson.name)}
                         />
                       </td>
                     )}

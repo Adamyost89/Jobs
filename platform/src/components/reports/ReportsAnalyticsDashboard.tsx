@@ -378,7 +378,7 @@ export function ReportsAnalyticsDashboard({ defaultYear }: { defaultYear: number
                 open that rep&apos;s jobs for {summaryYear}.
               </p>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div>
               <table className="table table-data" style={{ minWidth: 720 }}>
                 <thead>
                   <tr>

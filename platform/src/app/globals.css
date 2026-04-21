@@ -394,7 +394,7 @@ a.signed-month-drill-link:hover {
   padding: 1.25rem 1.5rem 2rem;
   flex: 1;
   min-width: 0;
-  --dash-table-sticky-top: clamp(3.75rem, 9vw, 6.5rem);
+  --dash-table-sticky-top: 0px;
 }
 
 .payout-history {

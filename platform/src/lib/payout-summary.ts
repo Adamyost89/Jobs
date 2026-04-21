@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { jobNumberSortKey } from "@/lib/job-sort";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 /** One posted check / payout row (for expand-by-period UI). */
 export type PayoutPeriodLine = {
@@ -106,13 +107,13 @@ export async function loadPayoutSummary(
 
   for (const r of payoutsForSummary) {
     if (year !== undefined && inferPayoutYear(r) !== year) continue;
-    const name = r.salesperson.name;
+    const name = displaySalespersonName(r.salesperson.name);
     const amt = r.amount.toNumber();
     const line: PayoutPeriodLine = {
       id: r.id,
       amount: amt,
       salespersonName: name,
-      amName: r.job?.salesperson?.name ?? null,
+      amName: r.job?.salesperson?.name ? displaySalespersonName(r.job.salesperson.name) : null,
       jobNumber: r.job?.jobNumber ?? null,
       jobName: r.job?.name ?? null,
       jobYear: r.job?.year ?? null,

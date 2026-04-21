@@ -383,7 +383,7 @@ export function JobsTableSection({
         </div>
       ) : null}
 
-      <div className="card" style={{ overflowX: "auto", padding: "0.35rem 0 0.85rem" }}>
+      <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
         {deleteMsg ? (
           <p style={{ margin: "0.75rem 1.25rem", color: "var(--warn)", fontSize: "0.86rem" }}>{deleteMsg}</p>
         ) : null}
