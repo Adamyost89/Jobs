@@ -20,6 +20,7 @@ const patchSchema = z
     paidInFull: z.boolean().optional(),
     invoiceFlag: z.boolean().optional(),
     paidDate: z.union([z.string(), z.null()]).optional(),
+    contractSignedAt: z.union([z.string(), z.null()]).optional(),
     drewParticipation: z.string().optional().nullable(),
   })
   .partial();
@@ -60,6 +61,12 @@ export async function PATCH(
       p.paidDate === null || p.paidDate === ""
         ? null
         : new Date(p.paidDate as string);
+  }
+  if (p.contractSignedAt !== undefined) {
+    data.contractSignedAt =
+      p.contractSignedAt === null || p.contractSignedAt === ""
+        ? null
+        : new Date(p.contractSignedAt as string);
   }
   if (p.drewParticipation !== undefined) data.drewParticipation = p.drewParticipation;
 

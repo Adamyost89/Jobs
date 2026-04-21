@@ -218,6 +218,7 @@ export default async function JobsPage({
       id: j.id,
       jobNumber: j.jobNumber,
       year: j.year,
+      contractSignedAt: j.contractSignedAt ? j.contractSignedAt.toISOString() : null,
       leadNumber: j.leadNumber,
       name: j.name,
       salespersonName: j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : null,

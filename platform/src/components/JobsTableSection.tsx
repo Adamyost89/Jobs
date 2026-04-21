@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { JobCostEditor } from "@/components/JobCostEditor";
 import { JobsDashboardPrefsForm } from "@/components/JobsDashboardPrefsForm";
@@ -31,6 +31,7 @@ export type JobsTableRowDTO = {
   id: string;
   jobNumber: string;
   year: number;
+  contractSignedAt: string | null;
   leadNumber: string | null;
   name: string | null;
   salespersonName: string | null;
@@ -96,6 +97,19 @@ export function JobsTableSection({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingEditId, setSavingEditId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    name: string;
+    leadNumber: string;
+    status: string;
+    contractAmount: string;
+    changeOrders: string;
+    invoicedTotal: string;
+    projectRevenue: string;
+    contractSignedAt: string;
+  } | null>(null);
+  const [editMsg, setEditMsg] = useState<string | null>(null);
 
   useEffect(() => {
     setPrefs(loadJobsTablePrefsFromStorage());
@@ -172,6 +186,111 @@ export function JobsTableSection({
       }
     },
     [canEdit, deletingId, router]
+  );
+
+  function toDateInputValue(iso: string | null): string {
+    if (!iso) return "";
+    return iso.slice(0, 10);
+  }
+
+  function toEditForm(row: JobsTableRowDTO) {
+    return {
+      name: row.name ?? "",
+      leadNumber: row.leadNumber ?? "",
+      status: row.status ?? "",
+      contractAmount: String(row.contractAmount),
+      changeOrders: String(row.changeOrders),
+      invoicedTotal: String(row.invoicedTotal),
+      projectRevenue: String(row.projectRevenue),
+      contractSignedAt: toDateInputValue(row.contractSignedAt),
+    };
+  }
+
+  function beginEdit(row: JobsTableRowDTO) {
+    if (!canEdit || deletingId || savingEditId) return;
+    setDeleteMsg(null);
+    setEditMsg(null);
+    setEditingId(row.id);
+    setEditForm(toEditForm(row));
+  }
+
+  function cancelEdit() {
+    if (savingEditId) return;
+    setEditingId(null);
+    setEditForm(null);
+  }
+
+  function parseMoneyInput(label: string, raw: string): { ok: true; value: number } | { ok: false; error: string } {
+    const value = Number(raw.trim());
+    if (!Number.isFinite(value)) return { ok: false, error: `${label} must be a valid number.` };
+    return { ok: true, value };
+  }
+
+  const saveEdit = useCallback(
+    async (row: JobsTableRowDTO) => {
+      if (!canEdit || !editForm || editingId !== row.id || savingEditId) return;
+      const status = editForm.status.trim();
+      if (!status) {
+        setEditMsg("Status is required.");
+        return;
+      }
+      const contract = parseMoneyInput("Contract amount", editForm.contractAmount);
+      if (!contract.ok) {
+        setEditMsg(contract.error);
+        return;
+      }
+      const changeOrders = parseMoneyInput("Change orders", editForm.changeOrders);
+      if (!changeOrders.ok) {
+        setEditMsg(changeOrders.error);
+        return;
+      }
+      const invoicedTotal = parseMoneyInput("Invoiced total", editForm.invoicedTotal);
+      if (!invoicedTotal.ok) {
+        setEditMsg(invoicedTotal.error);
+        return;
+      }
+      const projectRevenue = parseMoneyInput("Project revenue", editForm.projectRevenue);
+      if (!projectRevenue.ok) {
+        setEditMsg(projectRevenue.error);
+        return;
+      }
+
+      const payload = {
+        name: editForm.name.trim() ? editForm.name.trim() : null,
+        leadNumber: editForm.leadNumber.trim() ? editForm.leadNumber.trim() : null,
+        status,
+        contractAmount: contract.value,
+        changeOrders: changeOrders.value,
+        invoicedTotal: invoicedTotal.value,
+        projectRevenue: projectRevenue.value,
+        contractSignedAt: editForm.contractSignedAt.trim() ? editForm.contractSignedAt.trim() : null,
+      };
+
+      setSavingEditId(row.id);
+      setEditMsg(null);
+      setDeleteMsg(null);
+      try {
+        const res = await fetch(`/api/jobs/${row.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setEditMsg(typeof j.error === "string" ? j.error : "Failed to save job changes.");
+          return;
+        }
+        setEditMsg(`Saved changes for job ${row.jobNumber}.`);
+        setEditingId(null);
+        setEditForm(null);
+        router.refresh();
+      } catch {
+        setEditMsg("Network error saving job changes.");
+      } finally {
+        setSavingEditId(null);
+      }
+    },
+    [canEdit, editForm, editingId, savingEditId, router]
   );
 
   const legendBad = {
@@ -396,6 +515,9 @@ export function JobsTableSection({
         {deleteMsg ? (
           <p style={{ margin: "0.75rem 1.25rem", color: "var(--warn)", fontSize: "0.86rem" }}>{deleteMsg}</p>
         ) : null}
+        {editMsg ? (
+          <p style={{ margin: "0.75rem 1.25rem", color: "var(--muted)", fontSize: "0.86rem" }}>{editMsg}</p>
+        ) : null}
         {visibleRows.length === 0 ? (
           <p style={{ margin: "1rem 1.25rem", color: "var(--muted)" }}>
             No jobs match. Widen search, pick another year, or turn on &quot;Show empty job # placeholders&quot; for
@@ -413,22 +535,155 @@ export function JobsTableSection({
               {visibleRows.map((row) => {
                 const rowStyle = canSeeGp ? rowStyleForHighlight(row) : undefined;
                 return (
-                  <tr key={row.id} style={rowStyle}>
-                    {cols.map((id) => renderTd(row, id))}
-                    {canEdit ? (
-                      <td className="cell-nowrap">
-                        <button
-                          type="button"
-                          className="btn secondary"
-                          onClick={() => void deleteJob(row)}
-                          disabled={deletingId === row.id}
-                          style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca" }}
-                        >
-                          {deletingId === row.id ? "Deleting…" : "Delete"}
-                        </button>
-                      </td>
+                  <Fragment key={row.id}>
+                    <tr style={rowStyle}>
+                      {cols.map((id) => renderTd(row, id))}
+                      {canEdit ? (
+                        <td className="cell-nowrap">
+                          <button
+                            type="button"
+                            className="btn secondary"
+                            onClick={() => beginEdit(row)}
+                            disabled={deletingId != null || savingEditId != null}
+                            style={{ marginRight: "0.45rem" }}
+                          >
+                            {editingId === row.id ? "Editing" : "Edit"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn secondary"
+                            onClick={() => void deleteJob(row)}
+                            disabled={deletingId === row.id || savingEditId != null}
+                            style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca" }}
+                          >
+                            {deletingId === row.id ? "Deleting…" : "Delete"}
+                          </button>
+                        </td>
+                      ) : null}
+                    </tr>
+                    {canEdit && editingId === row.id && editForm ? (
+                      <tr>
+                        <td colSpan={cols.length + 1} style={{ paddingTop: 0 }}>
+                          <div className="card" style={{ margin: "0.35rem 0.7rem 0.8rem", padding: "0.9rem 1rem" }}>
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                                gap: "0.65rem 0.8rem",
+                              }}
+                            >
+                              <label>
+                                Customer name
+                                <input
+                                  className="input"
+                                  value={editForm.name}
+                                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
+                                  placeholder="Customer"
+                                />
+                              </label>
+                              <label>
+                                Lead #
+                                <input
+                                  className="input"
+                                  value={editForm.leadNumber}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => (prev ? { ...prev, leadNumber: e.target.value } : prev))
+                                  }
+                                  placeholder="Lead number"
+                                />
+                              </label>
+                              <label>
+                                Status
+                                <input
+                                  className="input"
+                                  value={editForm.status}
+                                  onChange={(e) => setEditForm((prev) => (prev ? { ...prev, status: e.target.value } : prev))}
+                                  placeholder="Status"
+                                />
+                              </label>
+                              <label>
+                                Contract amount
+                                <input
+                                  className="input"
+                                  inputMode="decimal"
+                                  value={editForm.contractAmount}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => (prev ? { ...prev, contractAmount: e.target.value } : prev))
+                                  }
+                                  placeholder="0.00"
+                                />
+                              </label>
+                              <label>
+                                Change orders
+                                <input
+                                  className="input"
+                                  inputMode="decimal"
+                                  value={editForm.changeOrders}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => (prev ? { ...prev, changeOrders: e.target.value } : prev))
+                                  }
+                                  placeholder="0.00"
+                                />
+                              </label>
+                              <label>
+                                Invoiced total
+                                <input
+                                  className="input"
+                                  inputMode="decimal"
+                                  value={editForm.invoicedTotal}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => (prev ? { ...prev, invoicedTotal: e.target.value } : prev))
+                                  }
+                                  placeholder="0.00"
+                                />
+                              </label>
+                              <label>
+                                Project revenue
+                                <input
+                                  className="input"
+                                  inputMode="decimal"
+                                  value={editForm.projectRevenue}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => (prev ? { ...prev, projectRevenue: e.target.value } : prev))
+                                  }
+                                  placeholder="0.00"
+                                />
+                              </label>
+                              <label>
+                                Contract signed date
+                                <input
+                                  className="input"
+                                  type="date"
+                                  value={editForm.contractSignedAt}
+                                  onChange={(e) =>
+                                    setEditForm((prev) => (prev ? { ...prev, contractSignedAt: e.target.value } : prev))
+                                  }
+                                />
+                              </label>
+                            </div>
+                            <div style={{ display: "flex", gap: "0.55rem", marginTop: "0.9rem" }}>
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => void saveEdit(row)}
+                                disabled={savingEditId === row.id}
+                              >
+                                {savingEditId === row.id ? "Saving…" : "Save changes"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn secondary"
+                                onClick={cancelEdit}
+                                disabled={savingEditId === row.id}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     ) : null}
-                  </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
