@@ -14,6 +14,7 @@ import Link from "next/link";
 import { signedCalendarMonthForChart } from "@/lib/contract-signed-month";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { normalizeStatusBadgeColorMap } from "@/lib/status-badge-colors";
 
 /**
  * Jobs list query params (GET):
@@ -218,6 +219,11 @@ export default async function JobsPage({
     };
   });
 
+  const statusColorRows = await prisma.$queryRaw<Array<{ statusBadgeColors: unknown }>>(
+    Prisma.sql`SELECT "statusBadgeColors" FROM "SystemConfig" WHERE "id" = 'singleton' LIMIT 1`
+  );
+  const statusBadgeColors = normalizeStatusBadgeColorMap(statusColorRows[0]?.statusBadgeColors);
+
   return (
     <div className="page-stack page-stack--full">
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
@@ -306,7 +312,7 @@ export default async function JobsPage({
         </span>
       </p>
 
-      <JobsTableSection rows={tableRows} user={user} />
+      <JobsTableSection rows={tableRows} user={user} statusBadgeColors={statusBadgeColors} />
     </div>
   );
 }

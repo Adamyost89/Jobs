@@ -10,6 +10,7 @@ import { JobsDashboardPrefsSettingsCard } from "@/components/JobsDashboardPrefsS
 import { loadSalespeopleWithKindForAdmin } from "@/lib/salespeople-kind-db";
 import { ProLineConnectionAssistant } from "@/components/ProLineConnectionAssistant";
 import { ProlineNameAliasSettings } from "@/components/ProlineNameAliasSettings";
+import { StatusBadgeColorSettings } from "@/components/StatusBadgeColorSettings";
 
 export default async function SettingsPage() {
   const user = await getSession();
@@ -62,6 +63,13 @@ export default async function SettingsPage() {
           Column layout, visibility, GP highlight thresholds, and row colors (same controls as on the Jobs page).
         </p>
         <JobsDashboardPrefsSettingsCard />
+      </div>
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Status badge colors</h2>
+        <p style={{ color: "var(--muted)" }}>
+          Set shared colors for status chips on Jobs. Custom stage labels (for example ProLine stages) can be added.
+        </p>
+        <StatusBadgeColorSettings />
       </div>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Cutover</h2>

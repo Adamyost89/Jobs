@@ -11,6 +11,11 @@ import { formatGpPercent, formatJobGpDisplay } from "@/lib/job-row-highlight";
 import type { JobLike } from "@/lib/job-row-highlight";
 import { hasDisplayableGp } from "@/lib/job-workflow";
 import {
+  resolveStatusBadgeColors,
+  statusColumnLabel,
+  type StatusBadgeColorMap,
+} from "@/lib/status-badge-colors";
+import {
   DEFAULT_JOBS_TABLE_PREFS,
   type HlColors,
   JOB_TABLE_COLUMN_LABELS,
@@ -75,26 +80,14 @@ function rowRevenue(row: JobsTableRowDTO): number {
   return row.contractAmount + row.changeOrders;
 }
 
-function statusClass(s: string) {
-  const u = s.toUpperCase();
-  if (u === "UNKNOWN") return "status-pill status-pill--unknown";
-  if (u.includes("CANCEL")) return "status-pill status-pill--bad";
-  if (u.includes("COMPLETE") || u.includes("SOLD")) return "status-pill status-pill--done";
-  return "status-pill status-pill--active";
-}
-
-function statusColumnLabel(row: JobsTableRowDTO): string {
-  const stage = row.prolineStage?.trim();
-  if (stage) return stage;
-  return row.status.replace(/_/g, " ");
-}
-
 export function JobsTableSection({
   rows,
   user,
+  statusBadgeColors,
 }: {
   rows: JobsTableRowDTO[];
   user: SessionUser;
+  statusBadgeColors: StatusBadgeColorMap;
 }) {
   const router = useRouter();
   const canEdit = canEditJobs(user);
@@ -272,11 +265,27 @@ export function JobsTableSection({
           </td>
         );
       case "status":
-        return (
-          <td key={id}>
-            <span className={statusClass(row.status)}>{statusColumnLabel(row)}</span>
-          </td>
-        );
+        {
+          const c = resolveStatusBadgeColors({
+            status: row.status,
+            prolineStage: row.prolineStage,
+            customMap: statusBadgeColors,
+          });
+          return (
+            <td key={id}>
+              <span
+                className="status-pill"
+                style={{
+                  background: c.background,
+                  color: c.text,
+                  border: `1px solid ${c.border}`,
+                }}
+              >
+                {statusColumnLabel(row.status, row.prolineStage)}
+              </span>
+            </td>
+          );
+        }
       case "contract":
         return <td key={id} className="cell-num">{money(row.contractAmount)}</td>;
       case "changeOrders":
