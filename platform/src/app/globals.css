@@ -6,6 +6,7 @@
   --accent: #3b82f6;
   --good: #22c55e;
   --warn: #eab308;
+  --dash-table-sticky-top: 0px;
 }
 
 * {
@@ -131,8 +132,8 @@ select.input {
 
 .table-data th {
   position: sticky;
-  top: 0;
-  z-index: 1;
+  top: var(--dash-table-sticky-top);
+  z-index: 8;
   background: var(--panel);
   box-shadow: 0 1px 0 #2a3545;
   white-space: nowrap;
@@ -393,6 +394,7 @@ a.signed-month-drill-link:hover {
   padding: 1.25rem 1.5rem 2rem;
   flex: 1;
   min-width: 0;
+  --dash-table-sticky-top: clamp(3.75rem, 9vw, 6.5rem);
 }
 
 .payout-history {
