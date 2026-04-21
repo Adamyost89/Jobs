@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { canViewAllJobs } from "@/lib/rbac";
+import { canModifyData, canViewAllJobs } from "@/lib/rbac";
 import { formatDateInEastern } from "@/lib/payout-display";
 import { distinctPayoutYearsForSelect, loadPayoutSummary } from "@/lib/payout-summary";
 import { PayPeriodAllRepsTable } from "@/components/PayPeriodAllRepsTable";
@@ -21,6 +21,7 @@ export default async function PayoutSummaryPage({
 }) {
   const user = await getSession();
   if (!user) return null;
+  const canManagePayoutLines = canModifyData(user);
 
   const sp = await searchParams;
   const yearParamRaw = pickString(sp.year);
@@ -122,7 +123,7 @@ export default async function PayoutSummaryPage({
           <p style={{ margin: 0, fontSize: "0.9rem" }}>
             <strong>Grand total paid ({grandTotalLabel}):</strong> {money2(grandTotalPaid)}
           </p>
-          <PayPeriodAllRepsTable rows={payPeriodAllRepsRows} />
+          <PayPeriodAllRepsTable rows={payPeriodAllRepsRows} canManagePayoutLines={canManagePayoutLines} />
 
           <h2 style={{ margin: "0.5rem 0 0", fontSize: "1.1rem", fontWeight: 700 }}>By salesperson &amp; pay period</h2>
           <div style={{ overflowX: "auto" }}>
