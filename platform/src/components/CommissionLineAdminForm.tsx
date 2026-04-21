@@ -64,12 +64,11 @@ export function CommissionLineAdminForm({
   }
 
   return (
-    <div style={{ display: "grid", gap: "0.45rem", maxWidth: 280 }}>
+    <div style={{ display: "grid", gap: "0.45rem", maxWidth: 240 }}>
       <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.45 }}>
-        Mis-assigned line (e.g. {salespersonName} shouldn&apos;t earn on this job)?{" "}
-        <strong>Adjust amount &amp; lock</strong> sets the remaining owed you enter and stops auto-recalc from changing
-        it. <strong>Clear lock &amp; recalc</strong> runs rules again — set the job&apos;s <em>Drew participation</em> to{" "}
-        <code>No</code> first if Drew should drop off entirely.
+        Wrong person/amount for this line (for example, {salespersonName})? <strong>Adjust amount &amp; lock</strong>{" "}
+        saves the remaining owed you enter and freezes recalc. <strong>Clear lock &amp; recalc</strong> re-applies normal
+        rules.
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", fontSize: "0.72rem", color: "var(--muted)" }}>
@@ -99,7 +98,7 @@ export function CommissionLineAdminForm({
           style={{ fontSize: "0.78rem", alignSelf: "flex-end" }}
           onClick={adjustAndLock}
         >
-          Adjust amount &amp; lock
+          Adjust &amp; lock
         </button>
         {initialOverride ? (
           <button
@@ -109,15 +108,14 @@ export function CommissionLineAdminForm({
             style={{ fontSize: "0.78rem", alignSelf: "flex-end" }}
             onClick={() => patch({ override: false })}
           >
-            Clear lock &amp; recalc
+            Clear &amp; recalc
           </button>
         ) : null}
       </div>
       {displayOwed > 0.005 && !initialOverride ? (
         <span style={{ fontSize: "0.7rem", color: "var(--muted)" }}>
-          Still owed {displayOwed.toLocaleString(undefined, { style: "currency", currency: "USD" })} — adjusting only
-          affects the ledger row; use job import/API to set Drew participation if the sheet says he didn&apos;t
-          participate.
+          Still owed {displayOwed.toLocaleString(undefined, { style: "currency", currency: "USD" })} - this only updates
+          this commission row.
         </span>
       ) : null}
       {msg ? (

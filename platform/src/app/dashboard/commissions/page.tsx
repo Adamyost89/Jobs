@@ -164,8 +164,8 @@ export default async function CommissionsPage() {
               <th className="cell-num">Still owed</th>
               <th style={{ minWidth: "15rem" }}>Payment history</th>
               <th>Lock</th>
-              {canEditCommissions(user) && <th style={{ minWidth: "14rem" }}>Admin fix</th>}
-              {canMarkCommissionPaid(user) && <th style={{ minWidth: "15rem" }}>Post payment</th>}
+              {canMarkCommissionPaid(user) && <th style={{ minWidth: "13rem" }}>Post payment</th>}
+              {canEditCommissions(user) && <th style={{ minWidth: "13rem" }}>Admin fix</th>}
             </tr>
           </thead>
           <tbody>
@@ -246,17 +246,6 @@ export default async function CommissionsPage() {
                       )}
                     </td>
                     <td>{c.override ? <span className="status-pill status-pill--warn">Override</span> : ""}</td>
-                    {canEditCommissions(user) && (
-                      <td style={{ verticalAlign: "top" }}>
-                        <CommissionLineAdminForm
-                          commissionId={c.id}
-                          ledgerPaid={c.paidAmount.toNumber()}
-                          displayOwed={displayOwed}
-                          override={c.override}
-                          salespersonName={displaySalespersonName(c.salesperson.name)}
-                        />
-                      </td>
-                    )}
                     {canMarkCommissionPaid(user) && (
                       <td style={{ verticalAlign: "top" }}>
                         {!c.override && c.salesperson.active && displayOwed > 0 ? (
@@ -268,6 +257,17 @@ export default async function CommissionsPage() {
                         ) : (
                           <span className="cell-muted">—</span>
                         )}
+                      </td>
+                    )}
+                    {canEditCommissions(user) && (
+                      <td style={{ verticalAlign: "top" }}>
+                        <CommissionLineAdminForm
+                          commissionId={c.id}
+                          ledgerPaid={c.paidAmount.toNumber()}
+                          displayOwed={displayOwed}
+                          override={c.override}
+                          salespersonName={displaySalespersonName(c.salesperson.name)}
+                        />
                       </td>
                     )}
                   </tr>

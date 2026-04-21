@@ -40,9 +40,8 @@ export function PayCommissionForm({
 
   return (
     <div style={{ display: "grid", gap: 8 }}>
-      <p style={{ margin: 0, fontSize: "0.76rem", color: "var(--muted)", lineHeight: 1.4, maxWidth: 280 }}>
-        This check will be filed under the pay period shown in the box (same two-week labels as payroll). Only change
-        it if you&apos;re correcting an old run.
+      <p style={{ margin: 0, fontSize: "0.76rem", color: "var(--muted)", lineHeight: 1.4, maxWidth: 220 }}>
+        Uses this pay period label for the check. Change only when correcting an older run.
       </p>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input
@@ -62,7 +61,7 @@ export function PayCommissionForm({
           }}
         />
         <button className="btn" type="button" onClick={pay} disabled={defaultOwed <= 0} style={{ fontSize: "0.82rem" }}>
-          Mark paid (${defaultOwed.toFixed(2)})
+          Mark paid {defaultOwed.toFixed(2)}
         </button>
         {msg && <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>{msg}</span>}
       </div>
