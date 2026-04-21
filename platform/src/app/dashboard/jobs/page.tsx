@@ -20,6 +20,7 @@ import { normalizeStatusBadgeColorMap } from "@/lib/status-badge-colors";
  * Jobs list query params (GET):
  * - `year` — job work year or `all`
  * - `sp` — salesperson id
+ * - `spn` — salesperson display-name token (matches full-name rows that start with that token)
  * - `q`, `status`, `sort` — search / status / sort direction
  * - `signedMonth` — 1–12: filter to jobs whose contract signed calendar month in America/Chicago matches
  *   (same rule as signed-contracts reports; see contract-signed-month.ts)
@@ -29,6 +30,7 @@ type Search = {
   q?: string;
   year?: string;
   sp?: string;
+  spn?: string;
   status?: string;
   sort?: string;
   signedMonth?: string;
@@ -54,6 +56,7 @@ export default async function JobsPage({
   const yearParamRaw = pickString(sp.year);
   const yearParam = yearParamRaw?.trim().toLowerCase();
   const spId = pickString(sp.sp)?.trim();
+  const spNameToken = pickString(sp.spn)?.trim();
   const status = pickString(sp.status)?.trim();
   const sortDir = pickString(sp.sort) === "asc" ? "asc" : "desc";
 
@@ -91,6 +94,22 @@ export default async function JobsPage({
   }
   if (yearInt !== undefined) parts.push({ year: yearInt });
   if (spId) parts.push({ salespersonId: spId });
+  if (spNameToken) {
+    parts.push({
+      OR: [
+        {
+          salesperson: {
+            is: { name: { equals: spNameToken, mode: Prisma.QueryMode.insensitive } },
+          },
+        },
+        {
+          salesperson: {
+            is: { name: { startsWith: `${spNameToken} `, mode: Prisma.QueryMode.insensitive } },
+          },
+        },
+      ],
+    });
+  }
   if (status) {
     parts.push({
       status: { contains: status, mode: Prisma.QueryMode.insensitive },
@@ -184,6 +203,7 @@ export default async function JobsPage({
   const hasFilters = Boolean(
     q ||
       spId ||
+      spNameToken ||
       status ||
       sortDir === "asc" ||
       yearParam === "all" ||
@@ -243,6 +263,7 @@ export default async function JobsPage({
       </div>
 
       <form method="get" className="card" style={{ padding: "1rem 1.15rem" }}>
+        {spNameToken ? <input type="hidden" name="spn" value={spNameToken} /> : null}
         <div className="filter-bar">
           {signedMonthFilter !== undefined ? (
             <input type="hidden" name="signedMonth" value={String(signedMonthFilter)} />

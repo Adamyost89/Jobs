@@ -88,7 +88,7 @@ export async function loadAmSummaryForYear(
   for (const j of jobs) {
     const sid = j.salespersonId;
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
-    const key = sid ?? "__unassigned__";
+    const key = name ? `name:${name.toLowerCase()}` : "__unassigned__";
     const row =
       map.get(key) ??
       ({
@@ -103,6 +103,10 @@ export async function loadAmSummaryForYear(
         jobsForRetail: [],
         jobsForIns: [],
       } satisfies Agg);
+    if (row.salespersonId && sid && row.salespersonId !== sid) {
+      // Combined display row represents multiple salesperson ids.
+      row.salespersonId = null;
+    }
 
     const c = num(j.contractAmount);
     const co = num(j.changeOrders);

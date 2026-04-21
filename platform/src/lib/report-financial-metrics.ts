@@ -240,7 +240,7 @@ export async function getFinancialMetricsAnalytics(
     const inv = num(j.invoicedTotal);
     const cost = num(j.cost);
     const g = num(j.gp);
-    const key = sid ?? `__unassigned__`;
+    const key = name ? `name:${name.toLowerCase()}` : `__unassigned__`;
     const row =
       repMap.get(key) ??
       {
@@ -254,6 +254,9 @@ export async function getFinancialMetricsAnalytics(
         totalCost: 0,
         totalGp: 0,
       };
+    if (row.salespersonId && sid && row.salespersonId !== sid) {
+      row.salespersonId = null;
+    }
     row.jobCount += 1;
     row.totalContract += c;
     row.totalChangeOrders += co;

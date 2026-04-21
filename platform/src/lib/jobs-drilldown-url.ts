@@ -4,6 +4,7 @@
  * Jobs page reads:
  * - `year` — job work year or `all`
  * - `sp` — salesperson id (admins / full job viewers only in the filter UI; RLS-style scope still applies server-side)
+ * - `spn` — salesperson display name token (used when one display row combines multiple salesperson ids)
  * - `q` — search (job #, lead, customer)
  * - `status`, `sort` — same as the Jobs filter form
  * - `signedMonth` — 1–12: contract signed month in {@link CONTRACT_SIGN_CHART_TIMEZONE} (see contract-signed-month.ts)
@@ -13,6 +14,7 @@
 export type JobsDrilldownUrlInput = {
   year?: number | "all";
   salespersonId?: string | null;
+  salespersonName?: string | null;
   signedMonth?: number | null;
   signedUndated?: boolean;
   q?: string;
@@ -27,6 +29,8 @@ export function jobsDrilldownUrl(params: JobsDrilldownUrlInput): string {
   }
   const sp = params.salespersonId?.trim();
   if (sp) q.set("sp", sp);
+  const spn = params.salespersonName?.trim();
+  if (spn) q.set("spn", spn);
   if (params.signedMonth != null && params.signedMonth >= 1 && params.signedMonth <= 12) {
     q.set("signedMonth", String(params.signedMonth));
   }

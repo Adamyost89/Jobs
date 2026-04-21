@@ -157,7 +157,7 @@ export async function getSignedContractsAnalytics(
     const c = num(j.contractAmount);
     const co = num(j.changeOrders);
     const g = num(j.gp);
-    const key = sid ?? `__unassigned__`;
+    const key = name ? `name:${name.toLowerCase()}` : `__unassigned__`;
     const row = repMap.get(key) ?? {
       salespersonId: sid,
       name,
@@ -172,6 +172,9 @@ export async function getSignedContractsAnalytics(
       insW: 0,
       insContract: 0,
     };
+    if (row.salespersonId && sid && row.salespersonId !== sid) {
+      row.salespersonId = null;
+    }
     row.jobCount += 1;
     row.contractAmt += c;
     row.changeOrders += co;

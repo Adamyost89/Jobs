@@ -124,7 +124,11 @@ export default async function DashboardHome({
             {amRows.map((r) => (
               <DrilldownTableRow
                 key={r.salespersonId ?? r.name}
-                href={jobsDrilldownUrl({ year: workYear, salespersonId: r.salespersonId ?? undefined })}
+                href={jobsDrilldownUrl({
+                  year: workYear,
+                  salespersonId: r.salespersonId ?? undefined,
+                  salespersonName: r.salespersonId ? undefined : r.name,
+                })}
               >
                 <td className="cell-strong">{r.name}</td>
                 <td className="cell-num">{r.jobCount}</td>
