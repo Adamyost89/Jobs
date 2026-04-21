@@ -528,7 +528,7 @@ export function JobsTableSection({
             <thead>
               <tr>
                 {cols.map((id) => renderTh(id))}
-                {canEdit ? <th>Actions</th> : null}
+                {canEdit ? <th style={{ minWidth: "10rem" }}>Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -539,13 +539,14 @@ export function JobsTableSection({
                     <tr style={rowStyle}>
                       {cols.map((id) => renderTd(row, id))}
                       {canEdit ? (
-                        <td className="cell-nowrap">
+                        <td style={{ whiteSpace: "normal" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
                           <button
                             type="button"
                             className="btn secondary"
                             onClick={() => beginEdit(row)}
                             disabled={deletingId != null || savingEditId != null}
-                            style={{ marginRight: "0.45rem" }}
+                            style={{ padding: "0.4rem 0.75rem" }}
                           >
                             {editingId === row.id ? "Editing" : "Edit"}
                           </button>
@@ -554,10 +555,11 @@ export function JobsTableSection({
                             className="btn secondary"
                             onClick={() => void deleteJob(row)}
                             disabled={deletingId === row.id || savingEditId != null}
-                            style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca" }}
+                            style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca", padding: "0.4rem 0.75rem" }}
                           >
                             {deletingId === row.id ? "Deleting…" : "Delete"}
                           </button>
+                          </div>
                         </td>
                       ) : null}
                     </tr>
