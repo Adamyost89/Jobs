@@ -113,7 +113,7 @@ export default async function DashboardHome({
               <th className="cell-num">Contract</th>
               <th className="cell-num">Change orders</th>
               <th className="cell-num">Total</th>
-              {canSeeGp ? <th className="cell-num">Paid</th> : null}
+              <th className="cell-num">Invoice paid</th>
               {canSeeGp ? <th className="cell-num">GP</th> : null}
               {canSeeGp ? <th className="cell-num">Retail %</th> : null}
               {canSeeGp ? <th className="cell-num">Insurance %</th> : null}
@@ -137,7 +137,7 @@ export default async function DashboardHome({
                 <td className="cell-num">{money2(r.contractAmt)}</td>
                 <td className="cell-num">{money2(r.changeOrders)}</td>
                 <td className="cell-num">{money2(r.total)}</td>
-                {canSeeGp ? <td className="cell-num">{money2(r.paid)}</td> : null}
+                <td className="cell-num">{money2(r.paid)}</td>
                 {canSeeGp ? <td className="cell-num">{money2(r.gp)}</td> : null}
                 {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.retailPct)}</td> : null}
                 {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.insurancePct)}</td> : null}
@@ -152,7 +152,7 @@ export default async function DashboardHome({
               <td className="cell-num">{money2(grand.contractAmt)}</td>
               <td className="cell-num">{money2(grand.changeOrders)}</td>
               <td className="cell-num">{money2(grand.total)}</td>
-              {canSeeGp ? <td className="cell-num">{money2(grand.paid)}</td> : null}
+              <td className="cell-num">{money2(grand.paid)}</td>
               {canSeeGp ? <td className="cell-num">{money2(grand.gp)}</td> : null}
               {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.retailPct)}</td> : null}
               {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.insurancePct)}</td> : null}

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { canViewAllJobs } from "@/lib/rbac";
 import { commissionPlanForJobYear } from "@/lib/commission-plan-defaults";
 import { loadCommissionTierTotalsForYear } from "@/lib/commission-tier-totals";
 import { loadSalespersonFlagsByName } from "@/lib/salespeople-kind-db";
@@ -21,6 +20,9 @@ export async function GET(
 ) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (user.role !== Role.SUPER_ADMIN) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const { id } = await ctx.params;
   const row = await prisma.commission.findUnique({
@@ -36,10 +38,6 @@ export async function GET(
     },
   });
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  if (!canViewAllJobs(user) && !user.salespersonIds.includes(row.salespersonId)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const basis =
     dec(row.job.projectRevenue) > 0

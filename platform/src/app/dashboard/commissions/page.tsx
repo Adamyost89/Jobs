@@ -16,6 +16,7 @@ import { CommissionExplainButton } from "@/components/CommissionExplainButton";
 export default async function CommissionsPage() {
   const user = await getSession();
   if (!user) return null;
+  const showCalcTrace = user.role === "SUPER_ADMIN";
 
   const suggestedPayPeriod = getCurrentPayPeriodLabel();
 
@@ -166,7 +167,7 @@ export default async function CommissionsPage() {
               <th className="cell-num">Paid (ledger + checks)</th>
               <th className="cell-num">Still owed</th>
               <th style={{ minWidth: "15rem" }}>Payment history</th>
-              <th style={{ minWidth: "18rem" }}>Calc trace</th>
+              {showCalcTrace && <th style={{ minWidth: "18rem" }}>Calc trace</th>}
               <th>Lock</th>
               {canMarkCommissionPaid(user) && <th style={{ minWidth: "13rem" }}>Post payment</th>}
               {canEditCommissions(user) && <th style={{ minWidth: "13rem" }}>Admin fix</th>}
@@ -179,7 +180,8 @@ export default async function CommissionsPage() {
                   colSpan={
                     (canMarkCommissionPaid(user) ? 1 : 0) +
                     (canEditCommissions(user) ? 1 : 0) +
-                    7
+                    6 +
+                    (showCalcTrace ? 1 : 0)
                   }
                   style={{ color: "var(--muted)" }}
                 >
@@ -249,9 +251,11 @@ export default async function CommissionsPage() {
                         </>
                       )}
                     </td>
-                    <td style={{ verticalAlign: "top" }}>
-                      <CommissionExplainButton commissionId={c.id} />
-                    </td>
+                    {showCalcTrace && (
+                      <td style={{ verticalAlign: "top" }}>
+                        <CommissionExplainButton commissionId={c.id} />
+                      </td>
+                    )}
                     <td>{c.override ? <span className="status-pill status-pill--warn">Override</span> : ""}</td>
                     {canMarkCommissionPaid(user) && (
                       <td style={{ verticalAlign: "top" }}>
