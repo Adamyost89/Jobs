@@ -1,49 +1,10 @@
+import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { commissionDisplayAmounts } from "./commission-display";
 
-type PrismaLike = {
-  commission: {
-    findMany: (args: {
-      where: { override: boolean };
-      select: {
-        id: true;
-        jobId: true;
-        salespersonId: true;
-        paidAmount: true;
-        owedAmount: true;
-        salesperson: { select: { active: true } };
-      };
-    }) => Promise<
-      Array<{
-        id: string;
-        jobId: string;
-        salespersonId: string;
-        paidAmount: Prisma.Decimal;
-        owedAmount: Prisma.Decimal;
-        salesperson: { active: boolean };
-      }>
-    >;
-    update: (args: {
-      where: { id: string };
-      data: { paidAmount: Prisma.Decimal; owedAmount: Prisma.Decimal };
-    }) => Promise<unknown>;
-  };
-  commissionPayout: {
-    groupBy: (args: {
-      by: ["jobId", "salespersonId"];
-      where: { jobId: { not: null } };
-      _sum: { amount: true };
-    }) => Promise<
-      Array<{
-        jobId: string | null;
-        salespersonId: string;
-        _sum: { amount: Prisma.Decimal | null };
-      }>
-    >;
-  };
-};
-
-export async function syncCommissionLedgerFromPayouts(db: PrismaLike): Promise<{
+export async function syncCommissionLedgerFromPayouts(
+  db: Pick<PrismaClient, "commission" | "commissionPayout">
+): Promise<{
   scanned: number;
   updated: number;
 }> {
