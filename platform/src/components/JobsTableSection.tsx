@@ -524,56 +524,57 @@ export function JobsTableSection({
             pre-assigned numbers.
           </p>
         ) : (
-          <table className="table table-data">
-            <thead>
-              <tr>
-                {cols.map((id) => renderTh(id))}
-                {canEdit ? <th style={{ minWidth: "10rem" }}>Actions</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((row) => {
-                const rowStyle = canSeeGp ? rowStyleForHighlight(row) : undefined;
-                return (
-                  <Fragment key={row.id}>
-                    <tr style={rowStyle}>
-                      {cols.map((id) => renderTd(row, id))}
-                      {canEdit ? (
-                        <td style={{ whiteSpace: "normal" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
-                          <button
-                            type="button"
-                            className="btn secondary"
-                            onClick={() => beginEdit(row)}
-                            disabled={deletingId != null || savingEditId != null}
-                            style={{ padding: "0.4rem 0.75rem" }}
-                          >
-                            {editingId === row.id ? "Editing" : "Edit"}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn secondary"
-                            onClick={() => void deleteJob(row)}
-                            disabled={deletingId === row.id || savingEditId != null}
-                            style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca", padding: "0.4rem 0.75rem" }}
-                          >
-                            {deletingId === row.id ? "Deleting…" : "Delete"}
-                          </button>
-                          </div>
-                        </td>
-                      ) : null}
-                    </tr>
-                    {canEdit && editingId === row.id && editForm ? (
-                      <tr>
-                        <td colSpan={cols.length + 1} style={{ paddingTop: 0 }}>
-                          <div className="card" style={{ margin: "0.35rem 0.7rem 0.8rem", padding: "0.9rem 1rem" }}>
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                                gap: "0.65rem 0.8rem",
-                              }}
+          <div className="table-scroll">
+            <table className="table table-data">
+              <thead>
+                <tr>
+                  {cols.map((id) => renderTh(id))}
+                  {canEdit ? <th style={{ minWidth: "10rem" }}>Actions</th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRows.map((row) => {
+                  const rowStyle = canSeeGp ? rowStyleForHighlight(row) : undefined;
+                  return (
+                    <Fragment key={row.id}>
+                      <tr style={rowStyle}>
+                        {cols.map((id) => renderTd(row, id))}
+                        {canEdit ? (
+                          <td style={{ whiteSpace: "normal" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              onClick={() => beginEdit(row)}
+                              disabled={deletingId != null || savingEditId != null}
+                              style={{ padding: "0.4rem 0.75rem" }}
                             >
+                              {editingId === row.id ? "Editing" : "Edit"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              onClick={() => void deleteJob(row)}
+                              disabled={deletingId === row.id || savingEditId != null}
+                              style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca", padding: "0.4rem 0.75rem" }}
+                            >
+                              {deletingId === row.id ? "Deleting…" : "Delete"}
+                            </button>
+                            </div>
+                          </td>
+                        ) : null}
+                      </tr>
+                      {canEdit && editingId === row.id && editForm ? (
+                        <tr>
+                          <td colSpan={cols.length + 1} style={{ paddingTop: 0 }}>
+                            <div className="card" style={{ margin: "0.35rem 0.7rem 0.8rem", padding: "0.9rem 1rem" }}>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                                  gap: "0.65rem 0.8rem",
+                                }}
+                              >
                               <label>
                                 Customer name
                                 <input
@@ -662,34 +663,35 @@ export function JobsTableSection({
                                   }
                                 />
                               </label>
+                              </div>
+                              <div style={{ display: "flex", gap: "0.55rem", marginTop: "0.9rem" }}>
+                                <button
+                                  type="button"
+                                  className="btn"
+                                  onClick={() => void saveEdit(row)}
+                                  disabled={savingEditId === row.id}
+                                >
+                                  {savingEditId === row.id ? "Saving…" : "Save changes"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn secondary"
+                                  onClick={cancelEdit}
+                                  disabled={savingEditId === row.id}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
-                            <div style={{ display: "flex", gap: "0.55rem", marginTop: "0.9rem" }}>
-                              <button
-                                type="button"
-                                className="btn"
-                                onClick={() => void saveEdit(row)}
-                                disabled={savingEditId === row.id}
-                              >
-                                {savingEditId === row.id ? "Saving…" : "Save changes"}
-                              </button>
-                              <button
-                                type="button"
-                                className="btn secondary"
-                                onClick={cancelEdit}
-                                disabled={savingEditId === row.id}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
