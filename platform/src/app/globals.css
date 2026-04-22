@@ -328,9 +328,6 @@ a.signed-month-drill-link:hover {
   padding: 0.65rem 1.25rem;
   border-bottom: 1px solid #2a3545;
   background: rgba(15, 20, 25, 0.92);
-  position: sticky;
-  top: 0;
-  z-index: 40;
 }
 
 .dash-header__brand {
@@ -401,7 +398,7 @@ a.signed-month-drill-link:hover {
   padding: 1.25rem 1.5rem 2rem;
   flex: 1;
   min-width: 0;
-  --dash-table-sticky-top: 3rem;
+  --dash-table-sticky-top: 0px;
 }
 
 .payout-history {
