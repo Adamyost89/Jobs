@@ -37,7 +37,7 @@ export async function GET(
   });
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  if (!canViewAllJobs(user) && user.salespersonId !== row.salespersonId) {
+  if (!canViewAllJobs(user) && !user.salespersonIds.includes(row.salespersonId)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

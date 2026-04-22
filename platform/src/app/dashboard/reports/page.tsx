@@ -11,7 +11,7 @@ export default async function ReportsPage() {
   if (!user) return null;
 
   const defaultYear = await preferredDashboardJobYear(prisma);
-  const showSignedDashboard = canRunFullReports(user) || !!user.salespersonId;
+  const showSignedDashboard = canRunFullReports(user) || user.salespersonIds.length > 0;
 
   return (
     <div className="page-stack page-stack--full">

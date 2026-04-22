@@ -13,6 +13,7 @@ import { ProlineNameAliasSettings } from "@/components/ProlineNameAliasSettings"
 import { StatusBadgeColorSettings } from "@/components/StatusBadgeColorSettings";
 import { SyncCommissionLedgerButton } from "@/components/SyncCommissionLedgerButton";
 import Link from "next/link";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 type Search = {
   section?: string;
@@ -59,7 +60,15 @@ export default async function SettingsPage({
       ? yearsFromJobs
       : [new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1];
 
-  const spOptions = salespeople.map((s) => ({ id: s.id, name: s.name }));
+  const spOptions = (() => {
+    const byName = new Map<string, { id: string; name: string }>();
+    for (const s of salespeople) {
+      const name = displaySalespersonName(s.name);
+      const key = name.toLowerCase();
+      if (!byName.has(key)) byName.set(key, { id: s.id, name });
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
 
   const envLooksReady = Boolean(
     process.env.PROLINE_API_KEY?.trim() &&

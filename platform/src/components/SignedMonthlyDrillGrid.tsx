@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { chartMonthLabelToDrill } from "@/lib/contract-signed-month";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
+import { formatUsd } from "@/lib/currency";
 
 type StackedRow = { monthLabel: string; [key: string]: string | number };
 
@@ -19,8 +20,7 @@ export function SignedMonthlyDrillGrid({
   monthlySignedCounts: { monthLabel: string; count: number }[];
   salespersonIdByRepName: Record<string, string>;
 }) {
-  const money = (n: number) =>
-    n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const money = (n: number) => formatUsd(n);
   const countByMonthLabel = new Map(monthlySignedCounts.map((row) => [row.monthLabel, row.count]));
 
   function cellHref(repKey: string, row: StackedRow): string {

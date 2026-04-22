@@ -15,8 +15,8 @@ export async function GET() {
 
   const where = canViewAllJobs(user)
     ? {}
-    : user.salespersonId
-      ? { salespersonId: user.salespersonId }
+    : user.salespersonIds.length > 0
+      ? { salespersonId: { in: user.salespersonIds } }
       : { id: "__none__" };
 
   const jobsRaw = await prisma.job.findMany({

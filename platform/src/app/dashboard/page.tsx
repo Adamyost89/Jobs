@@ -50,7 +50,8 @@ export default async function DashboardHome({
   const canSeeGp = canViewAllJobs(user);
   const jobWhere: Prisma.JobWhereInput = { year: workYear };
   if (!canSeeGp) {
-    jobWhere.salespersonId = user.salespersonId ?? "__none__";
+    jobWhere.salespersonId =
+      user.salespersonIds.length > 0 ? { in: user.salespersonIds } : "__none__";
   }
 
   const { rows: amRows, grand } = await loadAmSummaryForYear(prisma, jobWhere);

@@ -430,6 +430,9 @@ export function CommissionPlanForm({
                         >
                           <option value="paid_this_year">Money already paid to them this year (payroll total)</option>
                           <option value="sold_jobs_this_year">Dollar total of jobs they sold (their name on the job)</option>
+                          <option value="cash_collected_on_sold_jobs_this_year">
+                            Cash collected on jobs they sold (invoice paid amount)
+                          </option>
                         </select>
                       </label>
                       <div className="form-row">

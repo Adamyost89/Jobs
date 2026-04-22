@@ -73,15 +73,18 @@ export async function getSignedContractsAnalytics(
   opts: { summaryYear: number; monthlyYear: number }
 ): Promise<SignedContractsAnalytics | { error: "forbidden" }> {
   const full = canRunFullReports(user);
-  const repId = user.salespersonId;
-  if (!full && !repId) {
+  const repIds = user.salespersonIds;
+  if (!full && repIds.length === 0) {
     return { error: "forbidden" };
   }
 
-  const baseWhere: { salespersonId?: string } = full ? {} : { salespersonId: repId! };
+  const baseWhere = full ? {} : { salespersonId: { in: repIds } };
   const signedBaseWhere = {
     ...baseWhere,
-    salespersonId: { not: null as string | null, ...(baseWhere.salespersonId ? { equals: baseWhere.salespersonId } : {}) },
+    salespersonId: {
+      not: null as string | null,
+      ...(full ? {} : { in: repIds }),
+    },
     contractAmount: { gt: 0 },
   };
 

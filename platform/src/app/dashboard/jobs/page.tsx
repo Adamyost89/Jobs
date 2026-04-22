@@ -89,7 +89,9 @@ export default async function JobsPage({
   const parts: Prisma.JobWhereInput[] = [];
   if (!canViewAllJobs(user)) {
     parts.push(
-      user.salespersonId ? { salespersonId: user.salespersonId } : { id: "__none__" }
+      user.salespersonIds.length > 0
+        ? { salespersonId: { in: user.salespersonIds } }
+        : { id: "__none__" }
     );
   }
   if (yearInt !== undefined) parts.push({ year: yearInt });
@@ -152,6 +154,15 @@ export default async function JobsPage({
     orderBy: { name: "asc" },
     where: { active: true },
   });
+  const salespersonOptions = (() => {
+    const byName = new Map<string, { id: string; name: string }>();
+    for (const s of salespeople) {
+      const display = displaySalespersonName(s.name);
+      const key = display.toLowerCase();
+      if (!byName.has(key)) byName.set(key, { id: s.id, name: display });
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
 
   /** Signed-month slice matches report charts (Chicago calendar month of `contractSignedAt`). */
   let signedMonthFilter: number | undefined;
@@ -290,9 +301,9 @@ export default async function JobsPage({
               Salesperson
               <select name="sp" defaultValue={spId || ""} style={{ minWidth: 140 }}>
                 <option value="">All</option>
-                {salespeople.map((s) => (
+                {salespersonOptions.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {displaySalespersonName(s.name)}
+                    {s.name}
                   </option>
                 ))}
               </select>

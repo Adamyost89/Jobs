@@ -5,6 +5,7 @@ export type SessionUser = {
   email: string;
   role: Role;
   salespersonId: string | null;
+  salespersonIds: string[];
 };
 
 export function canViewAllJobs(user: SessionUser): boolean {

@@ -18,6 +18,7 @@ import type { SignedContractsAnalytics } from "@/lib/report-analytics";
 import { chartMonthLabelToDrill } from "@/lib/contract-signed-month";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { DrilldownTableRow } from "@/components/DrilldownTableRow";
+import { formatUsd } from "@/lib/currency";
 
 /** Slate/gray last so “Other” / tail reps are muted, not mid-legend gray bars. */
 const PALETTE = [
@@ -38,26 +39,11 @@ const PALETTE = [
 /** Avoid $0 tooltips when stacks are only a few dollars (whole dollars hide cents). */
 function fmtMoneyChart(n: number) {
   const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  const abs = Math.abs(x);
-  if (abs >= 1000) {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(x);
-  }
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(x);
+  return formatUsd(x);
 }
 
 function fmtUsdFull(n: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+  return formatUsd(n);
 }
 
 function fmtPctOrDash(v: number | null | undefined) {
@@ -66,9 +52,7 @@ function fmtPctOrDash(v: number | null | undefined) {
 }
 
 function tickMoney(v: number) {
-  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(0)}k`;
-  return fmtMoneyChart(v);
+  return formatUsd(v);
 }
 
 function ChartTooltip({

@@ -12,7 +12,7 @@ export type ScopeStepForm = { fromLead: number; useScope: "all_jobs" | "primary_
 export type BonusForm = {
   enabled: boolean;
   /** User-friendly labels map to metrics in `editorToRule`. */
-  basedOn: "paid_this_year" | "sold_jobs_this_year";
+  basedOn: "paid_this_year" | "sold_jobs_this_year" | "cash_collected_on_sold_jobs_this_year";
   afterDollars: number;
   /** Commission % after they hit the goal */
   higherPercent: number;
@@ -79,7 +79,11 @@ export function ruleToEditor(name: string, rule: CommissionPersonRuleV1): Commis
   if (rule.runningTiers) {
     bonus.enabled = true;
     bonus.basedOn =
-      rule.runningTiers.metric === "ytd_primary_job_basis" ? "sold_jobs_this_year" : "paid_this_year";
+      rule.runningTiers.metric === "ytd_primary_job_basis"
+        ? "sold_jobs_this_year"
+        : rule.runningTiers.metric === "ytd_primary_paid_amount"
+          ? "cash_collected_on_sold_jobs_this_year"
+          : "paid_this_year";
     const t0 = rule.runningTiers.tiers[0];
     bonus.afterDollars = t0?.minTotal ?? 0;
     bonus.higherPercent = Math.round((t0?.rate ?? 0) * 10000) / 100;
@@ -117,7 +121,11 @@ export function editorToRule(ed: CommissionPersonEditor): CommissionPersonRuleV1
 
   if (ed.bonus.enabled) {
     const metric =
-      ed.bonus.basedOn === "sold_jobs_this_year" ? "ytd_primary_job_basis" : "ytd_paid_commissions";
+      ed.bonus.basedOn === "sold_jobs_this_year"
+        ? "ytd_primary_job_basis"
+        : ed.bonus.basedOn === "cash_collected_on_sold_jobs_this_year"
+          ? "ytd_primary_paid_amount"
+          : "ytd_paid_commissions";
     const high = num(ed.bonus.higherPercent, 0) / 100;
     const threshold = Math.max(0, num(ed.bonus.afterDollars, 0));
 

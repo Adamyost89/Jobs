@@ -20,7 +20,7 @@ function jobYearFilterFromQuery(
 export async function GET(request: Request) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!user.salespersonId) {
+  if (user.salespersonIds.length === 0) {
     return NextResponse.json({ error: "No salesperson linked" }, { status: 400 });
   }
 
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   );
 
   const jobs = await prisma.job.findMany({
-    where: { salespersonId: user.salespersonId, ...yearSlice },
+    where: { salespersonId: { in: user.salespersonIds }, ...yearSlice },
     select: {
       jobNumber: true,
       name: true,
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
 
   const commissions = await prisma.commission.findMany({
     where: {
-      salespersonId: user.salespersonId,
+      salespersonId: { in: user.salespersonIds },
       ...(Object.keys(commissionJobFilter).length === 0
         ? {}
         : { job: commissionJobFilter }),

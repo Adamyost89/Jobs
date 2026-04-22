@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatUsd } from "@/lib/currency";
 
 export function JobCostEditor({
   jobId,
@@ -18,7 +19,7 @@ export function JobCostEditor({
   if (!canEdit) {
     return (
       <span className="cell-num" title="Cost (read-only)">
-        {initialCost.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })}
+        {formatUsd(initialCost)}
       </span>
     );
   }

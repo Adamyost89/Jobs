@@ -1,6 +1,7 @@
 /** Left-border + tint classes for Jobs table (roughly replaces Excel conditional formatting). */
 import type { Prisma } from "@prisma/client";
 import { hasDisplayableGp } from "./job-workflow";
+import { formatUsd } from "./currency";
 
 export type JobRowHighlight = "good" | "mid" | "bad" | "warn" | "";
 
@@ -77,5 +78,5 @@ export function formatGpPercent(job: JobLike): string {
 
 export function formatJobGpDisplay(job: JobLike): string {
   if (!hasDisplayableGp(job)) return "—";
-  return num(job.gp).toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  return formatUsd(num(job.gp));
 }

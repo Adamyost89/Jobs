@@ -37,7 +37,7 @@ export type CommissionRowExplain = {
   earnedToDate: number;
   alreadyPaidCommission: number;
   runningTierSnapshot: {
-    metric: "ytd_paid_commissions" | "ytd_primary_job_basis" | null;
+    metric: "ytd_paid_commissions" | "ytd_primary_job_basis" | "ytd_primary_paid_amount" | null;
     currentValue: number;
     nextThreshold: number | null;
     dollarsToNextThreshold: number;
@@ -53,13 +53,18 @@ export type CommissionRowExplain = {
 
 function runningTierSnapshotFor(
   rule: CommissionPersonRuleV1 | undefined,
-  totals: { ytdPaid: number; ytdPrimaryBasis: number }
+  totals: { ytdPaid: number; ytdPrimaryBasis: number; ytdPrimaryPaidAmount: number }
 ): CommissionRowExplain["runningTierSnapshot"] {
   if (!rule?.runningTiers) {
     return { metric: null, currentValue: 0, nextThreshold: null, dollarsToNextThreshold: 0 };
   }
   const pack = rule.runningTiers;
-  const currentValue = pack.metric === "ytd_paid_commissions" ? totals.ytdPaid : totals.ytdPrimaryBasis;
+  const currentValue =
+    pack.metric === "ytd_paid_commissions"
+      ? totals.ytdPaid
+      : pack.metric === "ytd_primary_paid_amount"
+        ? totals.ytdPrimaryPaidAmount
+        : totals.ytdPrimaryBasis;
   const asc = [...pack.tiers].sort((a, b) => a.minTotal - b.minTotal);
   const next = asc.find((t) => currentValue + 0.0001 < t.minTotal);
   return {
@@ -154,9 +159,14 @@ function rateFromLeadBrackets(
 function rateFromRunningTiers(
   pack: CommissionRunningTierPack,
   jobIdNum: number,
-  totals: { ytdPaid: number; ytdPrimaryBasis: number }
+  totals: { ytdPaid: number; ytdPrimaryBasis: number; ytdPrimaryPaidAmount: number }
 ): number {
-  const running = pack.metric === "ytd_paid_commissions" ? totals.ytdPaid : totals.ytdPrimaryBasis;
+  const running =
+    pack.metric === "ytd_paid_commissions"
+      ? totals.ytdPaid
+      : pack.metric === "ytd_primary_paid_amount"
+        ? totals.ytdPrimaryPaidAmount
+        : totals.ytdPrimaryBasis;
   const sorted = [...pack.tiers].sort((a, b) => b.minTotal - a.minTotal);
   for (const t of sorted) {
     if (running >= t.minTotal) return t.rate;
@@ -170,7 +180,7 @@ function rateFromRunningTiers(
 }
 
 function resolvePersonRate(rule: CommissionPersonRuleV1, ctx: CommissionComputeContext, salespersonName: string): number {
-  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0 };
+  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
   if (rule.runningTiers) {
     return rateFromRunningTiers(rule.runningTiers, ctx.jobIdNum, totals);
   }
@@ -185,10 +195,15 @@ function resolvePersonRateDetail(
   ctx: CommissionComputeContext,
   salespersonName: string
 ): { rate: number; reason: string } {
-  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0 };
+  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
   if (rule.runningTiers) {
     const pack = rule.runningTiers;
-    const running = pack.metric === "ytd_paid_commissions" ? totals.ytdPaid : totals.ytdPrimaryBasis;
+    const running =
+      pack.metric === "ytd_paid_commissions"
+        ? totals.ytdPaid
+        : pack.metric === "ytd_primary_paid_amount"
+          ? totals.ytdPrimaryPaidAmount
+          : totals.ytdPrimaryBasis;
     const sorted = [...pack.tiers].sort((a, b) => b.minTotal - a.minTotal);
     for (const t of sorted) {
       if (running >= t.minTotal) {
@@ -349,7 +364,7 @@ export function explainCommissionForSalesperson(
   ctx: CommissionComputeContext,
   salespersonName: string
 ): CommissionRowExplain {
-  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0 };
+  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
   const rule = ctx.plan.people[salespersonName];
   if (!rule) {
     return {

@@ -26,6 +26,7 @@ import {
   visibleColumnOrder,
 } from "@/lib/jobs-table-preferences";
 import { canEditJobs, canViewAllJobs, type SessionUser } from "@/lib/rbac";
+import { formatUsd } from "@/lib/currency";
 
 export type JobsTableRowDTO = {
   id: string;
@@ -132,15 +133,7 @@ export function JobsTableSection({
     [rows, deletedIds]
   );
 
-  const money = (n: number) =>
-    n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-  const money2 = (n: number) =>
-    n.toLocaleString(undefined, {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+  const money = (n: number) => formatUsd(n);
 
   const h = prefs.highlights;
   const positiveBands = useMemo(
@@ -414,7 +407,7 @@ export function JobsTableSection({
       case "amountPaid":
         return (
           <td key={id} className="cell-num">
-            {row.amountPaid != null ? money2(row.amountPaid) : <span className="cell-muted">—</span>}
+            {row.amountPaid != null ? money(row.amountPaid) : <span className="cell-muted">—</span>}
           </td>
         );
       case "retail":
@@ -460,13 +453,13 @@ export function JobsTableSection({
       case "commPaid":
         return (
           <td key={id} className="cell-num">
-            {row.commPaid != null ? money2(row.commPaid) : <span className="cell-muted">—</span>}
+            {row.commPaid != null ? money(row.commPaid) : <span className="cell-muted">—</span>}
           </td>
         );
       case "commOwed":
         return (
           <td key={id} className="cell-num">
-            {row.commOwed != null ? money2(row.commOwed) : <span className="cell-muted">—</span>}
+            {row.commOwed != null ? money(row.commOwed) : <span className="cell-muted">—</span>}
           </td>
         );
       default:

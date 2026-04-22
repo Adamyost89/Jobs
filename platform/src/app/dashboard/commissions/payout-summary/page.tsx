@@ -31,8 +31,8 @@ export default async function PayoutSummaryPage({
     defaultYearSelect: String(preferredY),
   });
   const curY = preferredY;
-  const salespersonId = !canViewAllJobs(user) ? user.salespersonId : null;
-  const yearOptsSet = new Set(await distinctPayoutYearsForSelect(prisma, { salespersonId }));
+  const salespersonIds = !canViewAllJobs(user) ? user.salespersonIds : undefined;
+  const yearOptsSet = new Set(await distinctPayoutYearsForSelect(prisma, { salespersonIds }));
   if (yearSelectDefault !== "all") {
     const n = parseInt(yearSelectDefault, 10);
     if (!Number.isNaN(n)) yearOptsSet.add(n);
@@ -41,7 +41,7 @@ export default async function PayoutSummaryPage({
 
   const { byWindow, byRep } = await loadPayoutSummary(prisma, {
     yearInt,
-    salespersonId,
+    salespersonIds,
   });
 
   const payPeriodAllRepsRows = byWindow.map((w) => ({

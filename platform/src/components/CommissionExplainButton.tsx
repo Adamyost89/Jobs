@@ -21,7 +21,7 @@ type ExplainPayload = {
     earnedToDate: number;
     alreadyPaidCommission: number;
     runningTierSnapshot: {
-      metric: "ytd_paid_commissions" | "ytd_primary_job_basis" | null;
+      metric: "ytd_paid_commissions" | "ytd_primary_job_basis" | "ytd_primary_paid_amount" | null;
       currentValue: number;
       nextThreshold: number | null;
       dollarsToNextThreshold: number;

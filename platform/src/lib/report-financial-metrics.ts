@@ -119,12 +119,12 @@ export async function getFinancialMetricsAnalytics(
   opts: { summaryYear: number; jobId?: string | null; jobNumber?: string | null }
 ): Promise<FinancialMetricsAnalytics | { error: "forbidden" } | { error: "not_found" }> {
   const full = canRunFullReports(user);
-  const repId = user.salespersonId;
-  if (!full && !repId) {
+  const repIds = user.salespersonIds;
+  if (!full && repIds.length === 0) {
     return { error: "forbidden" };
   }
 
-  const baseWhere: { salespersonId?: string } = full ? {} : { salespersonId: repId! };
+  const baseWhere = full ? {} : { salespersonId: { in: repIds } };
 
   let jobForHistory: { id: string; jobNumber: string } | null = null;
   const idTrim = opts.jobId?.trim();
@@ -135,7 +135,7 @@ export async function getFinancialMetricsAnalytics(
       select: { id: true, jobNumber: true, salespersonId: true },
     });
     if (!job) return { error: "not_found" };
-    if (!full && job.salespersonId !== repId) {
+    if (!full && (!job.salespersonId || !repIds.includes(job.salespersonId))) {
       return { error: "forbidden" };
     }
     jobForHistory = { id: job.id, jobNumber: job.jobNumber };

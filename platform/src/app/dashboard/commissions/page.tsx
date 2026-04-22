@@ -23,7 +23,9 @@ export default async function CommissionsPage() {
   parts.push({ owedAmount: { gt: 0 } });
   if (!canViewAllJobs(user)) {
     parts.push(
-      user.salespersonId ? { salespersonId: user.salespersonId } : { id: "__none__" }
+      user.salespersonIds.length > 0
+        ? { salespersonId: { in: user.salespersonIds } }
+        : { id: "__none__" }
     );
   }
   const where: Prisma.CommissionWhereInput =

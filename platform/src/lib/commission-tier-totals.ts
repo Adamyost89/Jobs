@@ -16,7 +16,7 @@ function jobBasis(projectRevenue: Prisma.Decimal, contractAmount: Prisma.Decimal
 
 /**
  * YTD aggregates per salesperson for the calendar job year. Used for bonus tiers
- * (paid commissions running total vs sold revenue on primary jobs).
+ * (paid commissions running total vs sold revenue vs cash collected on primary jobs).
  */
 export async function loadCommissionTierTotalsForYear(year: number): Promise<CommissionTierTotals> {
   const salespeople = await prisma.salesperson.findMany({
@@ -39,19 +39,23 @@ export async function loadCommissionTierTotalsForYear(year: number): Promise<Com
       projectRevenue: true,
       contractAmount: true,
       changeOrders: true,
+      amountPaid: true,
     },
   });
   const basisBySp = new Map<string, number>();
+  const paidAmountBySp = new Map<string, number>();
   for (const j of jobs) {
     if (!j.salespersonId) continue;
     const b = jobBasis(j.projectRevenue, j.contractAmount, j.changeOrders);
     basisBySp.set(j.salespersonId, (basisBySp.get(j.salespersonId) ?? 0) + b);
+    paidAmountBySp.set(j.salespersonId, (paidAmountBySp.get(j.salespersonId) ?? 0) + dec(j.amountPaid));
   }
 
   for (const sp of salespeople) {
     out[sp.name] = {
       ytdPaid: paidBySp.get(sp.id) ?? 0,
       ytdPrimaryBasis: basisBySp.get(sp.id) ?? 0,
+      ytdPrimaryPaidAmount: paidAmountBySp.get(sp.id) ?? 0,
     };
   }
   return out;

@@ -25,8 +25,8 @@ export async function GET(req: Request) {
   const where =
     scope === "full"
       ? {}
-      : user.salespersonId
-        ? { salespersonId: user.salespersonId }
+      : user.salespersonIds.length > 0
+        ? { salespersonId: { in: user.salespersonIds } }
         : { id: "__none__" };
 
   const jobs = await prisma.job.findMany({

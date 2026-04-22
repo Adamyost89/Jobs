@@ -16,6 +16,7 @@ import {
 import type { FinancialMetricsAnalytics } from "@/lib/report-financial-metrics";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { DrilldownTableRow } from "@/components/DrilldownTableRow";
+import { formatUsd } from "@/lib/currency";
 
 function workYearFromJobNumber(jn: string): number | undefined {
   const m = /^(\d{4})-/.exec(jn.trim());
@@ -26,26 +27,11 @@ function workYearFromJobNumber(jn: string): number | undefined {
 
 function fmtMoneyChart(n: number) {
   const x = Number(n);
-  if (!Number.isFinite(x)) return "—";
-  const abs = Math.abs(x);
-  if (abs >= 1000) {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(x);
-  }
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(x);
+  return formatUsd(x);
 }
 
 function fmtUsdFull(n: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
+  return formatUsd(n);
 }
 
 function fmtPctOrDash(v: number | null | undefined) {
@@ -54,9 +40,7 @@ function fmtPctOrDash(v: number | null | undefined) {
 }
 
 function tickMoney(v: number) {
-  if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(0)}k`;
-  return fmtMoneyChart(v);
+  return formatUsd(v);
 }
 
 function ChartTooltip({

@@ -11,8 +11,12 @@ export type CommissionScope = "all_jobs" | "primary_only";
 /**
  * - `ytd_paid_commissions`: sum of this rep's `Commission.paidAmount` for the job year (sheet H-style running total).
  * - `ytd_primary_job_basis`: sum of commission basis on jobs where this rep is primary salesperson (sold revenue).
+ * - `ytd_primary_paid_amount`: sum of `Job.amountPaid` on jobs where this rep is primary salesperson (cash collected).
  */
-export type CommissionRunningMetric = "ytd_paid_commissions" | "ytd_primary_job_basis";
+export type CommissionRunningMetric =
+  | "ytd_paid_commissions"
+  | "ytd_primary_job_basis"
+  | "ytd_primary_paid_amount";
 
 export type CommissionRunningTierPack = {
   metric: CommissionRunningMetric;
@@ -57,6 +61,7 @@ export type CommissionTierTotals = Record<
   {
     ytdPaid: number;
     ytdPrimaryBasis: number;
+    ytdPrimaryPaidAmount: number;
   }
 >;
 
