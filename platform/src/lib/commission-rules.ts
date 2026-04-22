@@ -36,6 +36,12 @@ export type CommissionRowExplain = {
   totalCommissionAtRate: number;
   earnedToDate: number;
   alreadyPaidCommission: number;
+  runningTierSnapshot: {
+    metric: "ytd_paid_commissions" | "ytd_primary_job_basis" | null;
+    currentValue: number;
+    nextThreshold: number | null;
+    dollarsToNextThreshold: number;
+  };
   elevatedPaidGuard: {
     enabled: boolean;
     triggered: boolean;
@@ -44,6 +50,25 @@ export type CommissionRowExplain = {
   };
   owed: number;
 };
+
+function runningTierSnapshotFor(
+  rule: CommissionPersonRuleV1 | undefined,
+  totals: { ytdPaid: number; ytdPrimaryBasis: number }
+): CommissionRowExplain["runningTierSnapshot"] {
+  if (!rule?.runningTiers) {
+    return { metric: null, currentValue: 0, nextThreshold: null, dollarsToNextThreshold: 0 };
+  }
+  const pack = rule.runningTiers;
+  const currentValue = pack.metric === "ytd_paid_commissions" ? totals.ytdPaid : totals.ytdPrimaryBasis;
+  const asc = [...pack.tiers].sort((a, b) => a.minTotal - b.minTotal);
+  const next = asc.find((t) => currentValue + 0.0001 < t.minTotal);
+  return {
+    metric: pack.metric,
+    currentValue: round2(currentValue),
+    nextThreshold: next ? round2(next.minTotal) : null,
+    dollarsToNextThreshold: next ? round2(Math.max(0, next.minTotal - currentValue)) : 0,
+  };
+}
 
 export type CommissionComputeContext = {
   year: number;
@@ -324,6 +349,7 @@ export function explainCommissionForSalesperson(
   ctx: CommissionComputeContext,
   salespersonName: string
 ): CommissionRowExplain {
+  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0 };
   const rule = ctx.plan.people[salespersonName];
   if (!rule) {
     return {
@@ -344,6 +370,7 @@ export function explainCommissionForSalesperson(
       totalCommissionAtRate: 0,
       earnedToDate: 0,
       alreadyPaidCommission: ctx.existingPaidBySalesperson[salespersonName] ?? 0,
+      runningTierSnapshot: runningTierSnapshotFor(undefined, totals),
       elevatedPaidGuard: { enabled: false, triggered: false, legacyRate: 0, legacyCommission: 0 },
       owed: 0,
     };
@@ -393,6 +420,7 @@ export function explainCommissionForSalesperson(
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
       alreadyPaidCommission: paidCommission,
+      runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
         enabled: !!g,
         triggered: guardTriggered,
@@ -422,6 +450,7 @@ export function explainCommissionForSalesperson(
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
       alreadyPaidCommission: paidCommission,
+      runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
         enabled: !!g,
         triggered: guardTriggered,
@@ -451,6 +480,7 @@ export function explainCommissionForSalesperson(
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
       alreadyPaidCommission: paidCommission,
+      runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
         enabled: !!g,
         triggered: guardTriggered,
@@ -480,6 +510,7 @@ export function explainCommissionForSalesperson(
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
       alreadyPaidCommission: paidCommission,
+      runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
         enabled: true,
         triggered: true,
@@ -508,6 +539,7 @@ export function explainCommissionForSalesperson(
     totalCommissionAtRate: round2(totalCommission),
     earnedToDate: round2(earnedToDate),
     alreadyPaidCommission: paidCommission,
+    runningTierSnapshot: runningTierSnapshotFor(rule, totals),
     elevatedPaidGuard: {
       enabled: !!g,
       triggered: false,

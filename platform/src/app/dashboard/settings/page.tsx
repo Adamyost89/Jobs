@@ -11,6 +11,7 @@ import { loadSalespeopleWithKindForAdmin } from "@/lib/salespeople-kind-db";
 import { ProLineConnectionAssistant } from "@/components/ProLineConnectionAssistant";
 import { ProlineNameAliasSettings } from "@/components/ProlineNameAliasSettings";
 import { StatusBadgeColorSettings } from "@/components/StatusBadgeColorSettings";
+import { SyncCommissionLedgerButton } from "@/components/SyncCommissionLedgerButton";
 import Link from "next/link";
 
 type Search = {
@@ -142,6 +143,14 @@ export default async function SettingsPage({
               Set shared colors for status chips on Jobs. Custom stage labels (for example ProLine stages) can be added.
             </p>
             <StatusBadgeColorSettings />
+          </div>
+          <div className="card">
+            <h2 style={{ marginTop: 0 }}>Commission ledger sync</h2>
+            <p style={{ color: "var(--muted)" }}>
+              Reconcile <code>Commission.paidAmount</code> and <code>owedAmount</code> from posted payout rows. Use after
+              payout imports or manual payout edits.
+            </p>
+            <SyncCommissionLedgerButton />
           </div>
         </>
       ) : null}

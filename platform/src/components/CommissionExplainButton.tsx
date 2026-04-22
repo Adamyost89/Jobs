@@ -20,6 +20,12 @@ type ExplainPayload = {
     totalCommissionAtRate: number;
     earnedToDate: number;
     alreadyPaidCommission: number;
+    runningTierSnapshot: {
+      metric: "ytd_paid_commissions" | "ytd_primary_job_basis" | null;
+      currentValue: number;
+      nextThreshold: number | null;
+      dollarsToNextThreshold: number;
+    };
     owed: number;
     elevatedPaidGuard: {
       enabled: boolean;
@@ -104,6 +110,20 @@ export function CommissionExplainButton({ commissionId }: { commissionId: string
               Owed formula: max(0, earned {money2(data.explain.earnedToDate)} − already paid{" "}
               {money2(data.explain.alreadyPaidCommission)}) = {money2(data.explain.owed)}
             </span>
+            {data.explain.runningTierSnapshot.metric ? (
+              <span>
+                Tier trigger ({data.explain.runningTierSnapshot.metric}): current{" "}
+                {money2(data.explain.runningTierSnapshot.currentValue)}
+                {data.explain.runningTierSnapshot.nextThreshold != null ? (
+                  <>
+                    {" "}· threshold {money2(data.explain.runningTierSnapshot.nextThreshold)} ·{" "}
+                    {money2(data.explain.runningTierSnapshot.dollarsToNextThreshold)} away
+                  </>
+                ) : (
+                  <> · highest tier already reached</>
+                )}
+              </span>
+            ) : null}
             {data.explain.elevatedPaidGuard.enabled ? (
               <span>
                 Elevated guard: {data.explain.elevatedPaidGuard.triggered ? "triggered" : "not triggered"} (legacy{" "}

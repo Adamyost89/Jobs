@@ -1,7 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 
 function normalizeWhitespace(raw: string): string {
-  return raw.trim().replace(/\s+/g, " ");
+  return raw
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 export function normalizeSalespersonName(raw: unknown): string {
@@ -13,7 +17,8 @@ export function firstTokenName(raw: string): string {
   const normalized = normalizeWhitespace(raw);
   if (!normalized) return "";
   const [first = ""] = normalized.split(" ");
-  return first;
+  const cleaned = first.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+  return cleaned || first;
 }
 
 export function displaySalespersonName(raw: unknown): string {
