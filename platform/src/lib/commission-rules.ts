@@ -18,6 +18,32 @@ export type CommissionRowCalc = {
   overrideSkip: boolean;
 };
 
+export type CommissionRowExplain = {
+  salespersonName: string;
+  included: boolean;
+  reason: string;
+  scope: "all_jobs" | "primary_only";
+  kind: SalesKind | "UNKNOWN";
+  active: boolean;
+  override: boolean;
+  rate: number;
+  rateReason: string;
+  basis: number;
+  customerPaid: number;
+  commissionableTotal: number;
+  paymentProgress: number;
+  totalCommissionAtRate: number;
+  earnedToDate: number;
+  alreadyPaidCommission: number;
+  elevatedPaidGuard: {
+    enabled: boolean;
+    triggered: boolean;
+    legacyRate: number;
+    legacyCommission: number;
+  };
+  owed: number;
+};
+
 export type CommissionComputeContext = {
   year: number;
   leadNumber: string | null;
@@ -126,6 +152,53 @@ function resolvePersonRate(rule: CommissionPersonRuleV1, ctx: CommissionComputeC
     return rateFromLeadBrackets(leadNumFromCtx(ctx), rule.leadBrackets, rule.baseRate);
   }
   return rule.baseRate ?? 0;
+}
+
+function resolvePersonRateDetail(
+  rule: CommissionPersonRuleV1,
+  ctx: CommissionComputeContext,
+  salespersonName: string
+): { rate: number; reason: string } {
+  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0 };
+  if (rule.runningTiers) {
+    const pack = rule.runningTiers;
+    const running = pack.metric === "ytd_paid_commissions" ? totals.ytdPaid : totals.ytdPrimaryBasis;
+    const sorted = [...pack.tiers].sort((a, b) => b.minTotal - a.minTotal);
+    for (const t of sorted) {
+      if (running >= t.minTotal) {
+        return {
+          rate: t.rate,
+          reason: `running tier met: ${pack.metric}=${round2(running)} >= ${round2(t.minTotal)}`,
+        };
+      }
+    }
+    const br = pack.belowRates;
+    if (br?.byLead) {
+      const rate = ctx.jobIdNum < br.byLead.splitLead ? br.byLead.belowRate : br.byLead.atOrAboveRate;
+      return {
+        rate,
+        reason: `running tier below threshold; fallback by lead split at ${br.byLead.splitLead}`,
+      };
+    }
+    if (br?.flat !== undefined) {
+      return {
+        rate: br.flat,
+        reason: `running tier below threshold; fallback flat rate`,
+      };
+    }
+    return { rate: 0, reason: "running tier configured with no fallback rate" };
+  }
+  if (rule.leadBrackets?.length) {
+    const lead = leadNumFromCtx(ctx);
+    const sorted = [...rule.leadBrackets].sort((a, b) => b.minLead - a.minLead);
+    for (const b of sorted) {
+      if (lead >= b.minLead) {
+        return { rate: b.rate, reason: `lead bracket matched: lead ${lead} >= ${b.minLead}` };
+      }
+    }
+    return { rate: rule.baseRate ?? 0, reason: "lead brackets found no match; using base rate" };
+  }
+  return { rate: rule.baseRate ?? 0, reason: "base rate" };
 }
 
 function scopeFromLeadBrackets(
@@ -246,4 +319,195 @@ export function computeCommissionsForJob(ctx: CommissionComputeContext): Commiss
 
   const byName = new Map(out.map((r) => [r.salespersonName, r]));
   return Array.from(byName.values());
+}
+
+export function explainCommissionForSalesperson(
+  ctx: CommissionComputeContext,
+  salespersonName: string
+): CommissionRowExplain {
+  const rule = ctx.plan.people[salespersonName];
+  if (!rule) {
+    return {
+      salespersonName,
+      included: false,
+      reason: "no rule in commission plan",
+      scope: "primary_only",
+      kind: "UNKNOWN",
+      active: false,
+      override: false,
+      rate: 0,
+      rateReason: "not applicable",
+      basis: Math.max(0, ctx.basis),
+      customerPaid: Math.max(0, ctx.customerPaid),
+      commissionableTotal: Math.max(0, ctx.commissionableTotal),
+      paymentProgress: 0,
+      totalCommissionAtRate: 0,
+      earnedToDate: 0,
+      alreadyPaidCommission: ctx.existingPaidBySalesperson[salespersonName] ?? 0,
+      elevatedPaidGuard: { enabled: false, triggered: false, legacyRate: 0, legacyCommission: 0 },
+      owed: 0,
+    };
+  }
+
+  const kind = ctx.kindBySalespersonName[salespersonName] ?? "UNKNOWN";
+  const lead = leadNumFromCtx(ctx);
+  const scope = effectiveScope(rule, ctx.kindBySalespersonName[salespersonName], lead);
+  const active = ctx.activeBySalespersonName[salespersonName] !== false;
+  const override = !!ctx.overrides[salespersonName];
+  const paidCommission = ctx.existingPaidBySalesperson[salespersonName] ?? 0;
+  const invoiceBase = Math.max(0, ctx.commissionableTotal);
+  const customerPaid = Math.max(0, ctx.customerPaid);
+  const paymentProgress = invoiceBase > 0.0005 ? clamp01(customerPaid / invoiceBase) : 0;
+  const basis = Math.max(0, ctx.basis);
+  const rateDetail = resolvePersonRateDetail(rule, ctx, salespersonName);
+  const totalCommission = basis * rateDetail.rate;
+  const earnedToDate = totalCommission * paymentProgress;
+
+  const g = rule.elevatedPaidGuard;
+  let legacyRate = 0;
+  let legacyCommission = 0;
+  let guardTriggered = false;
+  if (g && rateDetail.rate === g.elevatedRate) {
+    legacyRate = ctx.jobIdNum < g.splitLead ? g.belowRate : g.elseRate;
+    legacyCommission = legacyRate * basis;
+    guardTriggered = paidCommission >= legacyCommission - 0.01;
+  }
+
+  if (!active && !ctx.existingCommissionNamesOnJob.has(salespersonName)) {
+    return {
+      salespersonName,
+      included: false,
+      reason: "person inactive and has no existing line on this job",
+      scope,
+      kind,
+      active: false,
+      override,
+      rate: rateDetail.rate,
+      rateReason: rateDetail.reason,
+      basis,
+      customerPaid,
+      commissionableTotal: invoiceBase,
+      paymentProgress,
+      totalCommissionAtRate: round2(totalCommission),
+      earnedToDate: round2(earnedToDate),
+      alreadyPaidCommission: paidCommission,
+      elevatedPaidGuard: {
+        enabled: !!g,
+        triggered: guardTriggered,
+        legacyRate,
+        legacyCommission: round2(legacyCommission),
+      },
+      owed: 0,
+    };
+  }
+
+  if (override) {
+    return {
+      salespersonName,
+      included: true,
+      reason: "override-locked line; auto recalc skipped",
+      scope,
+      kind,
+      active,
+      override: true,
+      rate: rateDetail.rate,
+      rateReason: rateDetail.reason,
+      basis,
+      customerPaid,
+      commissionableTotal: invoiceBase,
+      paymentProgress,
+      totalCommissionAtRate: round2(totalCommission),
+      earnedToDate: round2(earnedToDate),
+      alreadyPaidCommission: paidCommission,
+      elevatedPaidGuard: {
+        enabled: !!g,
+        triggered: guardTriggered,
+        legacyRate,
+        legacyCommission: round2(legacyCommission),
+      },
+      owed: 0,
+    };
+  }
+
+  if (!shouldIncludePerson(salespersonName, rule, ctx)) {
+    return {
+      salespersonName,
+      included: false,
+      reason: `scope ${scope} excludes this job (primary is ${ctx.primarySalespersonName ?? "none"})`,
+      scope,
+      kind,
+      active,
+      override: false,
+      rate: rateDetail.rate,
+      rateReason: rateDetail.reason,
+      basis,
+      customerPaid,
+      commissionableTotal: invoiceBase,
+      paymentProgress,
+      totalCommissionAtRate: round2(totalCommission),
+      earnedToDate: round2(earnedToDate),
+      alreadyPaidCommission: paidCommission,
+      elevatedPaidGuard: {
+        enabled: !!g,
+        triggered: guardTriggered,
+        legacyRate,
+        legacyCommission: round2(legacyCommission),
+      },
+      owed: 0,
+    };
+  }
+
+  if (guardTriggered) {
+    return {
+      salespersonName,
+      included: true,
+      reason: "elevated paid guard triggered (already paid at legacy rate)",
+      scope,
+      kind,
+      active,
+      override: false,
+      rate: rateDetail.rate,
+      rateReason: rateDetail.reason,
+      basis,
+      customerPaid,
+      commissionableTotal: invoiceBase,
+      paymentProgress,
+      totalCommissionAtRate: round2(totalCommission),
+      earnedToDate: round2(earnedToDate),
+      alreadyPaidCommission: paidCommission,
+      elevatedPaidGuard: {
+        enabled: true,
+        triggered: true,
+        legacyRate,
+        legacyCommission: round2(legacyCommission),
+      },
+      owed: 0,
+    };
+  }
+
+  return {
+    salespersonName,
+    included: true,
+    reason: "standard commission calculation",
+    scope,
+    kind,
+    active,
+    override: false,
+    rate: rateDetail.rate,
+    rateReason: rateDetail.reason,
+    basis,
+    customerPaid,
+    commissionableTotal: invoiceBase,
+    paymentProgress,
+    totalCommissionAtRate: round2(totalCommission),
+    earnedToDate: round2(earnedToDate),
+    alreadyPaidCommission: paidCommission,
+    elevatedPaidGuard: {
+      enabled: !!g,
+      triggered: false,
+      legacyRate,
+      legacyCommission: round2(legacyCommission),
+    },
+    owed: owedAfterPaid(earnedToDate, paidCommission),
+  };
 }

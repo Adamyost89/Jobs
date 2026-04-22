@@ -11,6 +11,7 @@ import type { Prisma } from "@prisma/client";
 import { commissionDisplayAmounts, roundMoney } from "@/lib/commission-display";
 import { jobNumberSortKey } from "@/lib/job-sort";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { CommissionExplainButton } from "@/components/CommissionExplainButton";
 
 export default async function CommissionsPage() {
   const user = await getSession();
@@ -163,6 +164,7 @@ export default async function CommissionsPage() {
               <th className="cell-num">Paid (ledger + checks)</th>
               <th className="cell-num">Still owed</th>
               <th style={{ minWidth: "15rem" }}>Payment history</th>
+              <th style={{ minWidth: "18rem" }}>Calc trace</th>
               <th>Lock</th>
               {canMarkCommissionPaid(user) && <th style={{ minWidth: "13rem" }}>Post payment</th>}
               {canEditCommissions(user) && <th style={{ minWidth: "13rem" }}>Admin fix</th>}
@@ -175,7 +177,7 @@ export default async function CommissionsPage() {
                   colSpan={
                     (canMarkCommissionPaid(user) ? 1 : 0) +
                     (canEditCommissions(user) ? 1 : 0) +
-                    6
+                    7
                   }
                   style={{ color: "var(--muted)" }}
                 >
@@ -244,6 +246,9 @@ export default async function CommissionsPage() {
                           {more}
                         </>
                       )}
+                    </td>
+                    <td style={{ verticalAlign: "top" }}>
+                      <CommissionExplainButton commissionId={c.id} />
                     </td>
                     <td>{c.override ? <span className="status-pill status-pill--warn">Override</span> : ""}</td>
                     {canMarkCommissionPaid(user) && (
