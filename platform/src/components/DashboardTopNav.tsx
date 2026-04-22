@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export type NavItem = { href: string; label: string };
@@ -30,6 +31,29 @@ export function DashboardTopNav({
   roleLabel: string;
 }) {
   const pathname = usePathname() || "";
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const headerEl = headerRef.current;
+    if (!headerEl) return;
+
+    const setHeaderHeightVar = () => {
+      const px = `${Math.ceil(headerEl.getBoundingClientRect().height)}px`;
+      document.documentElement.style.setProperty("--dash-header-height", px);
+    };
+
+    setHeaderHeightVar();
+
+    const ro = new ResizeObserver(() => setHeaderHeightVar());
+    ro.observe(headerEl);
+    window.addEventListener("resize", setHeaderHeightVar);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", setHeaderHeightVar);
+      document.documentElement.style.removeProperty("--dash-header-height");
+    };
+  }, []);
 
   const activeHref =
     [...links]
@@ -37,7 +61,7 @@ export function DashboardTopNav({
       .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
 
   return (
-    <header className="dash-header">
+    <header ref={headerRef} className="dash-header">
       <div className="dash-header__brand">Elevated</div>
       <nav className="dash-nav" aria-label="Main">
         {links.map((l) => {
