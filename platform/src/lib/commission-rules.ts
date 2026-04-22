@@ -32,6 +32,7 @@ export type CommissionRowExplain = {
   customerPaid: number;
   commissionableTotal: number;
   paymentProgress: number;
+  collectedCommissionBase: number;
   totalCommissionAtRate: number;
   earnedToDate: number;
   alreadyPaidCommission: number;
@@ -256,9 +257,8 @@ function applyElevatedPaidGuard(
 export function computeCommissionsForJob(ctx: CommissionComputeContext): CommissionRowCalc[] {
   const out: CommissionRowCalc[] = [];
   const paid = Math.max(0, ctx.customerPaid);
-  const invoiceBase = Math.max(0, ctx.commissionableTotal);
-  // Commissions are earned only from collected customer cash, never from a paid-in-full flag alone.
-  const paymentProgress = invoiceBase > 0.0005 ? clamp01(paid / invoiceBase) : 0;
+  // Commissions are earned from collected customer cash to date.
+  const collectedCommissionBase = paid;
 
   for (const sp of orderedPeopleNames(ctx.plan)) {
     const rule = ctx.plan.people[sp];
@@ -300,8 +300,7 @@ export function computeCommissionsForJob(ctx: CommissionComputeContext): Commiss
 
     const paidCommission = ctx.existingPaidBySalesperson[sp] ?? 0;
     const rate = resolvePersonRate(rule, ctx, sp);
-    const totalCommission = ctx.basis * rate;
-    const earnedToDate = totalCommission * paymentProgress;
+    const earnedToDate = collectedCommissionBase * rate;
 
     const guard = applyElevatedPaidGuard(rule, rate, ctx, sp, paidCommission);
     if (guard.oweZero) {
@@ -341,6 +340,7 @@ export function explainCommissionForSalesperson(
       customerPaid: Math.max(0, ctx.customerPaid),
       commissionableTotal: Math.max(0, ctx.commissionableTotal),
       paymentProgress: 0,
+      collectedCommissionBase: Math.max(0, ctx.customerPaid),
       totalCommissionAtRate: 0,
       earnedToDate: 0,
       alreadyPaidCommission: ctx.existingPaidBySalesperson[salespersonName] ?? 0,
@@ -358,10 +358,11 @@ export function explainCommissionForSalesperson(
   const invoiceBase = Math.max(0, ctx.commissionableTotal);
   const customerPaid = Math.max(0, ctx.customerPaid);
   const paymentProgress = invoiceBase > 0.0005 ? clamp01(customerPaid / invoiceBase) : 0;
+  const collectedCommissionBase = customerPaid;
   const basis = Math.max(0, ctx.basis);
   const rateDetail = resolvePersonRateDetail(rule, ctx, salespersonName);
   const totalCommission = basis * rateDetail.rate;
-  const earnedToDate = totalCommission * paymentProgress;
+  const earnedToDate = collectedCommissionBase * rateDetail.rate;
 
   const g = rule.elevatedPaidGuard;
   let legacyRate = 0;
@@ -388,6 +389,7 @@ export function explainCommissionForSalesperson(
       customerPaid,
       commissionableTotal: invoiceBase,
       paymentProgress,
+      collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
       alreadyPaidCommission: paidCommission,
@@ -416,6 +418,7 @@ export function explainCommissionForSalesperson(
       customerPaid,
       commissionableTotal: invoiceBase,
       paymentProgress,
+      collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
       alreadyPaidCommission: paidCommission,
@@ -444,6 +447,7 @@ export function explainCommissionForSalesperson(
       customerPaid,
       commissionableTotal: invoiceBase,
       paymentProgress,
+      collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
       alreadyPaidCommission: paidCommission,
@@ -472,6 +476,7 @@ export function explainCommissionForSalesperson(
       customerPaid,
       commissionableTotal: invoiceBase,
       paymentProgress,
+      collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
       alreadyPaidCommission: paidCommission,
@@ -499,6 +504,7 @@ export function explainCommissionForSalesperson(
     customerPaid,
     commissionableTotal: invoiceBase,
     paymentProgress,
+    collectedCommissionBase,
     totalCommissionAtRate: round2(totalCommission),
     earnedToDate: round2(earnedToDate),
     alreadyPaidCommission: paidCommission,

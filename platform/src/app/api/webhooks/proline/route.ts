@@ -308,7 +308,9 @@ export async function POST(req: Request) {
 
     let invoiceDeltaApplied = false;
     let invoiceDeltaSkippedDuplicate = false;
-    if (e.invoicedDelta !== undefined && e.invoicedDelta !== 0) {
+    // Only invoice events should grow invoiced total. Payment events may include the same
+    // invoice total in payload; applying it again would double-count invoiced dollars.
+    if (e.internalType === "invoice" && e.invoicedDelta !== undefined && e.invoicedDelta !== 0) {
       let canApply = true;
       if (e.invoiceId) {
         const marker = await prisma.jobEvent.findFirst({

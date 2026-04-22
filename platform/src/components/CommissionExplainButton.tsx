@@ -16,6 +16,7 @@ type ExplainPayload = {
     customerPaid: number;
     commissionableTotal: number;
     paymentProgress: number;
+    collectedCommissionBase: number;
     totalCommissionAtRate: number;
     earnedToDate: number;
     alreadyPaidCommission: number;
@@ -96,8 +97,8 @@ export function CommissionExplainButton({ commissionId }: { commissionId: string
               {pct(data.explain.paymentProgress)}
             </span>
             <span>
-              Earned to date: ({money2(data.explain.basis)} × {pct(data.explain.rate)}) ×{" "}
-              {pct(data.explain.paymentProgress)} = {money2(data.explain.earnedToDate)}
+              Earned to date: {money2(data.explain.collectedCommissionBase)} × {pct(data.explain.rate)} ={" "}
+              {money2(data.explain.earnedToDate)}
             </span>
             <span>
               Owed formula: max(0, earned {money2(data.explain.earnedToDate)} − already paid{" "}
