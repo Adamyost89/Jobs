@@ -235,6 +235,25 @@ type ParsedRow = {
   paidDate: Date | null;
 };
 
+const MONEY_EPSILON = 0.005;
+
+function moneyEq(a: number | null | undefined, b: number | null | undefined, epsilon = MONEY_EPSILON): boolean {
+  if (a === null || a === undefined || b === null || b === undefined) return false;
+  return Math.abs(a - b) <= epsilon;
+}
+
+/**
+ * Import safety net:
+ * If Amount Paid equals Contract Amount, Change Orders should be zero.
+ * This prevents a bad/misaligned CO source column from writing false negatives.
+ */
+function normalizeParsedFinancials(p: ParsedRow): ParsedRow {
+  if (moneyEq(p.amountPaid, p.contractAmount) && Math.abs(p.changeOrders) > MONEY_EPSILON) {
+    return { ...p, changeOrders: 0 };
+  }
+  return p;
+}
+
 function looksLikeJobNumber(s: string): boolean {
   return /^\d{8}/.test(s) || /^202[4-9]/.test(s);
 }
@@ -492,10 +511,11 @@ export async function importJobBookTab(
 
   for (let i = dataStart; i < dataEnd; i++) {
     const row = rowsInput[i] as unknown[];
-    const p =
+    const parsed =
       layout === "modern" && mergedModern
         ? parseModernRow(row, mergedModern)
         : parseLegacy2024Row(row);
+    const p = parsed ? normalizeParsedFinancials(parsed) : null;
     if (!p) continue;
     if (layout === "modern" && !p.leadNumber) {
       skippedNoLead += 1;
