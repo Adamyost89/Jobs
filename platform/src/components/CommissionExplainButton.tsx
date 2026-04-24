@@ -19,6 +19,7 @@ type ExplainPayload = {
     collectedCommissionBase: number;
     totalCommissionAtRate: number;
     earnedToDate: number;
+    earnedToDateNote?: string;
     alreadyPaidCommission: number;
     runningTierSnapshot: {
       metric: "ytd_paid_commissions" | "ytd_primary_job_basis" | "ytd_primary_paid_amount" | null;
@@ -103,8 +104,12 @@ export function CommissionExplainButton({ commissionId }: { commissionId: string
               {pct(data.explain.paymentProgress)}
             </span>
             <span>
-              Earned to date: {money2(data.explain.collectedCommissionBase)} × {pct(data.explain.rate)} ={" "}
-              {money2(data.explain.earnedToDate)}
+              Earned to date:{" "}
+              {data.explain.earnedToDateNote
+                ? `${data.explain.earnedToDateNote} = ${money2(data.explain.earnedToDate)}`
+                : `${money2(data.explain.collectedCommissionBase)} × ${pct(data.explain.rate)} = ${money2(
+                    data.explain.earnedToDate
+                  )}`}
             </span>
             <span>
               Owed formula: max(0, earned {money2(data.explain.earnedToDate)} − already paid{" "}

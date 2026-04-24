@@ -35,6 +35,7 @@ export type CommissionRowExplain = {
   collectedCommissionBase: number;
   totalCommissionAtRate: number;
   earnedToDate: number;
+  earnedToDateNote?: string;
   alreadyPaidCommission: number;
   runningTierSnapshot: {
     metric: "ytd_paid_commissions" | "ytd_primary_job_basis" | "ytd_primary_paid_amount" | null;
@@ -179,6 +180,101 @@ function rateFromRunningTiers(
   return 0;
 }
 
+function runningMetricValue(
+  pack: CommissionRunningTierPack,
+  totals: { ytdPaid: number; ytdPrimaryBasis: number; ytdPrimaryPaidAmount: number }
+): number {
+  return pack.metric === "ytd_paid_commissions"
+    ? totals.ytdPaid
+    : pack.metric === "ytd_primary_paid_amount"
+      ? totals.ytdPrimaryPaidAmount
+      : totals.ytdPrimaryBasis;
+}
+
+function rateFromRunningTiersAtValue(pack: CommissionRunningTierPack, jobIdNum: number, runningValue: number): number {
+  const sorted = [...pack.tiers].sort((a, b) => b.minTotal - a.minTotal);
+  for (const t of sorted) {
+    if (runningValue >= t.minTotal) return t.rate;
+  }
+  const br = pack.belowRates;
+  if (br?.byLead) {
+    return jobIdNum < br.byLead.splitLead ? br.byLead.belowRate : br.byLead.atOrAboveRate;
+  }
+  if (br?.flat !== undefined) return br.flat;
+  return 0;
+}
+
+function metricContributionFromCurrentJob(
+  pack: CommissionRunningTierPack,
+  ctx: CommissionComputeContext,
+  salespersonName: string
+): number {
+  const isPrimary = ctx.primarySalespersonName === salespersonName;
+  if (!isPrimary) return 0;
+  if (pack.metric === "ytd_primary_paid_amount") return Math.max(0, ctx.customerPaid);
+  if (pack.metric === "ytd_primary_job_basis") return Math.max(0, ctx.basis);
+  return 0;
+}
+
+function earnedToDateWithRunningTierProgression(
+  rule: CommissionPersonRuleV1,
+  ctx: CommissionComputeContext,
+  salespersonName: string,
+  totals: { ytdPaid: number; ytdPrimaryBasis: number; ytdPrimaryPaidAmount: number },
+  collectedCommissionBase: number
+): number | null {
+  const pack = rule.runningTiers;
+  if (!pack) return null;
+  if (pack.metric !== "ytd_primary_paid_amount") return null;
+  const contribution = metricContributionFromCurrentJob(pack, ctx, salespersonName);
+  if (contribution <= 0 || collectedCommissionBase <= 0) return null;
+
+  const currentRunning = runningMetricValue(pack, totals);
+  const startRunning = Math.max(0, currentRunning - contribution);
+  const thresholdsAsc = [...pack.tiers].sort((a, b) => a.minTotal - b.minTotal);
+
+  let remainingBase = Math.max(0, collectedCommissionBase);
+  let runningCursor = startRunning;
+  let earned = 0;
+  while (remainingBase > 0.000001) {
+    const rate = rateFromRunningTiersAtValue(pack, ctx.jobIdNum, runningCursor + 0.000001);
+    const nextThreshold = thresholdsAsc.find((t) => runningCursor + 0.000001 < t.minTotal);
+    const segmentCap = nextThreshold ? Math.max(0, nextThreshold.minTotal - runningCursor) : remainingBase;
+    const segment = Math.min(remainingBase, segmentCap);
+    if (segment <= 0.000001) break;
+    earned += segment * rate;
+    remainingBase -= segment;
+    runningCursor += segment;
+  }
+  return earned;
+}
+
+function earnedToDateNoteWithRunningTierProgression(
+  rule: CommissionPersonRuleV1,
+  ctx: CommissionComputeContext,
+  salespersonName: string,
+  totals: { ytdPaid: number; ytdPrimaryBasis: number; ytdPrimaryPaidAmount: number },
+  collectedCommissionBase: number
+): string | null {
+  const pack = rule.runningTiers;
+  if (!pack || pack.metric !== "ytd_primary_paid_amount") return null;
+  const contribution = metricContributionFromCurrentJob(pack, ctx, salespersonName);
+  if (contribution <= 0 || collectedCommissionBase <= 0) return null;
+  const currentRunning = runningMetricValue(pack, totals);
+  const startRunning = Math.max(0, currentRunning - contribution);
+  const thresholdsAsc = [...pack.tiers].sort((a, b) => a.minTotal - b.minTotal);
+  const nextThreshold = thresholdsAsc.find((t) => startRunning + 0.0001 < t.minTotal);
+  if (!nextThreshold) return null;
+  const lowerRate = rateFromRunningTiersAtValue(pack, ctx.jobIdNum, startRunning + 0.000001);
+  const higherRate = rateFromRunningTiersAtValue(pack, ctx.jobIdNum, nextThreshold.minTotal + 0.000001);
+  if (Math.abs(lowerRate - higherRate) < 0.0000001) return null;
+  const lowerPortion = Math.max(0, Math.min(collectedCommissionBase, nextThreshold.minTotal - startRunning));
+  const higherPortion = Math.max(0, collectedCommissionBase - lowerPortion);
+  return `marginal tier: ${round2(lowerPortion)} @ ${(lowerRate * 100).toFixed(2)}% + ${round2(
+    higherPortion
+  )} @ ${(higherRate * 100).toFixed(2)}%`;
+}
+
 function resolvePersonRate(rule: CommissionPersonRuleV1, ctx: CommissionComputeContext, salespersonName: string): number {
   const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
   if (rule.runningTiers) {
@@ -198,12 +294,7 @@ function resolvePersonRateDetail(
   const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
   if (rule.runningTiers) {
     const pack = rule.runningTiers;
-    const running =
-      pack.metric === "ytd_paid_commissions"
-        ? totals.ytdPaid
-        : pack.metric === "ytd_primary_paid_amount"
-          ? totals.ytdPrimaryPaidAmount
-          : totals.ytdPrimaryBasis;
+    const running = runningMetricValue(pack, totals);
     const sorted = [...pack.tiers].sort((a, b) => b.minTotal - a.minTotal);
     for (const t of sorted) {
       if (running >= t.minTotal) {
@@ -340,7 +431,10 @@ export function computeCommissionsForJob(ctx: CommissionComputeContext): Commiss
 
     const paidCommission = ctx.existingPaidBySalesperson[sp] ?? 0;
     const rate = resolvePersonRate(rule, ctx, sp);
-    const earnedToDate = collectedCommissionBase * rate;
+    const totals = ctx.tierTotals[sp] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
+    const earnedToDate =
+      earnedToDateWithRunningTierProgression(rule, ctx, sp, totals, collectedCommissionBase) ??
+      collectedCommissionBase * rate;
 
     const guard = applyElevatedPaidGuard(rule, rate, ctx, sp, paidCommission);
     if (guard.oweZero) {
@@ -404,7 +498,12 @@ export function explainCommissionForSalesperson(
   const basis = Math.max(0, ctx.basis);
   const rateDetail = resolvePersonRateDetail(rule, ctx, salespersonName);
   const totalCommission = basis * rateDetail.rate;
-  const earnedToDate = collectedCommissionBase * rateDetail.rate;
+  const earnedToDate =
+    earnedToDateWithRunningTierProgression(rule, ctx, salespersonName, totals, collectedCommissionBase) ??
+    collectedCommissionBase * rateDetail.rate;
+  const earnedToDateNote =
+    earnedToDateNoteWithRunningTierProgression(rule, ctx, salespersonName, totals, collectedCommissionBase) ??
+    undefined;
 
   const g = rule.elevatedPaidGuard;
   let legacyRate = 0;
@@ -434,6 +533,7 @@ export function explainCommissionForSalesperson(
       collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
+      earnedToDateNote,
       alreadyPaidCommission: paidCommission,
       runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
@@ -464,6 +564,7 @@ export function explainCommissionForSalesperson(
       collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
+      earnedToDateNote,
       alreadyPaidCommission: paidCommission,
       runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
@@ -494,6 +595,7 @@ export function explainCommissionForSalesperson(
       collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
+      earnedToDateNote,
       alreadyPaidCommission: paidCommission,
       runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
@@ -524,6 +626,7 @@ export function explainCommissionForSalesperson(
       collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
       earnedToDate: round2(earnedToDate),
+      earnedToDateNote,
       alreadyPaidCommission: paidCommission,
       runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
@@ -553,6 +656,7 @@ export function explainCommissionForSalesperson(
     collectedCommissionBase,
     totalCommissionAtRate: round2(totalCommission),
     earnedToDate: round2(earnedToDate),
+    earnedToDateNote,
     alreadyPaidCommission: paidCommission,
     runningTierSnapshot: runningTierSnapshotFor(rule, totals),
     elevatedPaidGuard: {
