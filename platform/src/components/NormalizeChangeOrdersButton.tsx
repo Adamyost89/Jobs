@@ -17,6 +17,7 @@ export function NormalizeChangeOrdersButton() {
         scanned?: number;
         matched?: number;
         updated?: number;
+        recalculatedJobs?: number;
         error?: string;
       };
       if (!res.ok) {
@@ -24,7 +25,7 @@ export function NormalizeChangeOrdersButton() {
         return;
       }
       setMsg(
-        `Normalization complete. Updated ${j.updated ?? 0} of ${j.matched ?? 0} matched rows (scanned ${j.scanned ?? 0}).`
+        `Cleanup complete. Updated ${j.updated ?? 0} of ${j.matched ?? 0} matched rows (scanned ${j.scanned ?? 0}) and recalculated ${j.recalculatedJobs ?? 0} jobs.`
       );
     } catch {
       setMsg("Network error running normalization.");
@@ -39,11 +40,12 @@ export function NormalizeChangeOrdersButton() {
         <strong style={{ fontSize: "0.9rem" }}>Super Admin cleanup</strong>
         <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
           Force <code>changeOrders = 0</code> when <code>amountPaid</code> equals <code>contractAmount</code>.
+          Then recompute all job/commission calculations.
         </p>
       </div>
       <div>
         <button className="btn" type="button" onClick={runNormalize} disabled={busy}>
-          {busy ? "Running cleanup..." : "Run change-order cleanup"}
+          {busy ? "Running cleanup..." : "Run full financial cleanup"}
         </button>
       </div>
       {msg ? <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>{msg}</p> : null}

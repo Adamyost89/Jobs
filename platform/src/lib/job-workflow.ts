@@ -163,3 +163,15 @@ export async function recalculateJobAndCommissions(jobId: string) {
     });
   }
 }
+
+export async function recalculateAllJobsAndCommissions(): Promise<{ totalJobs: number }> {
+  const jobs = await prisma.job.findMany({
+    select: { id: true },
+    orderBy: { jobNumber: "asc" },
+    take: 20_000,
+  });
+  for (const job of jobs) {
+    await recalculateJobAndCommissions(job.id);
+  }
+  return { totalJobs: jobs.length };
+}
