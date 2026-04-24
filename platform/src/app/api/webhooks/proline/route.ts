@@ -249,7 +249,8 @@ export async function POST(req: Request) {
           },
         },
       });
-      throw error;
+      // Name writeback is best-effort and must never block financial recalculation.
+      console.error("ProLine name writeback failed:", error);
     }
   }
 
@@ -542,8 +543,8 @@ export async function POST(req: Request) {
         payload: e.raw as object,
       },
     });
-    await ensureRequiredNameWriteback(existing, e.name);
     await recalculateJobAndCommissions(existing.id);
+    await ensureRequiredNameWriteback(existing, e.name);
     return NextResponse.json({
       ok: true,
       jobId: existing.id,
@@ -643,8 +644,8 @@ export async function POST(req: Request) {
         },
       });
     }
-    await ensureRequiredNameWriteback(existing, e.name);
     await recalculateJobAndCommissions(existing.id);
+    await ensureRequiredNameWriteback(existing, e.name);
     return NextResponse.json({ ok: true, jobId: existing.id, upsert: "updated" });
   }
 
