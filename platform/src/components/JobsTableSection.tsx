@@ -43,6 +43,7 @@ export type JobsTableRowDTO = {
   changeOrders: number;
   invoicedTotal: number;
   amountPaid: number | null;
+  paidDate: string | null;
   retailPercent: number | null;
   insurancePercent: number | null;
   cost: number;
@@ -93,6 +94,7 @@ export function JobsTableSection({
 }) {
   const router = useRouter();
   const canEdit = canEditJobs(user);
+  const canEditPayments = user.role === "SUPER_ADMIN";
   const canSeeGp = canViewAllJobs(user);
   const [prefs, setPrefs] = useState<JobsTablePrefsV1>(DEFAULT_JOBS_TABLE_PREFS);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -107,7 +109,10 @@ export function JobsTableSection({
     contractAmount: string;
     changeOrders: string;
     invoicedTotal: string;
+    amountPaid: string;
     projectRevenue: string;
+    paidDate: string;
+    paidInFull: boolean;
     contractSignedAt: string;
   } | null>(null);
   const [editMsg, setEditMsg] = useState<string | null>(null);
@@ -194,7 +199,10 @@ export function JobsTableSection({
       contractAmount: String(row.contractAmount),
       changeOrders: String(row.changeOrders),
       invoicedTotal: String(row.invoicedTotal),
+      amountPaid: row.amountPaid == null ? "" : String(row.amountPaid),
       projectRevenue: String(row.projectRevenue),
+      paidDate: toDateInputValue(row.paidDate),
+      paidInFull: row.paidInFull,
       contractSignedAt: toDateInputValue(row.contractSignedAt),
     };
   }
@@ -247,6 +255,11 @@ export function JobsTableSection({
         setEditMsg(projectRevenue.error);
         return;
       }
+      const amountPaid = parseMoneyInput("Amount paid", editForm.amountPaid === "" ? "0" : editForm.amountPaid);
+      if (!amountPaid.ok) {
+        setEditMsg(amountPaid.error);
+        return;
+      }
 
       const payload = {
         name: editForm.name.trim() ? editForm.name.trim() : null,
@@ -257,6 +270,13 @@ export function JobsTableSection({
         invoicedTotal: invoicedTotal.value,
         projectRevenue: projectRevenue.value,
         contractSignedAt: editForm.contractSignedAt.trim() ? editForm.contractSignedAt.trim() : null,
+        ...(canEditPayments
+          ? {
+              amountPaid: editForm.amountPaid.trim() ? amountPaid.value : null,
+              paidDate: editForm.paidDate.trim() ? editForm.paidDate.trim() : null,
+              paidInFull: editForm.paidInFull,
+            }
+          : null),
       };
 
       setSavingEditId(row.id);
@@ -283,7 +303,7 @@ export function JobsTableSection({
         setSavingEditId(null);
       }
     },
-    [canEdit, editForm, editingId, savingEditId, router]
+    [canEdit, canEditPayments, editForm, editingId, savingEditId, router]
   );
 
   const legendBad = {
@@ -633,6 +653,20 @@ export function JobsTableSection({
                                   placeholder="0.00"
                                 />
                               </label>
+                              {canEditPayments ? (
+                                <label>
+                                  Amount paid
+                                  <input
+                                    className="input"
+                                    inputMode="decimal"
+                                    value={editForm.amountPaid}
+                                    onChange={(e) =>
+                                      setEditForm((prev) => (prev ? { ...prev, amountPaid: e.target.value } : prev))
+                                    }
+                                    placeholder="0.00"
+                                  />
+                                </label>
+                              ) : null}
                               <label>
                                 Project revenue
                                 <input
@@ -645,6 +679,31 @@ export function JobsTableSection({
                                   placeholder="0.00"
                                 />
                               </label>
+                              {canEditPayments ? (
+                                <>
+                                  <label>
+                                    Paid date
+                                    <input
+                                      className="input"
+                                      type="date"
+                                      value={editForm.paidDate}
+                                      onChange={(e) =>
+                                        setEditForm((prev) => (prev ? { ...prev, paidDate: e.target.value } : prev))
+                                      }
+                                    />
+                                  </label>
+                                  <label style={{ alignSelf: "end" }}>
+                                    <span style={{ display: "block", marginBottom: "0.45rem" }}>Paid in full</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={editForm.paidInFull}
+                                      onChange={(e) =>
+                                        setEditForm((prev) => (prev ? { ...prev, paidInFull: e.target.checked } : prev))
+                                      }
+                                    />
+                                  </label>
+                                </>
+                              ) : null}
                               <label>
                                 Contract signed date
                                 <input

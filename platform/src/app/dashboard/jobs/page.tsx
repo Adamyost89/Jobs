@@ -239,6 +239,7 @@ export default async function JobsPage({
       changeOrders: j.changeOrders.toNumber(),
       invoicedTotal: j.invoicedTotal.toNumber(),
       amountPaid: j.amountPaid?.toNumber() ?? null,
+      paidDate: j.paidDate ? j.paidDate.toISOString() : null,
       retailPercent: j.retailPercent?.toNumber() ?? null,
       insurancePercent: j.insurancePercent?.toNumber() ?? null,
       cost: j.cost.toNumber(),
