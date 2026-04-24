@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { canEditJobs } from "@/lib/rbac";
 import { JobWorkbookImportForm } from "@/components/JobWorkbookImportForm";
+import { NormalizeChangeOrdersButton } from "@/components/NormalizeChangeOrdersButton";
+import { Role } from "@prisma/client";
 
 export default async function ImportJobsFromWorkbookPage() {
   const user = await getSession();
@@ -28,6 +30,7 @@ export default async function ImportJobsFromWorkbookPage() {
         <strong>row range</strong> for each tab. Data is written to the <code>Job</code> table (same rules as{" "}
         <code>npm run import:jobs</code>).
       </p>
+      {user.role === Role.SUPER_ADMIN ? <NormalizeChangeOrdersButton /> : null}
       <JobWorkbookImportForm />
     </div>
   );
