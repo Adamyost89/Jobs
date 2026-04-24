@@ -316,6 +316,7 @@ a.signed-month-drill-link:hover {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  padding-top: var(--dash-header-height);
 }
 
 .dash-header {
@@ -326,8 +327,10 @@ a.signed-month-drill-link:hover {
   padding: 0.65rem 1.25rem;
   border-bottom: 1px solid #2a3545;
   background: rgba(15, 20, 25, 0.92);
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 40;
 }
 
