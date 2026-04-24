@@ -26,7 +26,8 @@
     "sync:commission-ledger-from-payouts": "tsx scripts/sync-commission-ledger-from-payouts.ts",
     "normalize:salespeople-first-names": "tsx scripts/normalize-salespeople-first-names.ts",
     "proline:probe": "tsx scripts/proline-probe.ts",
-    "proline:selftest": "tsx scripts/proline-api-selftest.ts"
+    "proline:selftest": "tsx scripts/proline-api-selftest.ts",
+    "proline:reconcile-payments": "tsx scripts/proline-reconcile-payments.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

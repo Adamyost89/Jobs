@@ -105,6 +105,7 @@ npm run sync:commission-ledger-from-payouts  # align Commission.paid/owed column
 | PATCH | `/api/commissions/:id` | Super admin: override lock |
 | POST | `/api/webhooks/proline` | ProLine triggers + legacy `type`; see [docs/PROLINE_INTEGRATION.md](../docs/PROLINE_INTEGRATION.md) |
 | GET | `/api/webhooks/proline` | Health / URL verification |
+| POST | `/api/integrations/proline/reconcile-payments` | Admin: compare local payment fields to ProLine; body `{ apply?: boolean, maxPages?: number }` |
 
 **ProLine webhooks on localhost:** use a public HTTPS tunnel to port 3000 (`npm run tunnel:dev` in `platform`), then paste `https://<tunnel-host>/api/webhooks/proline` in ProLine — details in [docs/PROLINE_INTEGRATION.md](../docs/PROLINE_INTEGRATION.md) (*Local testing*).
 | POST | `/api/integrations/zapier-bridge` | Bearer `ZAPIER_BRIDGE_SECRET` |

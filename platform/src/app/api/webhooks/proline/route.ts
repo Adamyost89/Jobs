@@ -101,6 +101,9 @@ export async function POST(req: Request) {
   }
 
   function skipProlineUpdate(existing: { status: string }): boolean {
+    // Financial webhooks can carry payment/invoice statuses (e.g. Paid/Failed)
+    // that are unrelated to project lifecycle and must not block recording.
+    if (e.internalType === "invoice" || e.internalType === "payment") return false;
     const incoming = incomingLifecycleFromEvent();
     if (incoming !== undefined && !isAllowedProlineLifecycleStatus(incoming)) return true;
     if (incoming === undefined && !jobQualifiesForProlineAutomation(existing.status)) return true;
