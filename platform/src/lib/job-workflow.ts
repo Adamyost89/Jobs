@@ -5,6 +5,7 @@ import { skipAutoCommissionRecalcForJobYear } from "./commission-import-policy";
 import { commissionPlanForJobYear } from "./commission-plan-defaults";
 import { loadCommissionTierTotalsForYear } from "./commission-tier-totals";
 import { loadSalespersonFlagsByName } from "./salespeople-kind-db";
+import { resolveOrCreateSalespersonByName } from "./salesperson-name";
 
 function dec(n: Prisma.Decimal | number | string): number {
   if (n instanceof Prisma.Decimal) return n.toNumber();
@@ -162,7 +163,10 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
   }
 
   for (const row of rows) {
-    const sp = await prisma.salesperson.findUnique({ where: { name: row.salespersonName } });
+    const sp = await resolveOrCreateSalespersonByName(prisma, row.salespersonName, {
+      preferFirstToken: true,
+      activeOnCreate: true,
+    });
     if (!sp) continue;
     if (row.overrideSkip) continue;
     await prisma.commission.upsert({

@@ -580,15 +580,17 @@ export function JobsTableSection({
                         {canEdit ? (
                           <td style={{ whiteSpace: "normal" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
-                            <button
-                              type="button"
-                              className="btn secondary"
-                              onClick={() => void recheckCommission(row)}
-                              disabled={recheckingId === row.id || deletingId != null || savingEditId != null}
-                              style={{ padding: "0.4rem 0.75rem" }}
-                            >
-                              {recheckingId === row.id ? "Rechecking…" : "Recheck commission"}
-                            </button>
+                            {canEditPayments ? (
+                              <button
+                                type="button"
+                                className="btn secondary"
+                                onClick={() => void recheckCommission(row)}
+                                disabled={recheckingId === row.id || deletingId != null || savingEditId != null}
+                                style={{ padding: "0.4rem 0.75rem" }}
+                              >
+                                {recheckingId === row.id ? "Rechecking…" : "Recheck commission"}
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               className="btn secondary"
