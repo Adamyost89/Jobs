@@ -103,6 +103,7 @@ export function JobsTableSection({
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
   const [recheckMsg, setRecheckMsg] = useState<string | null>(null);
   const [recheckingId, setRecheckingId] = useState<string | null>(null);
+  const [whyZeroLines, setWhyZeroLines] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingEditId, setSavingEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
@@ -177,6 +178,7 @@ export function JobsTableSection({
       if (!canEditPayments || recheckingId || deletingId || savingEditId) return;
       setRecheckingId(row.id);
       setRecheckMsg(null);
+      setWhyZeroLines([]);
       setDeleteMsg(null);
       setEditMsg(null);
       try {
@@ -190,9 +192,14 @@ export function JobsTableSection({
         const after = typeof j.commissionCountAfter === "number" ? j.commissionCountAfter : null;
         const payoutCount = typeof j.payoutCount === "number" ? j.payoutCount : 0;
         const payoutSum = typeof j.payoutSum === "number" ? j.payoutSum : 0;
+        const whyZero =
+          Array.isArray(j.whyZero) && j.whyZero.every((x: unknown) => typeof x === "string")
+            ? (j.whyZero as string[])
+            : [];
         setRecheckMsg(
           `Rechecked ${row.jobNumber}: commission lines ${before ?? "?"} → ${after ?? "?"}; payouts ${payoutCount} line${payoutCount === 1 ? "" : "s"} (${formatUsd(payoutSum)}).`
         );
+        setWhyZeroLines(after === 0 ? whyZero : []);
         router.refresh();
       } catch {
         setRecheckMsg("Network error rechecking commission.");
@@ -551,7 +558,21 @@ export function JobsTableSection({
           <p style={{ margin: "0.75rem 1.25rem", color: "var(--warn)", fontSize: "0.86rem" }}>{deleteMsg}</p>
         ) : null}
         {recheckMsg ? (
-          <p style={{ margin: "0.75rem 1.25rem", color: "var(--muted)", fontSize: "0.86rem" }}>{recheckMsg}</p>
+          <p style={{ margin: "0.75rem 1.25rem", color: "var(--muted)", fontSize: "0.86rem", display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+            <span>{recheckMsg}</span>
+            {whyZeroLines.length > 0 ? (
+              <button
+                type="button"
+                className="btn secondary"
+                style={{ padding: "0.28rem 0.55rem", fontSize: "0.78rem" }}
+                onClick={() => {
+                  window.alert(`Why commission stayed at 0:\n\n- ${whyZeroLines.join("\n- ")}`);
+                }}
+              >
+                Why 0?
+              </button>
+            ) : null}
+          </p>
         ) : null}
         {editMsg ? (
           <p style={{ margin: "0.75rem 1.25rem", color: "var(--muted)", fontSize: "0.86rem" }}>{editMsg}</p>
