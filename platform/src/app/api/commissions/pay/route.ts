@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canMarkCommissionPaid } from "@/lib/rbac";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
-import { formatIsoDateForPayrollTz, getCurrentPayPeriodLabel, getPayPeriodContaining, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
+import { formatIsoDateForPayrollTz, getCurrentPayPeriodLabel, getPayPeriodForPayday, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
 
 const bodySchema = z.object({
   commissionId: z.string(),
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid payday date (expected YYYY-MM-DD)" }, { status: 400 });
   }
   const label = paydayDate
-    ? getPayPeriodContaining(paydayDate).label
+    ? getPayPeriodForPayday(paydayDate).label
     : payPeriodLabel && String(payPeriodLabel).trim()
       ? String(payPeriodLabel).trim()
       : getCurrentPayPeriodLabel();

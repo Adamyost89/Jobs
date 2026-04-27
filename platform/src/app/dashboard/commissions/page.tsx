@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session";
 import { canViewAllJobs, canMarkCommissionPaid, canEditCommissions } from "@/lib/rbac";
 import { PayCommissionForm } from "@/components/PayCommissionForm";
 import { CommissionLineAdminForm } from "@/components/CommissionLineAdminForm";
-import { formatIsoDateForPayrollTz, getPayPeriodContaining, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
+import { formatIsoDateForPayrollTz, getPayPeriodForPayday, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
 import { formatDateInEastern } from "@/lib/payout-display";
 import Link from "next/link";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
@@ -34,7 +34,7 @@ export default async function CommissionsPage({
   const todayIso = formatIsoDateForPayrollTz(new Date());
   const selectedPaydayIso = parsePaydayParam(sp.payday) ?? todayIso;
   const selectedPaydayDate = parseIsoDateAtNoonUtc(selectedPaydayIso) ?? new Date();
-  const suggestedPayPeriod = getPayPeriodContaining(selectedPaydayDate).label;
+  const suggestedPayPeriod = getPayPeriodForPayday(selectedPaydayDate).label;
 
   const parts: Prisma.CommissionWhereInput[] = [];
   parts.push({ owedAmount: { gt: 0 } });

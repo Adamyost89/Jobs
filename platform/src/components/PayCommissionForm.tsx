@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { getPayPeriodContaining, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
+import { getPayPeriodForPayday, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
 
 export function PayCommissionForm({
   commissionId,
@@ -38,7 +38,7 @@ export function PayCommissionForm({
   }
 
   const paydayDate = parseIsoDateAtNoonUtc(payday);
-  const resolvedPayPeriod = paydayDate ? getPayPeriodContaining(paydayDate).label : null;
+  const resolvedPayPeriod = paydayDate ? getPayPeriodForPayday(paydayDate).label : null;
   const paydayChanged = payday.trim() !== suggestedPaydayIso.trim();
 
   return (

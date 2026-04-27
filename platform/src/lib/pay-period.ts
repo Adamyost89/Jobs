@@ -26,6 +26,10 @@ function fmt(d: Date): string {
   });
 }
 
+function addDaysUtc(base: Date, days: number): Date {
+  return new Date(base.getTime() + days * MS_PER_DAY);
+}
+
 export function formatIsoDateForPayrollTz(date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: PAYROLL_DISPLAY_TZ,
@@ -55,6 +59,23 @@ export function getPayPeriodContaining(date = new Date()): {
   const end = new Date(anchor.getTime() + (idx + 1) * DAYS * MS_PER_DAY - MS_PER_DAY);
   const label = `${fmt(start)} – ${fmt(end)}`;
   return { start, end, label };
+}
+
+/**
+ * Payroll posting rule for a payday date:
+ * use the two full weeks immediately before the week containing the payday.
+ */
+export function getPayPeriodForPayday(payday: Date): {
+  start: Date;
+  end: Date;
+  label: string;
+} {
+  const dayOfWeek = payday.getUTCDay(); // 0=Sun..6=Sat
+  const daysSinceMonday = (dayOfWeek + 6) % 7;
+  const weekStart = addDaysUtc(payday, -daysSinceMonday);
+  const end = addDaysUtc(weekStart, -1);
+  const start = addDaysUtc(end, -(DAYS - 1));
+  return { start, end, label: `${fmt(start)} – ${fmt(end)}` };
 }
 
 export function getCurrentPayPeriodLabel(now = new Date()): string {
