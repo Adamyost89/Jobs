@@ -304,8 +304,10 @@ export function JobsTableSection({
     if (!hasDisplayableGp(jl)) return undefined;
 
     const statusRaw = String(row.status ?? "").trim().toLowerCase();
-    const inBilling = statusRaw === "in billing" || statusRaw === "in_billing";
-    const active = row.paidInFull === true && inBilling;
+    const statusNorm = statusRaw.replace(/[^a-z0-9]+/g, " ").trim();
+    const isInBilling = statusNorm === "in billing";
+    const isPaidClosed = statusNorm === "paid closed";
+    const active = row.paidInFull === true && (isInBilling || isPaidClosed);
     if (!active) return undefined;
 
     const gpPct = toPercentNumber(row.gpPercent);
@@ -492,7 +494,7 @@ export function JobsTableSection({
           <br />
           <strong style={{ color: "var(--text)" }}>Row colors</strong> (only when{" "}
           <strong style={{ color: "var(--text)" }}>Paid in full</strong> and{" "}
-          <strong style={{ color: "var(--text)" }}>Status = In Billing</strong>):{" "}
+          <strong style={{ color: "var(--text)" }}>Status = In Billing or Paid &amp; Closed</strong>):{" "}
           <span className="row-legend" style={legendBad}>
             {h.labels.bad} (GP% &lt;32%)
           </span>{" "}
