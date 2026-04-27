@@ -6,8 +6,6 @@ services:
       POSTGRES_USER: elevated
       POSTGRES_PASSWORD: elevated
       POSTGRES_DB: elevated_jobs
-    ports:
-      - "5432:5432"
     volumes:
       - elevated_pg:/var/lib/postgresql/data
     healthcheck:
