@@ -61,11 +61,12 @@ export async function POST(
     const payoutSum = payoutAgg._sum.amount?.toNumber() ?? 0;
     const hasStoredPlan = !!storedPlanRow?.config;
     const storedPlanValid = isCommissionPlanConfigV1(storedPlanRow?.config);
-    const storedPlan = storedPlanValid ? storedPlanRow!.config : null;
-    const plan: CommissionPlanConfigV1 = storedPlan ?? {
-      version: COMMISSION_PLAN_VERSION,
-      people: {},
-    };
+    const plan: CommissionPlanConfigV1 = storedPlanValid
+      ? (storedPlanRow!.config as CommissionPlanConfigV1)
+      : {
+          version: COMMISSION_PLAN_VERSION,
+          people: {},
+        };
 
     let zeroWhy: string[] = [];
     if (after === 0 && refreshedJob) {
