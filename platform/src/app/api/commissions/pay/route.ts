@@ -5,11 +5,13 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canMarkCommissionPaid } from "@/lib/rbac";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
-import { getCurrentPayPeriodLabel } from "@/lib/pay-period";
+import { formatIsoDateForPayrollTz, getCurrentPayPeriodLabel, getPayPeriodContaining, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
 
 const bodySchema = z.object({
   commissionId: z.string(),
-  /** If omitted or blank, uses the current pay period (see PAY_PERIOD_ANCHOR). */
+  /** Optional payday (YYYY-MM-DD). If present, pay period is inferred from this date. */
+  payday: z.string().optional().nullable(),
+  /** Backward-compatible manual override for older clients. */
   payPeriodLabel: z.string().optional().nullable(),
   amount: z.number().positive().optional(),
 });
@@ -24,9 +26,15 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { commissionId, payPeriodLabel, amount } = parsed.data;
-  const label =
-    payPeriodLabel && String(payPeriodLabel).trim()
+  const { commissionId, payday, payPeriodLabel, amount } = parsed.data;
+  const trimmedPayday = payday ? String(payday).trim() : "";
+  const paydayDate = trimmedPayday ? parseIsoDateAtNoonUtc(trimmedPayday) : null;
+  if (trimmedPayday && !paydayDate) {
+    return NextResponse.json({ error: "Invalid payday date (expected YYYY-MM-DD)" }, { status: 400 });
+  }
+  const label = paydayDate
+    ? getPayPeriodContaining(paydayDate).label
+    : payPeriodLabel && String(payPeriodLabel).trim()
       ? String(payPeriodLabel).trim()
       : getCurrentPayPeriodLabel();
 
@@ -56,7 +64,7 @@ export async function POST(req: Request) {
           jobId: c.jobId,
           payPeriodLabel: label,
           amount: new Prisma.Decimal(payAmt.toFixed(2)),
-          notes: `Paid by ${user.email}`,
+          notes: `Paid by ${user.email}${paydayDate ? `; payday ${formatIsoDateForPayrollTz(paydayDate)}` : ""}`,
           recordedByUserId: user.id,
         },
       });
@@ -66,7 +74,7 @@ export async function POST(req: Request) {
           action: "COMMISSION_PAID",
           entityType: "Commission",
           entityId: commissionId,
-          payload: { payPeriodLabel: label, amount: payAmt },
+          payload: { payPeriodLabel: label, payday: paydayDate ? formatIsoDateForPayrollTz(paydayDate) : null, amount: payAmt },
         },
       });
       return c.jobId;

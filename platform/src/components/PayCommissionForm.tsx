@@ -1,29 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import { getPayPeriodContaining, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
 
 export function PayCommissionForm({
   commissionId,
   defaultOwed,
-  suggestedPayPeriod,
+  suggestedPaydayIso,
 }: {
   commissionId: string;
   defaultOwed: number;
-  /** Current payroll window — pre-filled; user can override for corrections. */
-  suggestedPayPeriod: string;
+  /** Default payday (YYYY-MM-DD). */
+  suggestedPaydayIso: string;
 }) {
-  const [payPeriod, setPayPeriod] = useState(suggestedPayPeriod);
+  const [payday, setPayday] = useState(suggestedPaydayIso);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function pay() {
     setMsg(null);
-    const trimmed = payPeriod.trim();
+    const trimmed = payday.trim();
     const res = await fetch("/api/commissions/pay", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         commissionId,
-        payPeriodLabel: trimmed || null,
+        payday: trimmed || null,
         amount: defaultOwed > 0 ? defaultOwed : undefined,
       }),
     });
@@ -36,24 +37,26 @@ export function PayCommissionForm({
     window.location.reload();
   }
 
-  const periodMismatch = payPeriod.trim() !== suggestedPayPeriod.trim();
+  const paydayDate = parseIsoDateAtNoonUtc(payday);
+  const resolvedPayPeriod = paydayDate ? getPayPeriodContaining(paydayDate).label : null;
+  const paydayChanged = payday.trim() !== suggestedPaydayIso.trim();
 
   return (
     <div style={{ display: "grid", gap: 6 }}>
       <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.25 }}>
-        Post check for period:
+        Set payday:
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
         <input
-          value={payPeriod}
-          onChange={(e) => setPayPeriod(e.target.value)}
-          title="Pay period label — default is the current payroll window"
-          placeholder="Pay period"
-          aria-label="Pay period label for this check"
+          type="date"
+          value={payday}
+          onChange={(e) => setPayday(e.target.value)}
+          title="Payday date for this check"
+          aria-label="Payday date for this check"
           style={{
             padding: "0.4rem 0.55rem",
             borderRadius: 8,
-            border: periodMismatch ? "1px solid #eab308" : "1px solid #334155",
+            border: paydayChanged ? "1px solid #eab308" : "1px solid #334155",
             background: "#0f172a",
             color: "var(--text)",
             minWidth: 200,
@@ -63,11 +66,16 @@ export function PayCommissionForm({
         <button className="btn" type="button" onClick={pay} disabled={defaultOwed <= 0} style={{ fontSize: "0.82rem" }}>
           Mark paid {defaultOwed.toFixed(2)}
         </button>
+        {resolvedPayPeriod ? (
+          <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>Pay period: {resolvedPayPeriod}</span>
+        ) : (
+          <span style={{ fontSize: "0.72rem", color: "#f59e0b" }}>Enter a valid payday date.</span>
+        )}
         {msg && <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>{msg}</span>}
       </div>
-      {periodMismatch && (
+      {paydayChanged && (
         <span style={{ fontSize: "0.72rem", color: "#fbbf24" }}>
-          Pay period differs from the current window ({suggestedPayPeriod}).
+          Payday differs from default ({suggestedPaydayIso}).
         </span>
       )}
     </div>

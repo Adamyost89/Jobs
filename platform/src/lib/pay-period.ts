@@ -26,6 +26,22 @@ function fmt(d: Date): string {
   });
 }
 
+export function formatIsoDateForPayrollTz(date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: PAYROLL_DISPLAY_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export function parseIsoDateAtNoonUtc(value: string): Date | null {
+  const raw = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;
+  const d = new Date(`${raw}T12:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export function getPayPeriodContaining(date = new Date()): {
   start: Date;
   end: Date;

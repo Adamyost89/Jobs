@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session";
 import { canViewAllJobs, canMarkCommissionPaid, canEditCommissions } from "@/lib/rbac";
 import { PayCommissionForm } from "@/components/PayCommissionForm";
 import { CommissionLineAdminForm } from "@/components/CommissionLineAdminForm";
-import { getCurrentPayPeriodLabel } from "@/lib/pay-period";
+import { formatIsoDateForPayrollTz, getPayPeriodContaining, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
 import { formatDateInEastern } from "@/lib/payout-display";
 import Link from "next/link";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
@@ -13,12 +13,28 @@ import { jobNumberSortKey } from "@/lib/job-sort";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { CommissionExplainButton } from "@/components/CommissionExplainButton";
 
-export default async function CommissionsPage() {
+function parsePaydayParam(raw: string | string[] | undefined): string | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v) return null;
+  const t = String(v).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  return t;
+}
+
+export default async function CommissionsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = (await searchParams) ?? {};
   const user = await getSession();
   if (!user) return null;
   const showCalcTrace = user.role === "SUPER_ADMIN";
 
-  const suggestedPayPeriod = getCurrentPayPeriodLabel();
+  const todayIso = formatIsoDateForPayrollTz(new Date());
+  const selectedPaydayIso = parsePaydayParam(sp.payday) ?? todayIso;
+  const selectedPaydayDate = parseIsoDateAtNoonUtc(selectedPaydayIso) ?? new Date();
+  const suggestedPayPeriod = getPayPeriodContaining(selectedPaydayDate).label;
 
   const parts: Prisma.CommissionWhereInput[] = [];
   parts.push({ owedAmount: { gt: 0 } });
@@ -146,14 +162,41 @@ export default async function CommissionsPage() {
       </div>
 
       <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
-        Pay period default when posting: <code>{suggestedPayPeriod}</code>
+        Payday default when posting: <code>{selectedPaydayIso}</code> (pay period: <code>{suggestedPayPeriod}</code>)
       </p>
+      {canMarkCommissionPaid(user) ? (
+        <form method="GET" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+          <label htmlFor="payday" style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
+            Payday for all lines:
+          </label>
+          <input
+            id="payday"
+            name="payday"
+            type="date"
+            defaultValue={selectedPaydayIso}
+            style={{
+              padding: "0.4rem 0.55rem",
+              borderRadius: 8,
+              border: "1px solid #334155",
+              background: "#0f172a",
+              color: "var(--text)",
+              fontSize: "0.82rem",
+            }}
+          />
+          <button className="btn" type="submit" style={{ fontSize: "0.82rem" }}>
+            Set payday
+          </button>
+          <Link className="btn btn-ghost" href="/dashboard/commissions" style={{ fontSize: "0.82rem" }}>
+            Reset to today
+          </Link>
+        </form>
+      ) : null}
       {canEditCommissions(user) ? (
         <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)", maxWidth: 720 }}>
-          <strong>Admins:</strong> If Drew (or anyone) should not earn on a job, set{" "}
-          <em>Drew participation</em> to <code>No</code> on that job (workbook import column or{" "}
+          <strong>Admins:</strong> If someone should not earn on a job, set{" "}
+          <em>Participation</em> to <code>No</code> on that job (workbook import column or{" "}
           <code>PATCH /api/jobs/&lt;id&gt;</code> with <code>drewParticipation</code>) and save — the next commission
-          recalc removes him. Use <strong>Adjust amount &amp; lock</strong> on a line for a one-off correction without
+          recalc removes that commission. Use <strong>Adjust amount &amp; lock</strong> on a line for a one-off correction without
           changing the job row.
         </p>
       ) : null}
@@ -263,7 +306,7 @@ export default async function CommissionsPage() {
                           <PayCommissionForm
                             commissionId={c.id}
                             defaultOwed={displayOwed}
-                            suggestedPayPeriod={suggestedPayPeriod}
+                            suggestedPaydayIso={selectedPaydayIso}
                           />
                         ) : (
                           <span className="cell-muted">—</span>
