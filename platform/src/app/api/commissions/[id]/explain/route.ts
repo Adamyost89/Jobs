@@ -20,7 +20,7 @@ export async function GET(
 ) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (user.role !== Role.SUPER_ADMIN) {
+  if (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

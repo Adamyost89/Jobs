@@ -15,10 +15,12 @@ export type PayPeriodAllRepsLine = {
 };
 
 export type PayPeriodAllRepsRow = {
+  key: string;
   payPeriodLabel: string;
   count: number;
   total: number;
   lastPostedLabel: string;
+  lastPostedAt: string;
   lines: PayPeriodAllRepsLine[];
 };
 
@@ -59,7 +61,11 @@ export function PayPeriodAllRepsTable({
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    setLocalRows(rows);
+    setLocalRows(
+      [...rows].sort(
+        (a, b) => new Date(b.lastPostedAt).getTime() - new Date(a.lastPostedAt).getTime()
+      )
+    );
   }, [rows]);
 
   const toggle = useCallback((label: string) => {
@@ -226,6 +232,12 @@ export function PayPeriodAllRepsTable({
     [busyLineId, canManagePayoutLines, editingLineId, router]
   );
 
+  function payPeriodWithYear(row: PayPeriodAllRepsRow): string {
+    const dt = new Date(row.lastPostedAt);
+    if (Number.isNaN(dt.getTime())) return row.payPeriodLabel;
+    return `${row.payPeriodLabel}, ${dt.getFullYear()}`;
+  }
+
   return (
     <div>
       {msg ? (
@@ -243,25 +255,25 @@ export function PayPeriodAllRepsTable({
         </thead>
         <tbody>
           {localRows.map((s) => {
-            const open = openLabel === s.payPeriodLabel;
+            const open = openLabel === s.key;
             return (
-              <Fragment key={s.payPeriodLabel}>
+              <Fragment key={s.key}>
                 <tr
                   className="payout-expand-row"
                   tabIndex={0}
                   aria-expanded={open}
-                  onClick={() => toggle(s.payPeriodLabel)}
+                  onClick={() => toggle(s.key)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      toggle(s.payPeriodLabel);
+                      toggle(s.key);
                     }
                   }}
                 >
                   <td className="cell-muted" style={{ fontSize: "0.75rem", userSelect: "none" }}>
                     {open ? "▼" : "▶"}
                   </td>
-                  <td style={{ fontWeight: 600 }}>{s.payPeriodLabel}</td>
+                  <td style={{ fontWeight: 600 }}>{payPeriodWithYear(s)}</td>
                   <td className="cell-num">{s.count}</td>
                   <td className="cell-num cell-strong">{money2(s.total)}</td>
                   <td className="cell-muted" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>
@@ -290,7 +302,7 @@ export function PayPeriodAllRepsTable({
                             </thead>
                             <tbody>
                               {groupedBySalesperson(s.lines).map((sp) => (
-                                <Fragment key={`${s.payPeriodLabel}-${sp.salespersonName}`}>
+                                <Fragment key={`${s.key}-${sp.salespersonName}`}>
                                   <tr style={{ background: "rgba(255,255,255,0.03)" }}>
                                     <td className="cell-nowrap cell-strong">{sp.salespersonName}</td>
                                     <td className="cell-muted" style={{ fontSize: "0.8rem" }}>

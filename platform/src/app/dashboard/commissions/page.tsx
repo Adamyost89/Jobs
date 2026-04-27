@@ -29,7 +29,7 @@ export default async function CommissionsPage({
   const sp = (await searchParams) ?? {};
   const user = await getSession();
   if (!user) return null;
-  const showCalcTrace = user.role === "SUPER_ADMIN";
+  const showCalcTrace = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
 
   const todayIso = formatIsoDateForPayrollTz(new Date());
   const selectedPaydayIso = parsePaydayParam(sp.payday) ?? todayIso;

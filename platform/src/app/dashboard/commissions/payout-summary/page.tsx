@@ -45,10 +45,12 @@ export default async function PayoutSummaryPage({
   });
 
   const payPeriodAllRepsRows = byWindow.map((w) => ({
+    key: `${w.payPeriodLabel}|${w.lastPosted.toISOString()}`,
     payPeriodLabel: w.payPeriodLabel,
     count: w.count,
     total: w.total,
     lastPostedLabel: formatDateInEastern(w.lastPosted),
+    lastPostedAt: w.lastPosted.toISOString(),
     lines: w.lines.map((l) => ({
       id: l.id,
       amount: l.amount,

@@ -94,6 +94,7 @@ export function JobsTableSection({
 }) {
   const router = useRouter();
   const canEdit = canEditJobs(user);
+  const canManageRowActions = user.role === "SUPER_ADMIN";
   const canEditPayments = user.role === "SUPER_ADMIN";
   const canSeeGp = canViewAllJobs(user);
   const canEditTablePrefs = user.role === "SUPER_ADMIN";
@@ -147,7 +148,7 @@ export function JobsTableSection({
   const h = prefs.highlights;
   const deleteJob = useCallback(
     async (row: JobsTableRowDTO) => {
-      if (!canEdit || deletingId) return;
+      if (!canManageRowActions || deletingId) return;
       const ok = window.confirm(
         `Delete job ${row.jobNumber}? This permanently removes the project record and frees this job number for reuse.`
       );
@@ -170,7 +171,7 @@ export function JobsTableSection({
         setDeletingId(null);
       }
     },
-    [canEdit, deletingId, router]
+    [canManageRowActions, deletingId, router]
   );
 
   const recheckCommission = useCallback(
@@ -232,7 +233,7 @@ export function JobsTableSection({
   }
 
   function beginEdit(row: JobsTableRowDTO) {
-    if (!canEdit || deletingId || savingEditId) return;
+    if (!canManageRowActions || deletingId || savingEditId) return;
     setDeleteMsg(null);
     setEditMsg(null);
     setEditingId(row.id);
@@ -253,7 +254,7 @@ export function JobsTableSection({
 
   const saveEdit = useCallback(
     async (row: JobsTableRowDTO) => {
-      if (!canEdit || !editForm || editingId !== row.id || savingEditId) return;
+      if (!canManageRowActions || !editForm || editingId !== row.id || savingEditId) return;
       const status = editForm.status.trim();
       if (!status) {
         setEditMsg("Status is required.");
@@ -327,7 +328,7 @@ export function JobsTableSection({
         setSavingEditId(null);
       }
     },
-    [canEdit, canEditPayments, editForm, editingId, savingEditId, router]
+    [canManageRowActions, canEditPayments, editForm, editingId, savingEditId, router]
   );
 
   const legendBad = {
@@ -519,7 +520,7 @@ export function JobsTableSection({
     <div className="jobs-hl-vars">
       {canEditTablePrefs ? <JobsDashboardPrefsForm prefs={prefs} onChange={persist} variant="jobs" /> : null}
 
-      {canSeeGp ? (
+      {canSeeGp && user.role === "SUPER_ADMIN" ? (
         <div className="card" style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.55 }}>
           <strong style={{ color: "var(--text)" }}>GP &amp; GP%</strong> come from the <strong style={{ color: "var(--text)" }}>sheet import</strong> when
           present. When <strong style={{ color: "var(--text)" }}>cost &gt; 0</strong> and the job is{" "}
@@ -588,7 +589,7 @@ export function JobsTableSection({
               <thead>
                 <tr>
                   {cols.map((id) => renderTh(id))}
-                  {canEdit ? <th style={{ minWidth: "10rem" }}>Actions</th> : null}
+                  {canManageRowActions ? <th style={{ minWidth: "10rem" }}>Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -598,7 +599,7 @@ export function JobsTableSection({
                     <Fragment key={row.id}>
                       <tr style={rowStyle}>
                         {cols.map((id) => renderTd(row, id))}
-                        {canEdit ? (
+                        {canManageRowActions ? (
                           <td style={{ whiteSpace: "normal" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
                             {canEditPayments ? (
@@ -634,7 +635,7 @@ export function JobsTableSection({
                           </td>
                         ) : null}
                       </tr>
-                      {canEdit && editingId === row.id && editForm ? (
+                      {canManageRowActions && editingId === row.id && editForm ? (
                         <tr>
                           <td colSpan={cols.length + 1} style={{ paddingTop: 0 }}>
                             <div className="card" style={{ margin: "0.35rem 0.7rem 0.8rem", padding: "0.9rem 1rem" }}>

@@ -265,7 +265,7 @@ export default async function JobsPage({
           Default year <strong>{yearSelectDefault === "all" ? "all" : yearSelectDefault}</strong>{" "}
           {yearParamRaw ? "" : `(default is current calendar year ${calendarY}). `}
           <Link href="/dashboard/archives">Archives</Link> for quick year links.
-          {canEditJobs(user) ? (
+          {user.role === "SUPER_ADMIN" ? (
             <>
               {" "}
               <Link href="/dashboard/data/import-jobs">Import jobs</Link> ·{" "}
