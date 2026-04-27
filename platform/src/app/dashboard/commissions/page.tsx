@@ -195,11 +195,9 @@ export default async function CommissionsPage({
       ) : null}
       {canEditCommissions(user) ? (
         <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)", maxWidth: 720 }}>
-          <strong>Admins:</strong> If someone should not earn on a job, set{" "}
-          <em>Participation</em> to <code>No</code> on that job (workbook import column or{" "}
-          <code>PATCH /api/jobs/&lt;id&gt;</code> with <code>drewParticipation</code>) and save — the next commission
-          recalc removes that commission. Use <strong>Adjust amount &amp; lock</strong> on a line for a one-off correction without
-          changing the job row.
+          <strong>Admins:</strong> If someone should not earn on a job, set <strong>Admin correction</strong> to{" "}
+          <code>$0</code> and click <strong>Adjust &amp; lock</strong>. Use this for one-off corrections without changing the
+          underlying job row.
         </p>
       ) : null}
 
