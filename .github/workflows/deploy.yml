@@ -53,6 +53,25 @@ jobs:
           fi
 
           echo "Using compose file: $compose_file"
+          # Free app host port if another Docker container is still publishing it.
+          # This commonly happens when legacy/non-project containers are still running.
+          mapfile -t port_3301_holders < <(docker ps --filter "publish=3301" --format '{{.ID}} {{.Names}}')
+          if [ "${#port_3301_holders[@]}" -gt 0 ]; then
+            echo "Port 3301 currently held by:"
+            printf '  %s\n' "${port_3301_holders[@]}"
+            for holder in "${port_3301_holders[@]}"; do
+              holder_id="${holder%% *}"
+              holder_name="${holder#* }"
+              # Keep this project's current app container if present; compose will recreate it.
+              if [ "$holder_name" = "elevated-app-1" ]; then
+                continue
+              fi
+              echo "Stopping conflicting container $holder_name ($holder_id)"
+              docker stop "$holder_id" || true
+              docker rm "$holder_id" || true
+            done
+          fi
+
           docker compose -f "$compose_file" -p elevated up -d --build --force-recreate --remove-orphans
           docker compose -f "$compose_file" -p elevated ps
 
