@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
-import { Role } from "@prisma/client";
+import { PasswordTokenType, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { issuePasswordToken } from "@/lib/password-tokens";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { sendEmail } from "@/lib/email";
 
 function requireSuperAdmin() {
   return getSession().then((u) => (u?.role === Role.SUPER_ADMIN ? u : null));
@@ -32,7 +34,6 @@ export async function GET() {
 
 const createSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
   role: z.nativeEnum(Role),
   salespersonId: z.string().nullable().optional(),
 });
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
-  const { email, password, role, salespersonId } = parsed.data;
+  const { email, role, salespersonId } = parsed.data;
 
   if (role === Role.SALESMAN && !salespersonId) {
     return NextResponse.json({ error: "Account manager users must be linked to a salesperson" }, { status: 400 });
@@ -58,29 +59,41 @@ export async function POST(req: Request) {
     if (taken) return NextResponse.json({ error: "That salesperson is already linked to a user" }, { status: 400 });
   }
 
-  const passwordHash = await bcrypt.hash(password, 12);
+  const normalizedEmail = email.toLowerCase().trim();
+  let created;
   try {
-    const created = await prisma.user.create({
+    created = await prisma.user.create({
       data: {
-        email: email.toLowerCase().trim(),
-        passwordHash,
+        email: normalizedEmail,
+        passwordHash: null,
         role,
         salespersonId: salespersonId ?? null,
       },
       include: { salesperson: { select: { name: true } } },
     });
-    return NextResponse.json({
-      user: {
-        id: created.id,
-        email: created.email,
-        role: created.role,
-        salespersonId: created.salespersonId,
-        salespersonName: created.salesperson?.name
-          ? displaySalespersonName(created.salesperson.name)
-          : null,
-      },
-    });
   } catch {
     return NextResponse.json({ error: "Email may already be in use" }, { status: 409 });
   }
+
+  const resetToken = await issuePasswordToken(created.id, PasswordTokenType.SETUP);
+  const baseUrl = await getAppBaseUrl();
+  const setupUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+  const setupEmailSent = await sendEmail({
+    to: normalizedEmail,
+    subject: "Set up your Elevated Sheets password",
+    text: `You've been invited to Elevated Sheets.\n\nSet your password using this link (valid for 24 hours):\n${setupUrl}\n\nIf you did not expect this invite, ignore this email.`,
+  });
+
+  return NextResponse.json({
+    user: {
+      id: created.id,
+      email: created.email,
+      role: created.role,
+      salespersonId: created.salespersonId,
+      salespersonName: created.salesperson?.name
+        ? displaySalespersonName(created.salesperson.name)
+        : null,
+    },
+    setupEmailSent,
+  });
 }

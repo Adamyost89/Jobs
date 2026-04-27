@@ -20,7 +20,6 @@ export function UserManagementSettings({
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [role, setRole] = useState<Role>(Role.ADMIN);
   const [spId, setSpId] = useState("");
 
@@ -42,7 +41,6 @@ export function UserManagementSettings({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: email.trim(),
-        password,
         role,
         salespersonId: role === Role.SALESMAN ? spId || null : null,
       }),
@@ -54,9 +52,8 @@ export function UserManagementSettings({
       return;
     }
     setEmail("");
-    setPassword("");
     setSpId("");
-    setMsg("User created.");
+    setMsg(j.setupEmailSent ? "User created and setup email sent." : "User created. Email delivery is not configured.");
     await load();
   }
 
@@ -96,6 +93,19 @@ export function UserManagementSettings({
     await load();
   }
 
+  async function sendResetLink(id: string, email: string) {
+    setMsg(null);
+    setBusy(true);
+    const res = await fetch(`/api/admin/users/${id}`, { method: "POST" });
+    const j = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) {
+      setMsg(typeof j.error === "string" ? j.error : "Could not send reset email");
+      return;
+    }
+    setMsg(j.emailSent ? `Reset link sent to ${email}.` : "Reset link created, but email delivery is not configured.");
+  }
+
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.9rem" }}>
@@ -109,10 +119,6 @@ export function UserManagementSettings({
           <label>
             Email
             <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
-          </label>
-          <label>
-            Password (min 8)
-            <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </label>
           <label>
             Role
@@ -136,7 +142,7 @@ export function UserManagementSettings({
               </select>
             </label>
           )}
-          <button className="btn" type="button" disabled={busy || !email.trim() || !password} onClick={() => void createUser()}>
+          <button className="btn" type="button" disabled={busy || !email.trim()} onClick={() => void createUser()}>
             Create
           </button>
         </div>
@@ -160,7 +166,15 @@ export function UserManagementSettings({
           </thead>
           <tbody>
             {rows.map((u) => (
-              <UserRow key={u.id} u={u} salespeople={salespeople} busy={busy} onPatch={patchUser} onDelete={deleteUser} />
+              <UserRow
+                key={u.id}
+                u={u}
+                salespeople={salespeople}
+                busy={busy}
+                onPatch={patchUser}
+                onDelete={deleteUser}
+                onSendResetLink={sendResetLink}
+              />
             ))}
           </tbody>
         </table>
@@ -175,12 +189,14 @@ function UserRow({
   busy,
   onPatch,
   onDelete,
+  onSendResetLink,
 }: {
   u: Row;
   salespeople: { id: string; name: string }[];
   busy: boolean;
   onPatch: (id: string, body: { role?: Role; salespersonId?: string | null; newPassword?: string }) => Promise<void>;
   onDelete: (id: string, email: string) => Promise<void>;
+  onSendResetLink: (id: string, email: string) => Promise<void>;
 }) {
   const [role, setRole] = useState(u.role);
   const [spId, setSpId] = useState(u.salespersonId ?? "");
@@ -219,6 +235,14 @@ function UserRow({
             style={{ maxWidth: 220 }}
           />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              className="btn secondary"
+              type="button"
+              disabled={busy}
+              onClick={() => void onSendResetLink(u.id, u.email)}
+            >
+              Send reset link
+            </button>
             <button
               className="btn secondary"
               type="button"

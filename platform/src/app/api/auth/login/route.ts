@@ -18,9 +18,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
   const { email, password } = parsed.data;
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
   if (!user) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+  if (!user.passwordHash) {
+    return NextResponse.json({ error: "Password setup required. Use Forgot password to continue." }, { status: 401 });
   }
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) {

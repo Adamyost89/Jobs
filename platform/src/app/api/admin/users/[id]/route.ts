@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
-import { Role } from "@prisma/client";
+import { PasswordTokenType, Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { issuePasswordToken } from "@/lib/password-tokens";
+import { getAppBaseUrl } from "@/lib/app-url";
+import { sendEmail } from "@/lib/email";
 
 const patchSchema = z
   .object({
@@ -101,4 +104,29 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
   await prisma.user.delete({ where: { id } });
   return NextResponse.json({ ok: true });
+}
+
+export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const me = await getSession();
+  if (!me || me.role !== Role.SUPER_ADMIN) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await ctx.params;
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, email: true },
+  });
+  if (!target) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const token = await issuePasswordToken(target.id, PasswordTokenType.RESET);
+  const baseUrl = await getAppBaseUrl();
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  const emailSent = await sendEmail({
+    to: target.email,
+    subject: "Reset your Elevated Sheets password",
+    text: `An admin requested a password reset for your Elevated Sheets account.\n\nUse this link to set a new password (valid for 24 hours):\n${resetUrl}\n\nIf you did not request this, contact your administrator.`,
+  });
+
+  return NextResponse.json({ ok: true, emailSent });
 }
