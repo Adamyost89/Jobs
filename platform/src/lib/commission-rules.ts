@@ -121,6 +121,23 @@ function leadNumFromCtx(ctx: CommissionComputeContext) {
   return parseInt(String(ctx.leadNumber || ""), 10) || 0;
 }
 
+function canonicalSalespersonIdentity(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const trimmed = String(raw).trim().toLowerCase();
+  if (!trimmed) return "";
+  const [first = ""] = trimmed.split(/\s+/);
+  return first.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
+}
+
+function isPrimarySalespersonMatch(
+  primarySalespersonName: string | null | undefined,
+  salespersonName: string
+): boolean {
+  const primary = canonicalSalespersonIdentity(primarySalespersonName);
+  const current = canonicalSalespersonIdentity(salespersonName);
+  return primary !== "" && current !== "" && primary === current;
+}
+
 /** Job sheet / API: when this is explicitly “no”, Drew is omitted for this job (same row can recalc without re-adding him). */
 export function isDrewParticipationExplicitlyOff(drewParticipation: string | null): boolean {
   if (drewParticipation == null) return false;
@@ -209,7 +226,7 @@ function metricContributionFromCurrentJob(
   ctx: CommissionComputeContext,
   salespersonName: string
 ): number {
-  const isPrimary = ctx.primarySalespersonName === salespersonName;
+  const isPrimary = isPrimarySalespersonMatch(ctx.primarySalespersonName, salespersonName);
   if (!isPrimary) return 0;
   if (pack.metric === "ytd_primary_paid_amount") return Math.max(0, ctx.customerPaid);
   if (pack.metric === "ytd_primary_job_basis") return Math.max(0, ctx.basis);
@@ -361,7 +378,7 @@ function shouldIncludePerson(
   const kind = ctx.kindBySalespersonName[salespersonName];
   const scope = effectiveScope(rule, kind, leadNumFromCtx(ctx));
   if (scope === "all_jobs") return true;
-  return ctx.primarySalespersonName === salespersonName;
+  return isPrimarySalespersonMatch(ctx.primarySalespersonName, salespersonName);
 }
 
 function orderedPeopleNames(plan: CommissionPlanConfigV1): string[] {
@@ -578,10 +595,11 @@ export function explainCommissionForSalesperson(
   }
 
   if (!shouldIncludePerson(salespersonName, rule, ctx)) {
+    const primaryDisplay = ctx.primarySalespersonName ?? "none";
     return {
       salespersonName,
       included: false,
-      reason: `scope ${scope} excludes this job (primary is ${ctx.primarySalespersonName ?? "none"})`,
+      reason: `scope ${scope} excludes this job (primary is ${primaryDisplay})`,
       scope,
       kind,
       active,
