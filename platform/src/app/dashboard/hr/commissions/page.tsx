@@ -9,6 +9,33 @@ import { commissionDisplayAmounts } from "@/lib/commission-display";
 import { CommissionSubnav } from "@/components/CommissionSubnav";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 
+function inferPayoutYearFromRow(row: { createdAt: Date; notes?: string | null; importSourceKey?: string | null }): number {
+  const blob = `${row.importSourceKey ?? ""} ${row.notes ?? ""}`;
+  const m = blob.match(/total commissions\s*(\d{4})/i);
+  if (m) {
+    const y = Number.parseInt(m[1] ?? "", 10);
+    if (Number.isFinite(y)) return y;
+  }
+  return row.createdAt.getUTCFullYear();
+}
+
+function parsePayPeriodSortDate(payPeriodLabel: string, fallbackYear: number, fallbackDate: Date): Date {
+  const raw = String(payPeriodLabel || "").trim();
+  const m = raw.match(/^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*(\d{4}))?$/);
+  if (!m) return fallbackDate;
+  const monthRaw = m[1] ?? "";
+  const dayRaw = m[2] ?? "";
+  const yearRaw = m[3] ?? "";
+  const monthIdx = new Date(`${monthRaw} 1, 2000`).getMonth();
+  const day = Number.parseInt(dayRaw, 10);
+  const year = yearRaw ? Number.parseInt(yearRaw, 10) : fallbackYear;
+  if (!Number.isFinite(monthIdx) || monthIdx < 0 || monthIdx > 11) return fallbackDate;
+  if (!Number.isFinite(day) || day < 1 || day > 31) return fallbackDate;
+  if (!Number.isFinite(year) || year < 1900 || year > 3000) return fallbackDate;
+  const dt = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0, 0));
+  return Number.isNaN(dt.getTime()) ? fallbackDate : dt;
+}
+
 export default async function HrCommissionsPayrollPage() {
   const user = await getSession();
   if (!user) redirect("/login");
@@ -87,11 +114,18 @@ export default async function HrCommissionsPayrollPage() {
     byPeriod.get(k)!.push(p);
   }
 
-  const periods = [...byPeriod.entries()].sort((a, b) => {
-    const ta = Math.max(...a[1].map((x) => x.createdAt.getTime()));
-    const tb = Math.max(...b[1].map((x) => x.createdAt.getTime()));
-    return tb - ta;
-  });
+  const periods = [...byPeriod.entries()]
+    .map(([payPeriodLabel, lines]) => {
+      const lastPostedAt = new Date(Math.max(...lines.map((x) => x.createdAt.getTime())));
+      const inferredYear = Math.max(...lines.map((x) => inferPayoutYearFromRow(x)));
+      const periodSortDate = parsePayPeriodSortDate(payPeriodLabel, inferredYear, lastPostedAt);
+      return { payPeriodLabel, lines, lastPostedAt, periodSortDate };
+    })
+    .sort(
+      (a, b) =>
+        b.periodSortDate.getTime() - a.periodSortDate.getTime() ||
+        b.lastPostedAt.getTime() - a.lastPostedAt.getTime()
+    );
 
   const grandTotal = payouts.reduce((s, p) => s + p.amount.toNumber(), 0);
 
@@ -185,7 +219,7 @@ export default async function HrCommissionsPayrollPage() {
           repo root, or post payments from Commission lines.
         </p>
       ) : (
-        periods.map(([periodLabel, lines]) => {
+        periods.map(({ payPeriodLabel, lines, periodSortDate }) => {
           const periodTotal = lines.reduce((s, p) => s + p.amount.toNumber(), 0);
           const bySp = new Map<string, number>();
           for (const p of lines) {
@@ -198,9 +232,11 @@ export default async function HrCommissionsPayrollPage() {
             .join(" · ");
 
           return (
-            <section key={periodLabel} className="card" style={{ display: "grid", gap: "0.75rem" }}>
+            <section key={`${payPeriodLabel}|${periodSortDate.toISOString()}`} className="card" style={{ display: "grid", gap: "0.75rem" }}>
               <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "0.5rem" }}>
-                <h2 style={{ margin: 0, fontSize: "1.15rem" }}>{periodLabel}</h2>
+                <h2 style={{ margin: 0, fontSize: "1.15rem" }}>
+                  {payPeriodLabel}, {periodSortDate.getUTCFullYear()}
+                </h2>
                 <div style={{ fontWeight: 700 }}>
                   Period total: ${periodTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
