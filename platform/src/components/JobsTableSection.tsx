@@ -101,6 +101,8 @@ export function JobsTableSection({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
+  const [recheckMsg, setRecheckMsg] = useState<string | null>(null);
+  const [recheckingId, setRecheckingId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingEditId, setSavingEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{
@@ -168,6 +170,37 @@ export function JobsTableSection({
       }
     },
     [canEdit, deletingId, router]
+  );
+
+  const recheckCommission = useCallback(
+    async (row: JobsTableRowDTO) => {
+      if (!canEditPayments || recheckingId || deletingId || savingEditId) return;
+      setRecheckingId(row.id);
+      setRecheckMsg(null);
+      setDeleteMsg(null);
+      setEditMsg(null);
+      try {
+        const res = await fetch(`/api/admin/jobs/${row.id}/recheck-commission`, { method: "POST" });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setRecheckMsg(typeof j.error === "string" ? j.error : "Failed to recheck commission.");
+          return;
+        }
+        const before = typeof j.commissionCountBefore === "number" ? j.commissionCountBefore : null;
+        const after = typeof j.commissionCountAfter === "number" ? j.commissionCountAfter : null;
+        const payoutCount = typeof j.payoutCount === "number" ? j.payoutCount : 0;
+        const payoutSum = typeof j.payoutSum === "number" ? j.payoutSum : 0;
+        setRecheckMsg(
+          `Rechecked ${row.jobNumber}: commission lines ${before ?? "?"} → ${after ?? "?"}; payouts ${payoutCount} line${payoutCount === 1 ? "" : "s"} (${formatUsd(payoutSum)}).`
+        );
+        router.refresh();
+      } catch {
+        setRecheckMsg("Network error rechecking commission.");
+      } finally {
+        setRecheckingId(null);
+      }
+    },
+    [canEditPayments, recheckingId, deletingId, savingEditId, router]
   );
 
   function toDateInputValue(iso: string | null): string {
@@ -517,6 +550,9 @@ export function JobsTableSection({
         {deleteMsg ? (
           <p style={{ margin: "0.75rem 1.25rem", color: "var(--warn)", fontSize: "0.86rem" }}>{deleteMsg}</p>
         ) : null}
+        {recheckMsg ? (
+          <p style={{ margin: "0.75rem 1.25rem", color: "var(--muted)", fontSize: "0.86rem" }}>{recheckMsg}</p>
+        ) : null}
         {editMsg ? (
           <p style={{ margin: "0.75rem 1.25rem", color: "var(--muted)", fontSize: "0.86rem" }}>{editMsg}</p>
         ) : null}
@@ -547,8 +583,17 @@ export function JobsTableSection({
                             <button
                               type="button"
                               className="btn secondary"
+                              onClick={() => void recheckCommission(row)}
+                              disabled={recheckingId === row.id || deletingId != null || savingEditId != null}
+                              style={{ padding: "0.4rem 0.75rem" }}
+                            >
+                              {recheckingId === row.id ? "Rechecking…" : "Recheck commission"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn secondary"
                               onClick={() => beginEdit(row)}
-                              disabled={deletingId != null || savingEditId != null}
+                              disabled={deletingId != null || savingEditId != null || recheckingId != null}
                               style={{ padding: "0.4rem 0.75rem" }}
                             >
                               {editingId === row.id ? "Editing" : "Edit"}
@@ -557,7 +602,7 @@ export function JobsTableSection({
                               type="button"
                               className="btn secondary"
                               onClick={() => void deleteJob(row)}
-                              disabled={deletingId === row.id || savingEditId != null}
+                              disabled={deletingId === row.id || savingEditId != null || recheckingId != null}
                               style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca", padding: "0.4rem 0.75rem" }}
                             >
                               {deletingId === row.id ? "Deleting…" : "Delete"}
