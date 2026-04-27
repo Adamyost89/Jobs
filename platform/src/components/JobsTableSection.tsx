@@ -77,10 +77,10 @@ function rowHighlightStyle(c: HlColors): CSSProperties {
   };
 }
 
-function rowRevenue(row: JobsTableRowDTO): number {
-  if (row.projectRevenue > 0) return row.projectRevenue;
-  if (row.invoicedTotal > 0) return row.invoicedTotal;
-  return row.contractAmount + row.changeOrders;
+function toPercentNumber(v: number): number {
+  if (!Number.isFinite(v)) return NaN;
+  // Match Apps Script `asPercentNumber`: treat decimal fractions as percentages.
+  return Math.abs(v) <= 1 ? v * 100 : v;
 }
 
 export function JobsTableSection({
@@ -96,6 +96,7 @@ export function JobsTableSection({
   const canEdit = canEditJobs(user);
   const canEditPayments = user.role === "SUPER_ADMIN";
   const canSeeGp = canViewAllJobs(user);
+  const canEditTablePrefs = user.role === "SUPER_ADMIN";
   const [prefs, setPrefs] = useState<JobsTablePrefsV1>(DEFAULT_JOBS_TABLE_PREFS);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
@@ -141,23 +142,6 @@ export function JobsTableSection({
   const money = (n: number) => formatUsd(n);
 
   const h = prefs.highlights;
-  const positiveBands = useMemo(
-    () =>
-      [
-        { id: "good", label: h.labels.good, minGpPct: h.strongGpPct, colors: h.colors.good },
-        { id: "medium", label: h.labels.medium, minGpPct: h.mediumGpPct, colors: h.colors.medium },
-        ...h.extraBands.map((band) => ({
-          id: band.id,
-          label: band.label,
-          minGpPct: band.minGpPct,
-          colors: band.colors,
-        })),
-      ]
-        .sort((a, b) => b.minGpPct - a.minGpPct)
-        .filter((band, i, arr) => arr.findIndex((x) => x.id === band.id) === i),
-    [h]
-  );
-
   const deleteJob = useCallback(
     async (row: JobsTableRowDTO) => {
       if (!canEdit || deletingId) return;
@@ -319,21 +303,23 @@ export function JobsTableSection({
     const jl = toJobLike(row);
     if (!hasDisplayableGp(jl)) return undefined;
 
-    const status = row.status.toUpperCase();
-    const gpPct = row.gpPercent;
-    const rev = rowRevenue(row);
+    const statusRaw = String(row.status ?? "").trim().toLowerCase();
+    const inBilling = statusRaw === "in billing" || statusRaw === "in_billing";
+    const active = row.paidInFull === true && inBilling;
+    if (!active) return undefined;
 
-    if (status.includes("CANCEL")) return rowHighlightStyle(h.colors.warn);
-    if (rev > h.minRevenue && (row.gp < 0 || (gpPct > 0 && gpPct < h.thinGpPct))) {
-      return rowHighlightStyle(h.colors.bad);
+    const gpPct = toPercentNumber(row.gpPercent);
+    const contractAmount = Number.isFinite(row.contractAmount) ? row.contractAmount : 0;
+
+    if (Number.isFinite(gpPct) && gpPct < 32) return rowHighlightStyle(h.colors.bad); // red
+    if ((Number.isFinite(gpPct) && gpPct < 50) || contractAmount < 5000) {
+      return rowHighlightStyle(h.colors.warn); // yellow
     }
-    if (rev > h.minRevenue) {
-      const matchedBand = positiveBands.find((band) => gpPct >= band.minGpPct);
-      if (matchedBand) return rowHighlightStyle(matchedBand.colors);
+    if (Number.isFinite(gpPct) && gpPct >= 50 && gpPct < 60 && contractAmount > 5000) {
+      return rowHighlightStyle(h.colors.medium); // blue
     }
-    if (status.includes("COMPLETE") && gpPct >= h.completeMinGpPct) return rowHighlightStyle(h.colors.good);
-    if (status.includes("IN_BILLING") && gpPct > 0 && gpPct < h.thinGpPct) {
-      return rowHighlightStyle(h.colors.warn);
+    if (Number.isFinite(gpPct) && gpPct >= 60 && contractAmount > 5000) {
+      return rowHighlightStyle(h.colors.good); // green
     }
     return undefined;
   }
@@ -489,7 +475,7 @@ export function JobsTableSection({
 
   return (
     <div className="jobs-hl-vars">
-      {canSeeGp ? <JobsDashboardPrefsForm prefs={prefs} onChange={persist} variant="jobs" /> : null}
+      {canEditTablePrefs ? <JobsDashboardPrefsForm prefs={prefs} onChange={persist} variant="jobs" /> : null}
 
       {canSeeGp ? (
         <div className="card" style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.55 }}>
@@ -504,22 +490,23 @@ export function JobsTableSection({
             </>
           ) : null}
           <br />
-          <strong style={{ color: "var(--text)" }}>Row colors</strong> (only when GP applies):{" "}
-          {positiveBands.map((band, i) => (
-            <span key={band.id}>
-              {i > 0 ? <> · </> : null}
-              <span className="row-legend" style={{ background: band.colors.legendBg, color: band.colors.legendText }}>
-                {band.label} (GP% ≥{band.minGpPct}%)
-              </span>
-            </span>
-          ))}{" "}
-          ·{" "}
+          <strong style={{ color: "var(--text)" }}>Row colors</strong> (only when{" "}
+          <strong style={{ color: "var(--text)" }}>Paid in full</strong> and{" "}
+          <strong style={{ color: "var(--text)" }}>Status = In Billing</strong>):{" "}
           <span className="row-legend" style={legendBad}>
-            {h.labels.bad} (GP% &lt;{h.thinGpPct}% or loss)
+            {h.labels.bad} (GP% &lt;32%)
           </span>{" "}
           ·{" "}
           <span className="row-legend" style={legendWarn}>
-            {h.labels.warn}
+            {h.labels.warn} (GP% &lt;50% or Contract &lt;$5,000)
+          </span>
+          {" "}·{" "}
+          <span className="row-legend" style={{ background: h.colors.medium.legendBg, color: h.colors.medium.legendText }}>
+            {h.labels.medium} (GP% 50-59.99% and Contract &gt;$5,000)
+          </span>{" "}
+          ·{" "}
+          <span className="row-legend" style={{ background: h.colors.good.legendBg, color: h.colors.good.legendText }}>
+            {h.labels.good} (GP% ≥60% and Contract &gt;$5,000)
           </span>
         </div>
       ) : null}
