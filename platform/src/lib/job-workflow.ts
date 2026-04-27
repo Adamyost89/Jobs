@@ -122,12 +122,31 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
   const planRow = await prisma.commissionPlan.findUnique({ where: { year: job.year } });
   const plan = commissionPlanForJobYear(job.year, planRow?.config);
 
-  const [tierTotals, flags] = await Promise.all([
+  const [tierTotals, flags, payoutRows] = await Promise.all([
     loadCommissionTierTotalsForYear(job.year),
     loadSalespersonFlagsByName(),
+    prisma.commissionPayout.findMany({
+      where: { jobId: job.id },
+      select: {
+        amount: true,
+        salesperson: { select: { name: true } },
+      },
+    }),
   ]);
   const { kindByName: kindBySalespersonName, activeByName: activeBySalespersonName } = flags;
   const existingCommissionNamesOnJob = new Set(job.commissions.map((c) => c.salesperson.name));
+  const payoutPaidBySalesperson: Record<string, number> = {};
+  for (const p of payoutRows) {
+    const name = p.salesperson.name;
+    payoutPaidBySalesperson[name] = (payoutPaidBySalesperson[name] ?? 0) + p.amount.toNumber();
+  }
+  const existingPaidBySalesperson = Object.fromEntries(
+    job.commissions.map((c) => {
+      const existingPaid = dec(c.paidAmount);
+      const payoutPaid = payoutPaidBySalesperson[c.salesperson.name] ?? 0;
+      return [c.salesperson.name, payoutPaid > 0 ? payoutPaid : existingPaid];
+    })
+  );
 
   const rows = computeCommissionsForJob({
     year: job.year,
@@ -139,9 +158,7 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
     paidInFull: job.paidInFull,
     primarySalespersonName: job.salesperson?.name ?? null,
     drewParticipation: job.drewParticipation,
-    existingPaidBySalesperson: Object.fromEntries(
-      job.commissions.map((c) => [c.salesperson.name, dec(c.paidAmount)])
-    ),
+    existingPaidBySalesperson,
     overrides: Object.fromEntries(
       job.commissions.filter((c) => c.override).map((c) => [c.salesperson.name, true])
     ),
@@ -181,6 +198,7 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
         override: false,
       },
       update: {
+        paidAmount: new Prisma.Decimal(row.paid.toFixed(2)),
         owedAmount: new Prisma.Decimal(row.owed.toFixed(2)),
       },
     });
