@@ -68,7 +68,12 @@ export async function allocateNextJobNumber(year: number): Promise<string> {
   return `${prefix}${String(next)}`;
 }
 
-export async function recalculateJobAndCommissions(jobId: string) {
+type RecalculateJobOptions = {
+  forceCommissionRecalc?: boolean;
+  forceCommissionRecalcReason?: string;
+};
+
+export async function recalculateJobAndCommissions(jobId: string, opts: RecalculateJobOptions = {}) {
   const job = await prisma.job.findUniqueOrThrow({
     where: { id: jobId },
     include: {
@@ -88,7 +93,21 @@ export async function recalculateJobAndCommissions(jobId: string) {
     where: { id: "singleton" },
     select: { cutoverComplete: true },
   });
-  if (skipAutoCommissionRecalcForJobYear(job.year, cfg?.cutoverComplete ?? false)) {
+  if (opts.forceCommissionRecalc) {
+    await prisma.jobEvent.create({
+      data: {
+        jobId: job.id,
+        type: "COMMISSION_RECALC_FORCED_PAYMENT",
+        source: "workflow",
+        payload: {
+          reason: opts.forceCommissionRecalcReason ?? "unspecified",
+          jobYear: job.year,
+          cutoverComplete: cfg?.cutoverComplete ?? false,
+        },
+      },
+    });
+  }
+  if (!opts.forceCommissionRecalc && skipAutoCommissionRecalcForJobYear(job.year, cfg?.cutoverComplete ?? false)) {
     return;
   }
 

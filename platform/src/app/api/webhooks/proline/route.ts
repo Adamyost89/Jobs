@@ -406,7 +406,11 @@ export async function POST(req: Request) {
         payload: e.raw as object,
       },
     });
-    await recalculateJobAndCommissions(job.id);
+    const paymentFieldsPresent = e.amountPaid !== undefined || e.paidInFull !== undefined || e.paidDate !== undefined;
+    await recalculateJobAndCommissions(job.id, {
+      forceCommissionRecalc: paymentFieldsPresent,
+      forceCommissionRecalcReason: "proline.webhook.create.payment_fields_present",
+    });
     await ensureRequiredNameWriteback(job, e.name);
     return { kind: "created" as const, job };
   }
@@ -477,7 +481,11 @@ export async function POST(req: Request) {
         payload: e.raw as object,
       },
     });
-    await recalculateJobAndCommissions(job.id);
+    const paymentFieldsPresent = e.amountPaid !== undefined || e.paidInFull !== undefined || e.paidDate !== undefined;
+    await recalculateJobAndCommissions(job.id, {
+      forceCommissionRecalc: paymentFieldsPresent,
+      forceCommissionRecalcReason: "proline.webhook.quote_approved.create.payment_fields_present",
+    });
     await ensureRequiredNameWriteback(job, e.name);
     return job;
   }
@@ -543,7 +551,11 @@ export async function POST(req: Request) {
         payload: e.raw as object,
       },
     });
-    await recalculateJobAndCommissions(existing.id);
+    const paymentFieldsPresent = e.amountPaid !== undefined || e.paidInFull !== undefined || e.paidDate !== undefined;
+    await recalculateJobAndCommissions(existing.id, {
+      forceCommissionRecalc: paymentFieldsPresent,
+      forceCommissionRecalcReason: "proline.webhook.quote_approved.update.payment_fields_present",
+    });
     await ensureRequiredNameWriteback(existing, e.name);
     return NextResponse.json({
       ok: true,
@@ -644,7 +656,14 @@ export async function POST(req: Request) {
         },
       });
     }
-    await recalculateJobAndCommissions(existing.id);
+    const paymentFieldsChanged =
+      Object.prototype.hasOwnProperty.call(data, "amountPaid") ||
+      Object.prototype.hasOwnProperty.call(data, "paidInFull") ||
+      Object.prototype.hasOwnProperty.call(data, "paidDate");
+    await recalculateJobAndCommissions(existing.id, {
+      forceCommissionRecalc: paymentFieldsChanged,
+      forceCommissionRecalcReason: "proline.webhook.upsert.update.payment_fields_changed",
+    });
     await ensureRequiredNameWriteback(existing, e.name);
     return NextResponse.json({ ok: true, jobId: existing.id, upsert: "updated" });
   }
@@ -712,6 +731,13 @@ export async function POST(req: Request) {
       },
     });
   }
-  await recalculateJobAndCommissions(existing.id);
+  const paymentFieldsChanged =
+    Object.prototype.hasOwnProperty.call(data, "amountPaid") ||
+    Object.prototype.hasOwnProperty.call(data, "paidInFull") ||
+    Object.prototype.hasOwnProperty.call(data, "paidDate");
+  await recalculateJobAndCommissions(existing.id, {
+    forceCommissionRecalc: paymentFieldsChanged,
+    forceCommissionRecalcReason: "proline.webhook.typed_update.payment_fields_changed",
+  });
   return NextResponse.json({ ok: true, jobId: existing.id, invoiceDeltaSkippedDuplicate });
 }

@@ -73,6 +73,10 @@ export async function POST(req: Request) {
       payload: json as object,
     },
   });
-  await recalculateJobAndCommissions(job.id);
+  const paymentFieldsChanged = patch.paidInFull !== undefined || patch.paidDate !== undefined;
+  await recalculateJobAndCommissions(job.id, {
+    forceCommissionRecalc: paymentFieldsChanged,
+    forceCommissionRecalcReason: "api.zapier_bridge.payment_fields",
+  });
   return NextResponse.json({ ok: true, jobId: job.id });
 }

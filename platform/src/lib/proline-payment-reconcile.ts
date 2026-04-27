@@ -247,7 +247,12 @@ export async function reconcileProlinePaymentsFromApi(
           },
         },
       });
-      await recalculateJobAndCommissions(local.id);
+      const paymentFieldsChanged =
+        changed.includes("amountPaid") || changed.includes("paidInFull") || changed.includes("paidDate");
+      await recalculateJobAndCommissions(local.id, {
+        forceCommissionRecalc: paymentFieldsChanged,
+        forceCommissionRecalcReason: "proline.payment_reconcile.changed_payment_fields",
+      });
       result.updated += 1;
     }
 

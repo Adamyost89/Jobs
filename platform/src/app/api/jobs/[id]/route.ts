@@ -93,7 +93,12 @@ export async function PATCH(
       payload: { by: user.id, patch: p },
     },
   });
-  await recalculateJobAndCommissions(id);
+  const paymentFieldsChanged =
+    p.amountPaid !== undefined || p.paidDate !== undefined || p.paidInFull !== undefined;
+  await recalculateJobAndCommissions(id, {
+    forceCommissionRecalc: paymentFieldsChanged,
+    forceCommissionRecalcReason: "api.jobs.patch.payment_fields",
+  });
   const full = await prisma.job.findUnique({
     where: { id },
     include: { salesperson: true, commissions: { include: { salesperson: true } } },
