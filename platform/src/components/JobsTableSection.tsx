@@ -344,10 +344,12 @@ export function JobsTableSection({
     const jl = toJobLike(row);
     if (!hasDisplayableGp(jl)) return undefined;
 
-    const statusRaw = String(row.status ?? "").trim().toLowerCase();
-    const statusNorm = statusRaw.replace(/[^a-z0-9]+/g, " ").trim();
-    const isInBilling = statusNorm === "in billing";
-    const isPaidClosed = statusNorm === "paid closed";
+    const shownStatus = statusColumnLabel(row.status, row.prolineStage);
+    const normalize = (s: string): string => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const statusNorm = normalize(String(row.status ?? ""));
+    const shownStatusNorm = normalize(shownStatus);
+    const isInBilling = statusNorm === "in billing" || shownStatusNorm === "in billing";
+    const isPaidClosed = statusNorm === "paid closed" || shownStatusNorm === "paid closed";
     const active = row.paidInFull === true && (isInBilling || isPaidClosed);
     if (!active) return undefined;
 
