@@ -18,6 +18,7 @@ export type PayoutPeriodLine = {
 
 export type PayoutSummaryWindow = {
   payPeriodLabel: string;
+  periodSortDate: Date;
   count: number;
   total: number;
   lastPosted: Date;
@@ -27,6 +28,7 @@ export type PayoutSummaryWindow = {
 
 export type PayoutSummaryByRep = {
   payPeriodLabel: string;
+  periodSortDate: Date;
   salespersonName: string;
   count: number;
   total: number;
@@ -45,6 +47,24 @@ function inferPayoutYear(row: {
     if (Number.isFinite(y)) return y;
   }
   return row.createdAt.getUTCFullYear();
+}
+
+function parsePayPeriodSortDate(payPeriodLabel: string, fallbackYear: number, fallbackDate: Date): Date {
+  const raw = String(payPeriodLabel || "").trim();
+  // Supports labels like "Dec 26th", "Dec 26", or "Dec 26, 2025".
+  const m = raw.match(/^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*(\d{4}))?$/);
+  if (!m) return fallbackDate;
+  const monthRaw = m[1] ?? "";
+  const dayRaw = m[2] ?? "";
+  const yearRaw = m[3] ?? "";
+  const monthIdx = new Date(`${monthRaw} 1, 2000`).getMonth();
+  const day = Number.parseInt(dayRaw, 10);
+  const year = yearRaw ? Number.parseInt(yearRaw, 10) : fallbackYear;
+  if (!Number.isFinite(monthIdx) || monthIdx < 0 || monthIdx > 11) return fallbackDate;
+  if (!Number.isFinite(day) || day < 1 || day > 31) return fallbackDate;
+  if (!Number.isFinite(year) || year < 1900 || year > 3000) return fallbackDate;
+  const dt = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0, 0));
+  return Number.isNaN(dt.getTime()) ? fallbackDate : dt;
 }
 
 export async function distinctPayoutYearsForSelect(
@@ -105,7 +125,7 @@ export async function loadPayoutSummary(
   });
 
   const byRepPeriod = new Map<string, PayoutSummaryByRep>();
-  const byPeriodOnly = new Map<string, { total: number; count: number; lastPosted: Date }>();
+  const byPeriodOnly = new Map<string, { total: number; count: number; lastPosted: Date; periodSortDate: Date }>();
   const linesByPeriod = new Map<string, PayoutPeriodLine[]>();
 
   for (const r of payoutsForSummary) {
@@ -126,11 +146,14 @@ export async function loadPayoutSummary(
     const bucket = linesByPeriod.get(r.payPeriodLabel) ?? [];
     bucket.push(line);
     linesByPeriod.set(r.payPeriodLabel, bucket);
+    const inferredYear = inferPayoutYear(r);
+    const periodSortDate = parsePayPeriodSortDate(r.payPeriodLabel, inferredYear, r.createdAt);
     const rk = `${r.payPeriodLabel}\t${name}`;
     const ex = byRepPeriod.get(rk);
     if (!ex) {
       byRepPeriod.set(rk, {
         payPeriodLabel: r.payPeriodLabel,
+        periodSortDate,
         salespersonName: name,
         total: amt,
         count: 1,
@@ -140,16 +163,18 @@ export async function loadPayoutSummary(
       ex.total += amt;
       ex.count += 1;
       if (r.createdAt > ex.lastPosted) ex.lastPosted = r.createdAt;
+      if (periodSortDate > ex.periodSortDate) ex.periodSortDate = periodSortDate;
     }
 
     const pk = r.payPeriodLabel;
     const pe = byPeriodOnly.get(pk);
     if (!pe) {
-      byPeriodOnly.set(pk, { total: amt, count: 1, lastPosted: r.createdAt });
+      byPeriodOnly.set(pk, { total: amt, count: 1, lastPosted: r.createdAt, periodSortDate });
     } else {
       pe.total += amt;
       pe.count += 1;
       if (r.createdAt > pe.lastPosted) pe.lastPosted = r.createdAt;
+      if (periodSortDate > pe.periodSortDate) pe.periodSortDate = periodSortDate;
     }
   }
 
@@ -176,10 +201,11 @@ export async function loadPayoutSummary(
       ...v,
       lines: linesByPeriod.get(payPeriodLabel) ?? [],
     }))
-    .sort((a, b) => b.lastPosted.getTime() - a.lastPosted.getTime());
+    .sort((a, b) => b.periodSortDate.getTime() - a.periodSortDate.getTime() || b.lastPosted.getTime() - a.lastPosted.getTime());
 
   const byRep = [...byRepPeriod.values()].sort(
     (a, b) =>
+      b.periodSortDate.getTime() - a.periodSortDate.getTime() ||
       b.lastPosted.getTime() - a.lastPosted.getTime() ||
       a.payPeriodLabel.localeCompare(b.payPeriodLabel) ||
       a.salespersonName.localeCompare(b.salespersonName)

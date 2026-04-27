@@ -19,6 +19,7 @@ export type PayPeriodAllRepsRow = {
   payPeriodLabel: string;
   count: number;
   total: number;
+  periodSortAt: string;
   lastPostedLabel: string;
   lastPostedAt: string;
   lines: PayPeriodAllRepsLine[];
@@ -63,7 +64,9 @@ export function PayPeriodAllRepsTable({
   useEffect(() => {
     setLocalRows(
       [...rows].sort(
-        (a, b) => new Date(b.lastPostedAt).getTime() - new Date(a.lastPostedAt).getTime()
+        (a, b) =>
+          new Date(b.periodSortAt).getTime() - new Date(a.periodSortAt).getTime() ||
+          new Date(b.lastPostedAt).getTime() - new Date(a.lastPostedAt).getTime()
       )
     );
   }, [rows]);
@@ -233,9 +236,9 @@ export function PayPeriodAllRepsTable({
   );
 
   function payPeriodWithYear(row: PayPeriodAllRepsRow): string {
-    const dt = new Date(row.lastPostedAt);
+    const dt = new Date(row.periodSortAt);
     if (Number.isNaN(dt.getTime())) return row.payPeriodLabel;
-    return `${row.payPeriodLabel}, ${dt.getFullYear()}`;
+    return `${row.payPeriodLabel}, ${dt.getUTCFullYear()}`;
   }
 
   return (

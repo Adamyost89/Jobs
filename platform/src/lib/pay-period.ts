@@ -81,3 +81,13 @@ export function getPayPeriodForPayday(payday: Date): {
 export function getCurrentPayPeriodLabel(now = new Date()): string {
   return getPayPeriodContaining(now).label;
 }
+
+/** Returns the next Friday in payroll timezone (today if already Friday). */
+export function getUpcomingFridayIsoForPayrollTz(now = new Date()): string {
+  const localIso = formatIsoDateForPayrollTz(now);
+  const localDate = parseIsoDateAtNoonUtc(localIso);
+  if (!localDate) return localIso;
+  const dayOfWeek = localDate.getUTCDay(); // 0=Sun..6=Sat
+  const daysUntilFriday = (5 - dayOfWeek + 7) % 7;
+  return formatIsoDateForPayrollTz(addDaysUtc(localDate, daysUntilFriday));
+}

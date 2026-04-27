@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session";
 import { canViewAllJobs, canMarkCommissionPaid, canEditCommissions } from "@/lib/rbac";
 import { PayCommissionForm } from "@/components/PayCommissionForm";
 import { CommissionLineAdminForm } from "@/components/CommissionLineAdminForm";
-import { formatIsoDateForPayrollTz, getPayPeriodForPayday, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
+import { getPayPeriodForPayday, getUpcomingFridayIsoForPayrollTz, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
 import { formatDateInEastern } from "@/lib/payout-display";
 import Link from "next/link";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
@@ -31,8 +31,8 @@ export default async function CommissionsPage({
   if (!user) return null;
   const showCalcTrace = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
 
-  const todayIso = formatIsoDateForPayrollTz(new Date());
-  const selectedPaydayIso = parsePaydayParam(sp.payday) ?? todayIso;
+  const defaultPaydayIso = getUpcomingFridayIsoForPayrollTz(new Date());
+  const selectedPaydayIso = parsePaydayParam(sp.payday) ?? defaultPaydayIso;
   const selectedPaydayDate = parseIsoDateAtNoonUtc(selectedPaydayIso) ?? new Date();
   const suggestedPayPeriod = getPayPeriodForPayday(selectedPaydayDate).label;
 
