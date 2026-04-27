@@ -161,9 +161,11 @@ export default async function CommissionsPage({
         </p>
       </div>
 
-      <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
-        Payday default when posting: <code>{selectedPaydayIso}</code> (pay period: <code>{suggestedPayPeriod}</code>)
-      </p>
+      {canMarkCommissionPaid(user) ? (
+        <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
+          Payday default when posting: <code>{selectedPaydayIso}</code> (pay period: <code>{suggestedPayPeriod}</code>)
+        </p>
+      ) : null}
       {canMarkCommissionPaid(user) ? (
         <form method="GET" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
           <label htmlFor="payday" style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
