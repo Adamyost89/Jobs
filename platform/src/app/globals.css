@@ -160,13 +160,12 @@ select.input {
 }
 
 .table-scroll--jobs {
-  max-height: calc(100vh - var(--dash-header-height) - 14rem);
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 .table-scroll--jobs .table-data thead th {
   position: sticky;
-  top: 0;
+  top: var(--dash-table-sticky-top);
   z-index: 6;
 }
 
