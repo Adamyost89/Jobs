@@ -586,7 +586,7 @@ export function JobsTableSection({
             pre-assigned numbers.
           </p>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll table-scroll--jobs">
             <table className="table table-data">
               <thead>
                 <tr>

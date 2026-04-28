@@ -155,14 +155,19 @@ select.input {
   padding: 0.65rem 0.75rem;
 }
 
-.table-data thead th {
-  position: sticky;
-  top: var(--dash-table-sticky-top);
-  z-index: 6;
-}
-
 .table-data thead th.cell-num {
   text-align: right;
+}
+
+.table-scroll--jobs {
+  max-height: calc(100vh - var(--dash-header-height) - 14rem);
+  overflow-y: auto;
+}
+
+.table-scroll--jobs .table-data thead th {
+  position: sticky;
+  top: 0;
+  z-index: 6;
 }
 
 .table-data td {
