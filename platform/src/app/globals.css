@@ -155,6 +155,12 @@ select.input {
   padding: 0.65rem 0.75rem;
 }
 
+.table-data thead th {
+  position: sticky;
+  top: var(--dash-table-sticky-top);
+  z-index: 6;
+}
+
 .table-data thead th.cell-num {
   text-align: right;
 }
