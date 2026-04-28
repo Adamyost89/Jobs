@@ -143,7 +143,7 @@ export default async function HrCommissionsPayrollPage() {
       </div>
 
       <section className="card" style={{ display: "grid", gap: "0.75rem" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "0.5rem", alignItems: "baseline" }}>
+        <div className="page-title-row" style={{ gap: "0.5rem" }}>
           <h2 style={{ margin: 0, fontSize: "1.15rem" }}>Still due (commission not yet paid)</h2>
           <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>
             Total:{" "}
@@ -156,7 +156,7 @@ export default async function HrCommissionsPayrollPage() {
         {rowsWithDisplay.length === 0 ? (
           <p style={{ margin: 0, color: "var(--muted)" }}>Nothing outstanding after reconciling checks with the ledger.</p>
         ) : (
-          <div>
+          <div className="table-responsive">
             <table className="table table-data">
               <thead>
                 <tr>
@@ -233,7 +233,7 @@ export default async function HrCommissionsPayrollPage() {
 
           return (
             <section key={`${payPeriodLabel}|${periodSortDate.toISOString()}`} className="card" style={{ display: "grid", gap: "0.75rem" }}>
-              <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: "0.5rem" }}>
+              <div className="page-title-row" style={{ gap: "0.5rem" }}>
                 <h2 style={{ margin: 0, fontSize: "1.15rem" }}>
                   {payPeriodLabel}, {periodSortDate.getUTCFullYear()}
                 </h2>
@@ -242,7 +242,7 @@ export default async function HrCommissionsPayrollPage() {
                 </div>
               </div>
               <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>{spSummary}</p>
-              <div>
+              <div className="table-responsive">
                 <table className="table">
                   <thead>
                     <tr>

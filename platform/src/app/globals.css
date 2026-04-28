@@ -138,6 +138,16 @@ select.input {
   overflow-x: auto;
 }
 
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-responsive > table {
+  min-width: max-content;
+}
+
 .table-data th {
   background: var(--panel);
   box-shadow: 0 1px 0 #2a3545;
@@ -515,4 +525,117 @@ a.signed-month-drill-link:hover {
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, "Cascadia Mono", monospace;
+}
+
+.page-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.page-actions-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-actions-inline > .btn,
+.page-actions-inline > a.btn {
+  white-space: nowrap;
+}
+
+.compact-field {
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 1100px) {
+  .dash-main {
+    padding: 1rem 1rem 1.5rem;
+  }
+
+  .dash-header {
+    gap: 0.55rem 0.75rem;
+    padding: 0.55rem 0.85rem;
+  }
+
+  .dash-header__email {
+    max-width: 150px;
+  }
+
+  .page-stack {
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .dash-header {
+    align-items: stretch;
+  }
+
+  .dash-nav {
+    order: 3;
+    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
+  }
+
+  .dash-header__user {
+    margin-left: auto;
+    justify-content: flex-end;
+  }
+
+  .dash-main {
+    padding: 0.85rem 0.7rem 1.25rem;
+  }
+
+  .card {
+    padding: 0.9rem;
+  }
+
+  .commission-subnav {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+  }
+
+  .commission-tab {
+    white-space: nowrap;
+  }
+
+  .table th,
+  .table td {
+    padding: 0.45rem 0.5rem;
+  }
+
+  .page-title-row {
+    align-items: stretch;
+  }
+
+  .page-actions-inline {
+    width: 100%;
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+
+  .page-actions-inline > .btn,
+  .page-actions-inline > a.btn,
+  .page-actions-inline > label,
+  .page-actions-inline > input,
+  .page-actions-inline > select {
+    width: 100%;
+  }
+
+  .page-actions-inline > label > input,
+  .page-actions-inline > label > select {
+    width: 100%;
+  }
 }

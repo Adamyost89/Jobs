@@ -46,7 +46,7 @@ export function PayCommissionForm({
       <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.25 }}>
         Set payday:
       </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+      <div className="page-actions-inline" style={{ flexDirection: "column", gap: 8, alignItems: "stretch" }}>
         <input
           type="date"
           value={payday}
@@ -54,14 +54,11 @@ export function PayCommissionForm({
           title="Payday date for this check"
           aria-label="Payday date for this check"
           style={{
-            padding: "0.4rem 0.55rem",
-            borderRadius: 8,
+            width: "100%",
             border: paydayChanged ? "1px solid #eab308" : "1px solid #334155",
-            background: "#0f172a",
-            color: "var(--text)",
-            minWidth: 200,
-            fontSize: "0.82rem",
+            maxWidth: 220,
           }}
+          className="compact-field"
         />
         <button className="btn" type="button" onClick={pay} disabled={defaultOwed <= 0} style={{ fontSize: "0.82rem" }}>
           Mark paid {defaultOwed.toFixed(2)}

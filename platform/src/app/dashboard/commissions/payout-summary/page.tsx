@@ -76,7 +76,7 @@ export default async function PayoutSummaryPage({
 
   return (
     <div className="page-stack page-stack--full">
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
+      <div className="page-title-row">
         <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Payout summary</h1>
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 480 }}>
           Posted check totals by pay window (same data as the payroll log, rolled up).
@@ -129,7 +129,7 @@ export default async function PayoutSummaryPage({
           <PayPeriodAllRepsTable rows={payPeriodAllRepsRows} canManagePayoutLines={canManagePayoutLines} />
 
           <h2 style={{ margin: "0.5rem 0 0", fontSize: "1.1rem", fontWeight: 700 }}>By salesperson &amp; pay period</h2>
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-responsive">
             <table className="table">
               <thead>
                 <tr>

@@ -67,12 +67,12 @@ export default async function DashboardHome({
 
   return (
     <div className="page-stack">
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: "0.75rem" }}>
+      <div className="page-title-row">
         <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Home</h1>
-        <form method="get" style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <label style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
+        <form method="get" className="page-actions-inline">
+          <label style={{ fontSize: "0.88rem", color: "var(--muted)", display: "grid", gap: "0.2rem" }}>
             Year
-            <select name="year" defaultValue={String(workYear)} style={{ marginLeft: "0.35rem", minWidth: 100 }}>
+            <select name="year" defaultValue={String(workYear)} style={{ minWidth: 100 }}>
               {yearOpts.map((y) => (
                 <option key={y} value={String(y)}>
                   {y}
@@ -105,63 +105,65 @@ export default async function DashboardHome({
         <p style={{ margin: "0 1rem 0.5rem", fontSize: "0.8rem", color: "var(--muted)" }}>
           Click a rep row to open their jobs for {workYear}.
         </p>
-        <table className="table table-data" style={{ fontSize: "0.88rem" }}>
-          <thead>
-            <tr>
-              <th>AM</th>
-              <th className="cell-num">#</th>
-              <th className="cell-num">Contract</th>
-              <th className="cell-num">Change orders</th>
-              <th className="cell-num">Total</th>
-              <th className="cell-num">Invoice paid</th>
-              {canSeeGp ? <th className="cell-num">GP</th> : null}
-              {canSeeGp ? <th className="cell-num">Retail %</th> : null}
-              {canSeeGp ? <th className="cell-num">Insurance %</th> : null}
-              {canSeeGp ? <th className="cell-num">GP %</th> : null}
-              <th className="cell-num">Avg / contract</th>
-              <th className="cell-num">Open jobs</th>
-            </tr>
-          </thead>
-          <tbody>
-            {amRows.map((r) => (
-              <DrilldownTableRow
-                key={r.salespersonId ?? r.name}
-                href={jobsDrilldownUrl({
-                  year: workYear,
-                  salespersonId: r.salespersonId ?? undefined,
-                  salespersonName: r.salespersonId ? undefined : r.name,
-                })}
-              >
-                <td className="cell-strong">{r.name}</td>
-                <td className="cell-num">{r.jobCount}</td>
-                <td className="cell-num">{money2(r.contractAmt)}</td>
-                <td className="cell-num">{money2(r.changeOrders)}</td>
-                <td className="cell-num">{money2(r.total)}</td>
-                <td className="cell-num">{money2(r.paid)}</td>
-                {canSeeGp ? <td className="cell-num">{money2(r.gp)}</td> : null}
-                {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.retailPct)}</td> : null}
-                {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.insurancePct)}</td> : null}
-                {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.gpPctOfTotal)}</td> : null}
-                <td className="cell-num">{money2(r.avgPerContract)}</td>
-                <td className="cell-num">{r.openJobs}</td>
-              </DrilldownTableRow>
-            ))}
-            <tr style={{ fontWeight: 700, background: "var(--card-border, rgba(0,0,0,0.06))" }}>
-              <td>Grand total</td>
-              <td className="cell-num">{grand.jobCount}</td>
-              <td className="cell-num">{money2(grand.contractAmt)}</td>
-              <td className="cell-num">{money2(grand.changeOrders)}</td>
-              <td className="cell-num">{money2(grand.total)}</td>
-              <td className="cell-num">{money2(grand.paid)}</td>
-              {canSeeGp ? <td className="cell-num">{money2(grand.gp)}</td> : null}
-              {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.retailPct)}</td> : null}
-              {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.insurancePct)}</td> : null}
-              {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.gpPctOfTotal)}</td> : null}
-              <td className="cell-num">{money2(grand.avgPerContract)}</td>
-              <td className="cell-num">{grand.openJobs}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div className="table-responsive">
+          <table className="table table-data" style={{ fontSize: "0.88rem" }}>
+            <thead>
+              <tr>
+                <th>AM</th>
+                <th className="cell-num">#</th>
+                <th className="cell-num">Contract</th>
+                <th className="cell-num">Change orders</th>
+                <th className="cell-num">Total</th>
+                <th className="cell-num">Invoice paid</th>
+                {canSeeGp ? <th className="cell-num">GP</th> : null}
+                {canSeeGp ? <th className="cell-num">Retail %</th> : null}
+                {canSeeGp ? <th className="cell-num">Insurance %</th> : null}
+                {canSeeGp ? <th className="cell-num">GP %</th> : null}
+                <th className="cell-num">Avg / contract</th>
+                <th className="cell-num">Open jobs</th>
+              </tr>
+            </thead>
+            <tbody>
+              {amRows.map((r) => (
+                <DrilldownTableRow
+                  key={r.salespersonId ?? r.name}
+                  href={jobsDrilldownUrl({
+                    year: workYear,
+                    salespersonId: r.salespersonId ?? undefined,
+                    salespersonName: r.salespersonId ? undefined : r.name,
+                  })}
+                >
+                  <td className="cell-strong">{r.name}</td>
+                  <td className="cell-num">{r.jobCount}</td>
+                  <td className="cell-num">{money2(r.contractAmt)}</td>
+                  <td className="cell-num">{money2(r.changeOrders)}</td>
+                  <td className="cell-num">{money2(r.total)}</td>
+                  <td className="cell-num">{money2(r.paid)}</td>
+                  {canSeeGp ? <td className="cell-num">{money2(r.gp)}</td> : null}
+                  {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.retailPct)}</td> : null}
+                  {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.insurancePct)}</td> : null}
+                  {canSeeGp ? <td className="cell-num">{formatPctOrDash(r.gpPctOfTotal)}</td> : null}
+                  <td className="cell-num">{money2(r.avgPerContract)}</td>
+                  <td className="cell-num">{r.openJobs}</td>
+                </DrilldownTableRow>
+              ))}
+              <tr style={{ fontWeight: 700, background: "var(--card-border, rgba(0,0,0,0.06))" }}>
+                <td>Grand total</td>
+                <td className="cell-num">{grand.jobCount}</td>
+                <td className="cell-num">{money2(grand.contractAmt)}</td>
+                <td className="cell-num">{money2(grand.changeOrders)}</td>
+                <td className="cell-num">{money2(grand.total)}</td>
+                <td className="cell-num">{money2(grand.paid)}</td>
+                {canSeeGp ? <td className="cell-num">{money2(grand.gp)}</td> : null}
+                {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.retailPct)}</td> : null}
+                {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.insurancePct)}</td> : null}
+                {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.gpPctOfTotal)}</td> : null}
+                <td className="cell-num">{money2(grand.avgPerContract)}</td>
+                <td className="cell-num">{grand.openJobs}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {monthly && (

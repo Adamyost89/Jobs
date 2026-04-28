@@ -64,11 +64,11 @@ export function CommissionLineAdminForm({
   }
 
   return (
-    <div style={{ display: "grid", gap: "0.35rem", maxWidth: 220 }}>
+    <div style={{ display: "grid", gap: "0.35rem", maxWidth: 240 }}>
       <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.25 }}>
         Admin correction for {salespersonName}:
       </p>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", alignItems: "center" }}>
+      <div className="page-actions-inline" style={{ alignItems: "stretch", gap: "0.35rem" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", fontSize: "0.72rem", color: "var(--muted)" }}>
           <span>Remaining owed ($)</span>
           <input
@@ -79,14 +79,9 @@ export function CommissionLineAdminForm({
             disabled={busy}
             aria-label="Remaining owed amount to lock on this commission line"
             style={{
-              padding: "0.35rem 0.5rem",
-              borderRadius: 8,
-              border: "1px solid #334155",
-              background: "#0f172a",
-              color: "var(--text)",
-              minWidth: "6.5rem",
-              fontSize: "0.82rem",
+              minWidth: "8rem",
             }}
+            className="compact-field"
           />
         </label>
         <button

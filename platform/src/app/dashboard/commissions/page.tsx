@@ -145,15 +145,7 @@ export default async function CommissionsPage({
 
   return (
     <div className="page-stack page-stack--full">
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: "0.75rem",
-        }}
-      >
+      <div className="page-title-row">
         <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Commission lines</h1>
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 520 }}>
           Outstanding balances only (all job years). Full payout rollups:{" "}
@@ -167,7 +159,7 @@ export default async function CommissionsPage({
         </p>
       ) : null}
       {canMarkCommissionPaid(user) ? (
-        <form method="GET" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+        <form method="GET" className="page-actions-inline">
           <label htmlFor="payday" style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
             Payday for all lines:
           </label>
@@ -176,14 +168,7 @@ export default async function CommissionsPage({
             name="payday"
             type="date"
             defaultValue={selectedPaydayIso}
-            style={{
-              padding: "0.4rem 0.55rem",
-              borderRadius: 8,
-              border: "1px solid #334155",
-              background: "#0f172a",
-              color: "var(--text)",
-              fontSize: "0.82rem",
-            }}
+            className="compact-field"
           />
           <button className="btn" type="submit" style={{ fontSize: "0.82rem" }}>
             Set payday
@@ -202,7 +187,8 @@ export default async function CommissionsPage({
       ) : null}
 
       <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
-        <table className="table table-data">
+        <div className="table-responsive">
+          <table className="table table-data">
           <thead>
             <tr>
               <th>Job</th>
@@ -329,7 +315,8 @@ export default async function CommissionsPage({
               })
             )}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </div>
   );
