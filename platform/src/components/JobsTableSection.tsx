@@ -348,9 +348,12 @@ export function JobsTableSection({
     const normalize = (s: string): string => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const statusNorm = normalize(String(row.status ?? ""));
     const shownStatusNorm = normalize(shownStatus);
+    const closedPaidStageTokens = ["paid closed", "invoice paid", "complete", "closed"];
     const isInBilling = statusNorm === "in billing" || shownStatusNorm === "in billing";
-    const isPaidClosed = statusNorm === "paid closed" || shownStatusNorm === "paid closed";
-    const active = row.paidInFull === true && (isInBilling || isPaidClosed);
+    const isClosedPaidStage =
+      closedPaidStageTokens.some((token) => statusNorm.includes(token)) ||
+      closedPaidStageTokens.some((token) => shownStatusNorm.includes(token));
+    const active = row.paidInFull === true && (isInBilling || isClosedPaidStage);
     if (!active) return undefined;
 
     const gpPct = toPercentNumber(row.gpPercent);
