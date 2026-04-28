@@ -380,12 +380,14 @@ export async function POST(req: Request) {
       salespersonId = sp?.id ?? null;
     }
     const contract = new Prisma.Decimal((e.contractAmount ?? 0).toFixed(2));
+    const signedAtNow = new Date();
     const job = await prisma.job.create({
       data: {
         jobNumber,
         year,
         leadNumber: e.leadNumber ?? null,
         name: e.name ?? null,
+        contractSignedAt: signedAtNow,
         contractAmount: contract,
         projectRevenue: contract,
         cost: asDecimal(Math.max(0, e.cost ?? 0)),

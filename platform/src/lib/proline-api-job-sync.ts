@@ -167,12 +167,14 @@ export async function syncProlineJobsFromApi(
       if (!existing) {
         const jobNumber = await allocateNextJobNumber(opts.defaultYear);
         const contract = new Prisma.Decimal((contractAmount ?? 0).toFixed(2));
+        const signedAtNow = new Date();
         const job = await db.job.create({
           data: {
             jobNumber,
             year: opts.defaultYear,
             leadNumber,
             name,
+            contractSignedAt: signedAtNow,
             contractAmount: contract,
             projectRevenue: contract,
             salespersonId,
