@@ -195,11 +195,11 @@ export default async function CommissionsPage({
               <th>Salesperson</th>
               <th className="cell-num">Paid (ledger + checks)</th>
               <th className="cell-num">Still owed</th>
-              <th style={{ minWidth: "15rem" }}>Payment history</th>
-              {showCalcTrace && <th style={{ minWidth: "18rem" }}>Calc trace</th>}
               <th>Lock</th>
               {canMarkCommissionPaid(user) && <th style={{ minWidth: "13rem" }}>Post payment</th>}
               {canEditCommissions(user) && <th style={{ minWidth: "13rem" }}>Admin fix</th>}
+              <th style={{ minWidth: "15rem" }}>Payment history</th>
+              {showCalcTrace && <th style={{ minWidth: "18rem" }}>Calc trace</th>}
             </tr>
           </thead>
           <tbody>
@@ -258,6 +258,31 @@ export default async function CommissionsPage({
                       ) : null}
                     </td>
                     <td className="cell-num">{money2(displayOwed)}</td>
+                    <td>{c.override ? <span className="status-pill status-pill--warn">Override</span> : ""}</td>
+                    {canMarkCommissionPaid(user) && (
+                      <td style={{ verticalAlign: "top" }}>
+                        {!c.override && c.salesperson.active && displayOwed > 0 ? (
+                          <PayCommissionForm
+                            commissionId={c.id}
+                            defaultOwed={displayOwed}
+                            suggestedPaydayIso={selectedPaydayIso}
+                          />
+                        ) : (
+                          <span className="cell-muted">—</span>
+                        )}
+                      </td>
+                    )}
+                    {canEditCommissions(user) && (
+                      <td style={{ verticalAlign: "top" }}>
+                        <CommissionLineAdminForm
+                          commissionId={c.id}
+                          ledgerPaid={c.paidAmount.toNumber()}
+                          displayOwed={displayOwed}
+                          override={c.override}
+                          salespersonName={displaySalespersonName(c.salesperson.name)}
+                        />
+                      </td>
+                    )}
                     <td style={{ maxWidth: 420, fontSize: "0.82rem", lineHeight: 1.45, verticalAlign: "top" }}>
                       {lines.length === 0 ? (
                         <span className="cell-muted">—</span>
@@ -283,31 +308,6 @@ export default async function CommissionsPage({
                     {showCalcTrace && (
                       <td style={{ verticalAlign: "top" }}>
                         <CommissionExplainButton commissionId={c.id} />
-                      </td>
-                    )}
-                    <td>{c.override ? <span className="status-pill status-pill--warn">Override</span> : ""}</td>
-                    {canMarkCommissionPaid(user) && (
-                      <td style={{ verticalAlign: "top" }}>
-                        {!c.override && c.salesperson.active && displayOwed > 0 ? (
-                          <PayCommissionForm
-                            commissionId={c.id}
-                            defaultOwed={displayOwed}
-                            suggestedPaydayIso={selectedPaydayIso}
-                          />
-                        ) : (
-                          <span className="cell-muted">—</span>
-                        )}
-                      </td>
-                    )}
-                    {canEditCommissions(user) && (
-                      <td style={{ verticalAlign: "top" }}>
-                        <CommissionLineAdminForm
-                          commissionId={c.id}
-                          ledgerPaid={c.paidAmount.toNumber()}
-                          displayOwed={displayOwed}
-                          override={c.override}
-                          salespersonName={displaySalespersonName(c.salesperson.name)}
-                        />
                       </td>
                     )}
                   </tr>
