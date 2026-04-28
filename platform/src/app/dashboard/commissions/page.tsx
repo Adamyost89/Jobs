@@ -192,9 +192,9 @@ export default async function CommissionsPage({
           <thead>
             <tr>
               <th>Job</th>
-              <th>Salesperson</th>
-              <th className="cell-num">Paid (ledger + checks)</th>
-              <th className="cell-num">Still owed</th>
+              <th style={{ minWidth: "8rem" }}>Salesperson</th>
+              <th className="cell-num" style={{ minWidth: "10rem" }}>Paid (ledger + checks)</th>
+              <th className="cell-num" style={{ minWidth: "8rem" }}>Still owed</th>
               <th>Lock</th>
               {canMarkCommissionPaid(user) && <th style={{ minWidth: "13rem" }}>Post payment</th>}
               <th style={{ minWidth: "15rem" }}>Payment history</th>
@@ -241,7 +241,7 @@ export default async function CommissionsPage({
                       </Link>
                       {sub && <div className="cell-sub">{sub}</div>}
                     </td>
-                    <td className="cell-nowrap">
+                    <td className="cell-nowrap" style={{ minWidth: "8rem" }}>
                       {displaySalespersonName(c.salesperson.name)}
                       {!c.salesperson.active ? (
                         <span className="cell-muted" style={{ fontSize: "0.75rem", display: "block" }}>
@@ -249,7 +249,7 @@ export default async function CommissionsPage({
                         </span>
                       ) : null}
                     </td>
-                    <td className="cell-num">
+                    <td className="cell-num" style={{ minWidth: "10rem" }}>
                       {money2(displayPaid)}
                       {payoutSum > 0.005 && c.paidAmount.toNumber() + 0.005 < payoutSum ? (
                         <div className="cell-muted" style={{ fontSize: "0.72rem", marginTop: "0.2rem" }}>
@@ -257,7 +257,7 @@ export default async function CommissionsPage({
                         </div>
                       ) : null}
                     </td>
-                    <td className="cell-num">{money2(displayOwed)}</td>
+                    <td className="cell-num" style={{ minWidth: "8rem" }}>{money2(displayOwed)}</td>
                     <td>{c.override ? <span className="status-pill status-pill--warn">Override</span> : ""}</td>
                     {canMarkCommissionPaid(user) && (
                       <td style={{ verticalAlign: "top" }}>
