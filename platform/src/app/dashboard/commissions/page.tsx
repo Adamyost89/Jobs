@@ -197,9 +197,9 @@ export default async function CommissionsPage({
               <th className="cell-num">Still owed</th>
               <th>Lock</th>
               {canMarkCommissionPaid(user) && <th style={{ minWidth: "13rem" }}>Post payment</th>}
-              {canEditCommissions(user) && <th style={{ minWidth: "13rem" }}>Admin fix</th>}
               <th style={{ minWidth: "15rem" }}>Payment history</th>
               {showCalcTrace && <th style={{ minWidth: "18rem" }}>Calc trace</th>}
+              {canEditCommissions(user) && <th style={{ minWidth: "13rem" }}>Admin fix</th>}
             </tr>
           </thead>
           <tbody>
@@ -272,17 +272,6 @@ export default async function CommissionsPage({
                         )}
                       </td>
                     )}
-                    {canEditCommissions(user) && (
-                      <td style={{ verticalAlign: "top" }}>
-                        <CommissionLineAdminForm
-                          commissionId={c.id}
-                          ledgerPaid={c.paidAmount.toNumber()}
-                          displayOwed={displayOwed}
-                          override={c.override}
-                          salespersonName={displaySalespersonName(c.salesperson.name)}
-                        />
-                      </td>
-                    )}
                     <td style={{ maxWidth: 420, fontSize: "0.82rem", lineHeight: 1.45, verticalAlign: "top" }}>
                       {lines.length === 0 ? (
                         <span className="cell-muted">—</span>
@@ -308,6 +297,17 @@ export default async function CommissionsPage({
                     {showCalcTrace && (
                       <td style={{ verticalAlign: "top" }}>
                         <CommissionExplainButton commissionId={c.id} />
+                      </td>
+                    )}
+                    {canEditCommissions(user) && (
+                      <td style={{ verticalAlign: "top" }}>
+                        <CommissionLineAdminForm
+                          commissionId={c.id}
+                          ledgerPaid={c.paidAmount.toNumber()}
+                          displayOwed={displayOwed}
+                          override={c.override}
+                          salespersonName={displaySalespersonName(c.salesperson.name)}
+                        />
                       </td>
                     )}
                   </tr>
