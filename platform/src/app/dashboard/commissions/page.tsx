@@ -188,18 +188,18 @@ export default async function CommissionsPage({
 
       <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
         <div className="table-responsive">
-          <table className="table table-data">
+          <table className="table table-data table-data--commissions">
           <thead>
             <tr>
               <th>Job</th>
-              <th style={{ minWidth: "8rem" }}>Salesperson</th>
-              <th className="cell-num" style={{ minWidth: "10rem" }}>Paid (ledger + checks)</th>
-              <th className="cell-num" style={{ minWidth: "8rem" }}>Still owed</th>
+              <th style={{ minWidth: "6.75rem" }}>Salesperson</th>
+              <th className="cell-num" style={{ minWidth: "8.5rem" }}>Paid (ledger + checks)</th>
+              <th className="cell-num" style={{ minWidth: "7.25rem" }}>Still owed</th>
               <th>Lock</th>
-              {canMarkCommissionPaid(user) && <th style={{ minWidth: "13rem" }}>Post payment</th>}
-              <th style={{ minWidth: "15rem" }}>Payment history</th>
-              {showCalcTrace && <th style={{ minWidth: "18rem" }}>Calc trace</th>}
-              {canEditCommissions(user) && <th style={{ minWidth: "13rem" }}>Admin fix</th>}
+              {canMarkCommissionPaid(user) && <th style={{ minWidth: "10.25rem" }}>Post payment</th>}
+              <th style={{ minWidth: "12rem" }}>Payment history</th>
+              {showCalcTrace && <th style={{ minWidth: "8.25rem" }}>Calc trace</th>}
+              {canEditCommissions(user) && <th style={{ minWidth: "10.5rem" }}>Admin fix</th>}
             </tr>
           </thead>
           <tbody>
@@ -229,7 +229,7 @@ export default async function CommissionsPage({
 
                 return (
                   <tr key={c.id} className={rowHl}>
-                    <td style={{ minWidth: "9.5rem" }}>
+                    <td style={{ minWidth: "8.75rem" }}>
                       <Link
                         href={jobsDrilldownUrl({
                           year: c.job.year,
@@ -241,7 +241,7 @@ export default async function CommissionsPage({
                       </Link>
                       {sub && <div className="cell-sub">{sub}</div>}
                     </td>
-                    <td className="cell-nowrap" style={{ minWidth: "8rem" }}>
+                    <td className="cell-nowrap" style={{ minWidth: "6.75rem" }}>
                       {displaySalespersonName(c.salesperson.name)}
                       {!c.salesperson.active ? (
                         <span className="cell-muted" style={{ fontSize: "0.75rem", display: "block" }}>
@@ -249,7 +249,7 @@ export default async function CommissionsPage({
                         </span>
                       ) : null}
                     </td>
-                    <td className="cell-num" style={{ minWidth: "10rem" }}>
+                    <td className="cell-num" style={{ minWidth: "8.5rem" }}>
                       {money2(displayPaid)}
                       {payoutSum > 0.005 && c.paidAmount.toNumber() + 0.005 < payoutSum ? (
                         <div className="cell-muted" style={{ fontSize: "0.72rem", marginTop: "0.2rem" }}>
@@ -257,7 +257,7 @@ export default async function CommissionsPage({
                         </div>
                       ) : null}
                     </td>
-                    <td className="cell-num" style={{ minWidth: "8rem" }}>{money2(displayOwed)}</td>
+                    <td className="cell-num" style={{ minWidth: "7.25rem" }}>{money2(displayOwed)}</td>
                     <td>{c.override ? <span className="status-pill status-pill--warn">Override</span> : ""}</td>
                     {canMarkCommissionPaid(user) && (
                       <td style={{ verticalAlign: "top" }}>
@@ -272,7 +272,7 @@ export default async function CommissionsPage({
                         )}
                       </td>
                     )}
-                    <td style={{ maxWidth: 420, fontSize: "0.82rem", lineHeight: 1.45, verticalAlign: "top" }}>
+                    <td style={{ maxWidth: 320, fontSize: "0.82rem", lineHeight: 1.45, verticalAlign: "top" }}>
                       {lines.length === 0 ? (
                         <span className="cell-muted">—</span>
                       ) : (

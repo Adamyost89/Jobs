@@ -584,6 +584,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       jobId: existing.id,
+      jobNumber: existing.jobNumber,
       quoteApproved: "updated_existing",
     });
   }
@@ -689,7 +690,7 @@ export async function POST(req: Request) {
       forceCommissionRecalcReason: "proline.webhook.upsert.update.payment_fields_changed",
     });
     await ensureRequiredNameWriteback(existing, e.name);
-    return NextResponse.json({ ok: true, jobId: existing.id, upsert: "updated" });
+    return NextResponse.json({ ok: true, jobId: existing.id, jobNumber: existing.jobNumber, upsert: "updated" });
   }
 
   const existing = await findExistingJobForWebhook();
@@ -763,5 +764,10 @@ export async function POST(req: Request) {
     forceCommissionRecalc: paymentFieldsChanged,
     forceCommissionRecalcReason: "proline.webhook.typed_update.payment_fields_changed",
   });
-  return NextResponse.json({ ok: true, jobId: existing.id, invoiceDeltaSkippedDuplicate });
+  return NextResponse.json({
+    ok: true,
+    jobId: existing.id,
+    jobNumber: existing.jobNumber,
+    invoiceDeltaSkippedDuplicate,
+  });
 }
