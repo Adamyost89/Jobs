@@ -250,7 +250,7 @@ export function PayPeriodAllRepsTable({
         <thead>
           <tr>
             <th style={{ width: "2rem" }} aria-hidden />
-            <th>Pay period (check bucket)</th>
+            <th>Paycheck date (check bucket)</th>
             <th className="cell-num"># line items</th>
             <th className="cell-num">Total paid</th>
             <th>Last activity (posted)</th>
@@ -288,7 +288,7 @@ export function PayPeriodAllRepsTable({
                     <td colSpan={5} style={{ padding: 0, background: "rgba(0,0,0,0.2)", borderBottom: "1px solid #2a3545" }}>
                       <div style={{ padding: "0.65rem 0.75rem 0.85rem" }}>
                         <p style={{ margin: "0 0 0.5rem", fontSize: "0.8rem", color: "var(--muted)" }}>
-                          Posted payouts in this period grouped by salesperson (click the row above to collapse).
+                          Posted payouts for this paycheck date grouped by salesperson (click the row above to collapse).
                         </p>
                         <div>
                           <table className="table table-data" style={{ margin: 0, fontSize: "0.84rem" }}>

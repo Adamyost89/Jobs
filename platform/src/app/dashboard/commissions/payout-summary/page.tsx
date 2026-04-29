@@ -119,7 +119,7 @@ export default async function PayoutSummaryPage({
         </p>
       ) : (
         <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
-          <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>By pay period (all reps combined)</h2>
+          <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>By paycheck date (all reps combined)</h2>
           <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
             Click a row to expand and see every posted payout line in that check bucket.
           </p>
@@ -128,12 +128,12 @@ export default async function PayoutSummaryPage({
           </p>
           <PayPeriodAllRepsTable rows={payPeriodAllRepsRows} canManagePayoutLines={canManagePayoutLines} />
 
-          <h2 style={{ margin: "0.5rem 0 0", fontSize: "1.1rem", fontWeight: 700 }}>By salesperson &amp; pay period</h2>
+          <h2 style={{ margin: "0.5rem 0 0", fontSize: "1.1rem", fontWeight: 700 }}>By salesperson &amp; paycheck date</h2>
           <div className="table-responsive">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Pay period</th>
+                  <th>Paycheck date</th>
                   <th>Salesperson</th>
                   <th className="cell-num"># checks</th>
                   <th className="cell-num">Total</th>

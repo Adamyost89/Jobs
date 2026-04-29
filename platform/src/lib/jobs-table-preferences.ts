@@ -28,7 +28,7 @@ export type JobTableColumnId = (typeof JOB_TABLE_COLUMN_IDS)[number];
 export const JOB_TABLE_COLUMN_LABELS: Record<JobTableColumnId, string> = {
   jobNumber: "Job #",
   year: "Year",
-  leadNumber: "Lead / project #",
+  leadNumber: "Lead #",
   name: "Customer",
   sales: "Sales",
   status: "Status",
