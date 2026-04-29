@@ -163,8 +163,8 @@ select.input {
   overflow: visible;
 }
 
-.table-scroll--jobs > .table-data {
-  min-width: max-content;
+.table-scroll--jobs .table-data {
+  width: 100%;
 }
 
 .table-scroll--jobs .table-data thead th {

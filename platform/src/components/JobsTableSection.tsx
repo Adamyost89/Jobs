@@ -589,9 +589,8 @@ export function JobsTableSection({
             pre-assigned numbers.
           </p>
         ) : (
-          <div className="table-responsive">
-            <div className="table-scroll table-scroll--jobs">
-              <table className="table table-data">
+          <div className="table-scroll table-scroll--jobs">
+            <table className="table table-data">
               <thead>
                 <tr>
                   {cols.map((id) => renderTh(id))}
@@ -806,8 +805,7 @@ export function JobsTableSection({
                   );
                 })}
               </tbody>
-              </table>
-            </div>
+            </table>
           </div>
         )}
       </div>
