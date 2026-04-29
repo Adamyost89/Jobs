@@ -48,6 +48,7 @@ export default async function DashboardHome({
   const yearOpts = [...yearOptsSet].sort((a, b) => b - a);
 
   const canSeeGp = canViewAllJobs(user);
+  const companyWhere: Prisma.JobWhereInput = { year: workYear };
   const jobWhere: Prisma.JobWhereInput = { year: workYear };
   if (!canSeeGp) {
     jobWhere.salespersonId =
@@ -55,6 +56,7 @@ export default async function DashboardHome({
   }
 
   const { rows: amRows, grand } = await loadAmSummaryForYear(prisma, jobWhere);
+  const companyGrand = canSeeGp ? grand : (await loadAmSummaryForYear(prisma, companyWhere)).grand;
 
   const money2 = (n: number) =>
     n.toLocaleString(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -103,7 +105,9 @@ export default async function DashboardHome({
       <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
         <h2 style={{ margin: "0.65rem 1rem 0.5rem", fontSize: "1.05rem" }}>By account manager</h2>
         <p style={{ margin: "0 1rem 0.5rem", fontSize: "0.8rem", color: "var(--muted)" }}>
-          Click a rep row to open their jobs for {workYear}.
+          {canSeeGp
+            ? `Click a rep row to open their jobs for ${workYear}.`
+            : `Your row shows your jobs only. Company totals below include all account managers for ${workYear}.`}
         </p>
         <div className="table-responsive">
           <table className="table table-data" style={{ fontSize: "0.88rem" }}>
@@ -148,18 +152,18 @@ export default async function DashboardHome({
                 </DrilldownTableRow>
               ))}
               <tr style={{ fontWeight: 700, background: "var(--card-border, rgba(0,0,0,0.06))" }}>
-                <td>Grand total</td>
-                <td className="cell-num">{grand.jobCount}</td>
-                <td className="cell-num">{money2(grand.contractAmt)}</td>
-                <td className="cell-num">{money2(grand.changeOrders)}</td>
-                <td className="cell-num">{money2(grand.total)}</td>
-                <td className="cell-num">{money2(grand.paid)}</td>
-                {canSeeGp ? <td className="cell-num">{money2(grand.gp)}</td> : null}
-                {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.retailPct)}</td> : null}
-                {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.insurancePct)}</td> : null}
-                {canSeeGp ? <td className="cell-num">{formatPctOrDash(grand.gpPctOfTotal)}</td> : null}
-                <td className="cell-num">{money2(grand.avgPerContract)}</td>
-                <td className="cell-num">{grand.openJobs}</td>
+                <td>{canSeeGp ? "Grand total" : "Company total"}</td>
+                <td className="cell-num">{companyGrand.jobCount}</td>
+                <td className="cell-num">{money2(companyGrand.contractAmt)}</td>
+                <td className="cell-num">{money2(companyGrand.changeOrders)}</td>
+                <td className="cell-num">{money2(companyGrand.total)}</td>
+                <td className="cell-num">{money2(companyGrand.paid)}</td>
+                {canSeeGp ? <td className="cell-num">{money2(companyGrand.gp)}</td> : null}
+                {canSeeGp ? <td className="cell-num">{formatPctOrDash(companyGrand.retailPct)}</td> : null}
+                {canSeeGp ? <td className="cell-num">{formatPctOrDash(companyGrand.insurancePct)}</td> : null}
+                {canSeeGp ? <td className="cell-num">{formatPctOrDash(companyGrand.gpPctOfTotal)}</td> : null}
+                <td className="cell-num">{money2(companyGrand.avgPerContract)}</td>
+                <td className="cell-num">{companyGrand.openJobs}</td>
               </tr>
             </tbody>
           </table>

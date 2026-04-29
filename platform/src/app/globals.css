@@ -160,7 +160,9 @@ select.input {
 }
 
 .table-scroll--jobs {
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table-scroll--jobs .table-data thead th {
