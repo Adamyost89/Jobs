@@ -62,7 +62,7 @@ export function DashboardTopNav({
 
   return (
     <header ref={headerRef} className="dash-header">
-      <div className="dash-header__brand">Elevated</div>
+      <div className="dash-header__brand">Elevated Roofing &amp; Siding</div>
       <nav className="dash-nav" aria-label="Main">
         {links.map((l) => {
           const active = activeHref === l.href;
