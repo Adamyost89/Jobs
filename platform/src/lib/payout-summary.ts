@@ -51,20 +51,40 @@ function inferPayoutYear(row: {
 
 function parsePayPeriodSortDate(payPeriodLabel: string, fallbackYear: number, fallbackDate: Date): Date {
   const raw = String(payPeriodLabel || "").trim();
-  // Supports labels like "Dec 26th", "Dec 26", or "Dec 26, 2025".
-  const m = raw.match(/^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*(\d{4}))?$/);
-  if (!m) return fallbackDate;
-  const monthRaw = m[1] ?? "";
-  const dayRaw = m[2] ?? "";
-  const yearRaw = m[3] ?? "";
-  const monthIdx = new Date(`${monthRaw} 1, 2000`).getMonth();
-  const day = Number.parseInt(dayRaw, 10);
-  const year = yearRaw ? Number.parseInt(yearRaw, 10) : fallbackYear;
-  if (!Number.isFinite(monthIdx) || monthIdx < 0 || monthIdx > 11) return fallbackDate;
-  if (!Number.isFinite(day) || day < 1 || day > 31) return fallbackDate;
-  if (!Number.isFinite(year) || year < 1900 || year > 3000) return fallbackDate;
-  const dt = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0, 0));
-  return Number.isNaN(dt.getTime()) ? fallbackDate : dt;
+  const parseMonthDay = (token: string, defaultYear: number): Date | null => {
+    // Supports labels like "Dec 26th", "Dec 26", or "Dec 26, 2025".
+    const m = token.trim().match(/^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*(\d{4}))?$/);
+    if (!m) return null;
+    const monthRaw = m[1] ?? "";
+    const dayRaw = m[2] ?? "";
+    const yearRaw = m[3] ?? "";
+    const monthIdx = new Date(`${monthRaw} 1, 2000`).getMonth();
+    const day = Number.parseInt(dayRaw, 10);
+    const year = yearRaw ? Number.parseInt(yearRaw, 10) : defaultYear;
+    if (!Number.isFinite(monthIdx) || monthIdx < 0 || monthIdx > 11) return null;
+    if (!Number.isFinite(day) || day < 1 || day > 31) return null;
+    if (!Number.isFinite(year) || year < 1900 || year > 3000) return null;
+    const dt = new Date(Date.UTC(year, monthIdx, day, 12, 0, 0, 0));
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  };
+
+  const toFridayPayDate = (dt: Date): Date => {
+    // Payday is Friday; move any period end date forward to that week's Friday.
+    const dayOfWeek = dt.getUTCDay(); // 0=Sun ... 5=Fri
+    const addDays = (5 - dayOfWeek + 7) % 7;
+    return new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate() + addDays, 12, 0, 0, 0));
+  };
+
+  // Range labels (e.g. "Apr 13, 2026 - Apr 26, 2026"): use period end, then shift to Friday payday.
+  const range = raw.match(/^(.*?)\s*[–-]\s*(.*?)$/);
+  if (range) {
+    const endToken = (range[2] ?? "").trim();
+    const end = parseMonthDay(endToken, fallbackYear);
+    if (end) return toFridayPayDate(end);
+  }
+
+  const single = parseMonthDay(raw, fallbackYear);
+  return single ?? fallbackDate;
 }
 
 export async function distinctPayoutYearsForSelect(
