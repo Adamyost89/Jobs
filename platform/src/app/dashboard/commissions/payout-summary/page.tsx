@@ -46,7 +46,7 @@ export default async function PayoutSummaryPage({
 
   const payPeriodAllRepsRows = byWindow.map((w) => ({
     key: `${w.payPeriodLabel}|${w.lastPosted.toISOString()}`,
-    payPeriodLabel: w.payPeriodLabel,
+    payPeriodLabel: formatDateInEastern(w.periodSortDate),
     count: w.count,
     total: w.total,
     lastPostedLabel: formatDateInEastern(w.lastPosted),
@@ -143,9 +143,7 @@ export default async function PayoutSummaryPage({
               <tbody>
                 {byRep.map((s) => (
                   <tr key={`${s.payPeriodLabel}|${s.salespersonName}`}>
-                    <td>
-                      {s.payPeriodLabel}, {s.periodSortDate.getUTCFullYear()}
-                    </td>
+                    <td>{formatDateInEastern(s.periodSortDate)}</td>
                     <td className="cell-nowrap">{s.salespersonName}</td>
                     <td className="cell-num">{s.count}</td>
                     <td className="cell-num">{money2(s.total)}</td>

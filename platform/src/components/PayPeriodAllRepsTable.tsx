@@ -235,12 +235,6 @@ export function PayPeriodAllRepsTable({
     [busyLineId, canManagePayoutLines, editingLineId, router]
   );
 
-  function payPeriodWithYear(row: PayPeriodAllRepsRow): string {
-    const dt = new Date(row.periodSortAt);
-    if (Number.isNaN(dt.getTime())) return row.payPeriodLabel;
-    return `${row.payPeriodLabel}, ${dt.getUTCFullYear()}`;
-  }
-
   return (
     <div>
       {msg ? (
@@ -276,7 +270,7 @@ export function PayPeriodAllRepsTable({
                   <td className="cell-muted" style={{ fontSize: "0.75rem", userSelect: "none" }}>
                     {open ? "▼" : "▶"}
                   </td>
-                  <td style={{ fontWeight: 600 }}>{payPeriodWithYear(s)}</td>
+                  <td style={{ fontWeight: 600 }}>{s.payPeriodLabel}</td>
                   <td className="cell-num">{s.count}</td>
                   <td className="cell-num cell-strong">{money2(s.total)}</td>
                   <td className="cell-muted" style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>
