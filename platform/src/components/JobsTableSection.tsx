@@ -607,35 +607,15 @@ export function JobsTableSection({
                         {canManageRowActions ? (
                           <td style={{ whiteSpace: "normal" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
-                            {canEditPayments ? (
                               <button
                                 type="button"
                                 className="btn secondary"
-                                onClick={() => void recheckCommission(row)}
-                                disabled={recheckingId === row.id || deletingId != null || savingEditId != null}
+                                onClick={() => beginEdit(row)}
+                                disabled={deletingId != null || savingEditId != null || recheckingId != null}
                                 style={{ padding: "0.4rem 0.75rem" }}
                               >
-                                {recheckingId === row.id ? "Rechecking…" : "Recheck commission"}
+                                {editingId === row.id ? "Editing" : "Edit"}
                               </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="btn secondary"
-                              onClick={() => beginEdit(row)}
-                              disabled={deletingId != null || savingEditId != null || recheckingId != null}
-                              style={{ padding: "0.4rem 0.75rem" }}
-                            >
-                              {editingId === row.id ? "Editing" : "Edit"}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn secondary"
-                              onClick={() => void deleteJob(row)}
-                              disabled={deletingId === row.id || savingEditId != null || recheckingId != null}
-                              style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca", padding: "0.4rem 0.75rem" }}
-                            >
-                              {deletingId === row.id ? "Deleting…" : "Delete"}
-                            </button>
                             </div>
                           </td>
                         ) : null}
@@ -779,7 +759,7 @@ export function JobsTableSection({
                                 />
                               </label>
                               </div>
-                              <div style={{ display: "flex", gap: "0.55rem", marginTop: "0.9rem" }}>
+                              <div style={{ display: "flex", gap: "0.55rem", marginTop: "0.9rem", flexWrap: "wrap" }}>
                                 <button
                                   type="button"
                                   className="btn"
@@ -795,6 +775,25 @@ export function JobsTableSection({
                                   disabled={savingEditId === row.id}
                                 >
                                   Cancel
+                                </button>
+                                {canEditPayments ? (
+                                  <button
+                                    type="button"
+                                    className="btn secondary"
+                                    onClick={() => void recheckCommission(row)}
+                                    disabled={recheckingId === row.id || deletingId != null || savingEditId != null}
+                                  >
+                                    {recheckingId === row.id ? "Rechecking…" : "Recheck commission"}
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="btn secondary"
+                                  onClick={() => void deleteJob(row)}
+                                  disabled={deletingId === row.id || savingEditId != null || recheckingId != null}
+                                  style={{ borderColor: "rgba(239, 68, 68, 0.6)", color: "#fecaca" }}
+                                >
+                                  {deletingId === row.id ? "Deleting…" : "Delete"}
                                 </button>
                               </div>
                             </div>
