@@ -85,7 +85,6 @@ export async function getSignedContractsAnalytics(
       not: null as string | null,
       ...(full ? {} : { in: repIds }),
     },
-    contractAmount: { gt: 0 },
   };
 
   const jobsTrend = await prisma.job.findMany({
