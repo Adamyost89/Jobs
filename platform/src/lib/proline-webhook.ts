@@ -36,6 +36,10 @@ export type NormalizedProlineEvent = {
   name?: string | null;
   contractAmount?: number;
   approvedDate?: string | null;
+  approvedTotal?: number;
+  quoteId?: string;
+  quoteName?: string | null;
+  shareLink?: string;
   amountPaid?: number;
   invoicedDelta?: number;
   invoiceId?: string;
@@ -136,6 +140,35 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
     typeof body.approved_date === "string"
   ) {
     body.approvedDate = body.approved_date;
+  }
+  if (
+    (body.approvedTotal === undefined || body.approvedTotal === null || body.approvedTotal === "") &&
+    body.approved_total !== undefined
+  ) {
+    const n = numberFromUnknown(body.approved_total);
+    if (n !== undefined) body.approvedTotal = n;
+  }
+
+  if (
+    (body.quoteId === undefined || body.quoteId === null || body.quoteId === "") &&
+    body.quote_id !== undefined
+  ) {
+    const id = String(body.quote_id).trim();
+    if (id) body.quoteId = id;
+  }
+  if (
+    (body.quoteName === undefined || body.quoteName === null || body.quoteName === "") &&
+    typeof body.quote_name === "string"
+  ) {
+    const name = body.quote_name.trim();
+    if (name) body.quoteName = name;
+  }
+  if (
+    (body.shareLink === undefined || body.shareLink === null || body.shareLink === "") &&
+    typeof body.share_link === "string"
+  ) {
+    const link = body.share_link.trim();
+    if (link) body.shareLink = link;
   }
 
   if ((body.invoiceId === undefined || body.invoiceId === null || body.invoiceId === "") && body.invoice_id !== undefined) {
@@ -311,6 +344,10 @@ export function normalizeProlineWebhookBody(
       })(),
       name: (body.name as string | null | undefined) ?? null,
       contractAmount: typeof body.contractAmount === "number" ? body.contractAmount : undefined,
+      approvedTotal: typeof body.approvedTotal === "number" ? body.approvedTotal : undefined,
+      quoteId: typeof body.quoteId === "string" ? body.quoteId : undefined,
+      quoteName: (body.quoteName as string | null | undefined) ?? null,
+      shareLink: typeof body.shareLink === "string" ? body.shareLink : undefined,
       amountPaid: typeof body.amountPaid === "number" ? body.amountPaid : undefined,
       invoicedDelta: typeof body.invoicedDelta === "number" ? body.invoicedDelta : undefined,
       invoiceId: typeof body.invoiceId === "string" ? body.invoiceId : undefined,

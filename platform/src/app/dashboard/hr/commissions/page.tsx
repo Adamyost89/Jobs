@@ -8,6 +8,8 @@ import { formatDateTimeInEastern } from "@/lib/payout-display";
 import { commissionDisplayAmounts } from "@/lib/commission-display";
 import { CommissionSubnav } from "@/components/CommissionSubnav";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { quoteLinksByJobIds } from "@/lib/job-quote-links";
+import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
 
 function inferPayoutYearFromRow(row: { createdAt: Date; notes?: string | null; importSourceKey?: string | null }): number {
   const blob = `${row.importSourceKey ?? ""} ${row.notes ?? ""}`;
@@ -106,6 +108,11 @@ export default async function HrCommissionsPayrollPage() {
       job: { select: { jobNumber: true, name: true, year: true } },
     },
   });
+  const quoteJobIds = [...new Set([
+    ...candidates.map((c) => c.jobId),
+    ...payouts.map((p) => p.jobId).filter((id): id is string => Boolean(id)),
+  ])];
+  const quoteLinksByJob = await quoteLinksByJobIds(quoteJobIds);
 
   const byPeriod = new Map<string, typeof payouts>();
   for (const p of payouts) {
@@ -173,12 +180,12 @@ export default async function HrCommissionsPayrollPage() {
                   <tr key={c.id}>
                     <td className="cell-nowrap">{displaySalespersonName(c.salesperson.name)}</td>
                     <td className="job-cell-num">
-                      <Link
-                        href={jobsDrilldownUrl({ year: c.job.year, q: c.job.jobNumber })}
+                      <JobQuotePickerLink
+                        fallbackHref={jobsDrilldownUrl({ year: c.job.year, q: c.job.jobNumber })}
+                        fallbackLabel={c.job.jobNumber}
+                        quoteLinks={quoteLinksByJob.get(c.jobId) ?? []}
                         style={{ color: "inherit", textDecoration: "none" }}
-                      >
-                        {c.job.jobNumber}
-                      </Link>
+                      />
                     </td>
                     <td>{c.job.year}</td>
                     <td>{c.job.leadNumber ?? "—"}</td>
@@ -268,15 +275,15 @@ export default async function HrCommissionsPayrollPage() {
                           <td>${p.amount.toNumber().toFixed(2)}</td>
                           <td>
                             {p.job?.jobNumber ? (
-                              <Link
-                                href={jobsDrilldownUrl({
+                              <JobQuotePickerLink
+                                fallbackHref={jobsDrilldownUrl({
                                   year: p.job.year,
                                   q: p.job.jobNumber,
                                 })}
+                                fallbackLabel={p.job.jobNumber}
+                                quoteLinks={p.jobId ? (quoteLinksByJob.get(p.jobId) ?? []) : []}
                                 style={{ color: "inherit", textDecoration: "none" }}
-                              >
-                                {p.job.jobNumber}
-                              </Link>
+                              />
                             ) : (
                               "—"
                             )}

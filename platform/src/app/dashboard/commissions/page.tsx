@@ -12,6 +12,8 @@ import { commissionDisplayAmounts, roundMoney } from "@/lib/commission-display";
 import { jobNumberSortKey } from "@/lib/job-sort";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { CommissionExplainButton } from "@/components/CommissionExplainButton";
+import { quoteLinksByJobIds } from "@/lib/job-quote-links";
+import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
 
 function parsePaydayParam(raw: string | string[] | undefined): string | null {
   const v = Array.isArray(raw) ? raw[0] : raw;
@@ -56,6 +58,7 @@ export default async function CommissionsPage({
       salesperson: { select: { name: true, active: true } },
     },
   });
+  const quoteLinksByJob = await quoteLinksByJobIds([...new Set(rows.map((c) => c.jobId))]);
 
   const pairKeys = [...new Set(rows.map((c) => `${c.jobId}|${c.salespersonId}`))];
   const orClause = pairKeys.map((k) => {
@@ -230,15 +233,17 @@ export default async function CommissionsPage({
                 return (
                   <tr key={c.id} className={rowHl}>
                     <td style={{ minWidth: "8.75rem" }}>
-                      <Link
-                        href={jobsDrilldownUrl({
-                          year: c.job.year,
-                          q: c.job.jobNumber,
-                        })}
-                        style={{ color: "inherit", textDecoration: "none" }}
-                      >
-                        <div className="job-cell-num">{c.job.jobNumber}</div>
-                      </Link>
+                      <div className="job-cell-num">
+                        <JobQuotePickerLink
+                          fallbackHref={jobsDrilldownUrl({
+                            year: c.job.year,
+                            q: c.job.jobNumber,
+                          })}
+                          fallbackLabel={c.job.jobNumber}
+                          quoteLinks={quoteLinksByJob.get(c.jobId) ?? []}
+                          style={{ color: "inherit", textDecoration: "none" }}
+                        />
+                      </div>
                       {sub && <div className="cell-sub">{sub}</div>}
                     </td>
                     <td className="cell-nowrap" style={{ minWidth: "6.75rem" }}>

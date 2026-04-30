@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
@@ -27,6 +26,8 @@ import {
 } from "@/lib/jobs-table-preferences";
 import { canEditJobs, canViewAllJobs, type SessionUser } from "@/lib/rbac";
 import { formatUsd } from "@/lib/currency";
+import type { JobQuoteLinkOption } from "@/lib/job-quote-links";
+import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
 
 export type JobsTableRowDTO = {
   id: string;
@@ -54,6 +55,7 @@ export type JobsTableRowDTO = {
   /** When null, no commission rows exist for this job. */
   commPaid: number | null;
   commOwed: number | null;
+  quoteLinks?: JobQuoteLinkOption[];
 };
 
 function toJobLike(row: JobsTableRowDTO): JobLike {
@@ -398,12 +400,12 @@ export function JobsTableSection({
       case "jobNumber":
         return (
           <td key={id} className="cell-strong cell-nowrap">
-            <Link
-              href={jobsDrilldownUrl({ year: row.year, q: row.jobNumber })}
+            <JobQuotePickerLink
+              fallbackHref={jobsDrilldownUrl({ year: row.year, q: row.jobNumber })}
+              fallbackLabel={row.jobNumber}
+              quoteLinks={row.quoteLinks}
               style={{ color: "inherit", textDecoration: "none" }}
-            >
-              {row.jobNumber}
-            </Link>
+            />
           </td>
         );
       case "year":

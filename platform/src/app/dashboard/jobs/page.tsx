@@ -15,6 +15,7 @@ import { signedCalendarMonthForChart } from "@/lib/contract-signed-month";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { normalizeStatusBadgeColorMap } from "@/lib/status-badge-colors";
+import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 
 /**
  * Jobs list query params (GET):
@@ -194,6 +195,7 @@ export default async function JobsPage({
   });
 
   const jobs = sortJobsByJobNumber(jobsRaw, sortDir);
+  const quoteLinksByJob = await quoteLinksByJobIds(jobs.map((j) => j.id));
 
   const jobIds = jobs.map((j) => j.id);
   const commByJob = new Map<string, { paid: number; owed: number }>();
@@ -249,6 +251,7 @@ export default async function JobsPage({
       projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
       commPaid: cx ? cx.paid : null,
       commOwed: cx ? cx.owed : null,
+      quoteLinks: quoteLinksByJob.get(j.id) ?? [],
     };
   });
 

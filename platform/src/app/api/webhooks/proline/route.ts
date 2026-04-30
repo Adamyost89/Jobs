@@ -78,6 +78,20 @@ export async function POST(req: Request) {
   const e = normalized.event;
   const year = e.year ?? new Date().getFullYear();
 
+  function buildProlineEventPayload(extra?: Record<string, unknown>): Prisma.InputJsonObject {
+    const rawObject =
+      e.raw && typeof e.raw === "object" && !Array.isArray(e.raw) ? (e.raw as Record<string, unknown>) : {};
+    return {
+      ...rawObject,
+      quoteId: e.quoteId ?? null,
+      quoteName: e.quoteName ?? null,
+      shareLink: e.shareLink ?? null,
+      approvedDate: e.approvedDate ?? null,
+      approvedTotal: e.approvedTotal ?? e.contractAmount ?? null,
+      ...(extra ?? {}),
+    } as Prisma.InputJsonObject;
+  }
+
   logProlineWebhook("received", {
     internalType: e.internalType,
     prolineJobId: e.prolineJobId,
@@ -418,7 +432,7 @@ export async function POST(req: Request) {
         jobId: job.id,
         type: "PROLINE_SIGNED",
         source: "proline",
-        payload: e.raw as object,
+        payload: buildProlineEventPayload(),
       },
     });
     const paymentFieldsPresent = e.amountPaid !== undefined || e.paidInFull !== undefined || e.paidDate !== undefined;
@@ -455,7 +469,7 @@ export async function POST(req: Request) {
   }
 
   function approvedAmountFromEvent(): Prisma.Decimal {
-    return asDecimal(Math.max(0, e.contractAmount ?? 0));
+    return asDecimal(Math.max(0, e.approvedTotal ?? e.contractAmount ?? 0));
   }
 
   async function createQuoteApprovedJob(approvedDate: Date): Promise<{ id: string; jobNumber: string }> {
@@ -494,7 +508,7 @@ export async function POST(req: Request) {
         jobId: job.id,
         type: "PROLINE_QUOTE_APPROVED",
         source: "proline",
-        payload: e.raw as object,
+        payload: buildProlineEventPayload(),
       },
     });
     const paymentFieldsPresent = e.amountPaid !== undefined || e.paidInFull !== undefined || e.paidDate !== undefined;
@@ -572,7 +586,7 @@ export async function POST(req: Request) {
         jobId: existing.id,
         type: "PROLINE_QUOTE_APPROVED",
         source: "proline",
-        payload: e.raw as object,
+        payload: buildProlineEventPayload(),
       },
     });
     const paymentFieldsPresent = e.amountPaid !== undefined || e.paidInFull !== undefined || e.paidDate !== undefined;
@@ -661,10 +675,7 @@ export async function POST(req: Request) {
         jobId: existing.id,
         type: "PROLINE_UPSERT",
         source: "proline",
-        payload: {
-          ...(e.raw as object),
-          invoiceDeltaSkippedDuplicate,
-        },
+        payload: buildProlineEventPayload({ invoiceDeltaSkippedDuplicate }),
       },
     });
     if (invoiceDeltaApplied && e.invoiceId) {
@@ -736,10 +747,7 @@ export async function POST(req: Request) {
       jobId: existing.id,
       type: "PROLINE_" + e.internalType.toUpperCase().replace(/\./g, "_"),
       source: "proline",
-      payload: {
-        ...(e.raw as object),
-        invoiceDeltaSkippedDuplicate,
-      },
+      payload: buildProlineEventPayload({ invoiceDeltaSkippedDuplicate }),
     },
   });
   if (invoiceDeltaApplied && e.invoiceId) {
