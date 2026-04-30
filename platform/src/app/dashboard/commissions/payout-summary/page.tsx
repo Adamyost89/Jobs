@@ -7,7 +7,7 @@ import { PayPeriodAllRepsTable } from "@/components/PayPeriodAllRepsTable";
 import { defaultDashboardYear, parseWorkYearQuery } from "@/lib/work-year";
 import Link from "next/link";
 
-type Search = { year?: string };
+type Search = { year?: string; q?: string };
 
 function pickString(v: string | string[] | undefined): string | undefined {
   if (v === undefined) return undefined;
@@ -25,6 +25,9 @@ export default async function PayoutSummaryPage({
 
   const sp = await searchParams;
   const yearParamRaw = pickString(sp.year);
+  const jobQueryRaw = pickString(sp.q) ?? "";
+  const jobQuery = jobQueryRaw.trim();
+  const normalizedJobQuery = jobQuery.toLocaleLowerCase();
   const preferredY = defaultDashboardYear();
   const { yearInt, yearSelectDefault } = parseWorkYearQuery(yearParamRaw, {
     defaultYearInt: preferredY,
@@ -39,12 +42,88 @@ export default async function PayoutSummaryPage({
   }
   const yearOpts = [...yearOptsSet].sort((a, b) => b - a);
 
-  const { byWindow, byRep } = await loadPayoutSummary(prisma, {
+  const { byWindow } = await loadPayoutSummary(prisma, {
     yearInt,
     salespersonIds,
   });
+  const hasJobQuery = normalizedJobQuery.length > 0;
+  const lineMatchesQuery = (line: {
+    jobNumber: string | null;
+    jobName: string | null;
+    notes: string | null;
+    salespersonName: string;
+  }) => {
+    if (!hasJobQuery) return true;
+    const haystack = `${line.jobNumber ?? ""} ${line.jobName ?? ""} ${line.notes ?? ""} ${line.salespersonName}`.toLocaleLowerCase();
+    return haystack.includes(normalizedJobQuery);
+  };
+  const filteredByWindow = byWindow
+    .map((w) => {
+      const lines = w.lines.filter(lineMatchesQuery);
+      const total = lines.reduce((sum, l) => sum + l.amount, 0);
+      return {
+        ...w,
+        lines,
+        total,
+        count: lines.length,
+      };
+    })
+    .filter((w) => w.lines.length > 0);
+  const filteredByRepMap = new Map<
+    string,
+    {
+      payPeriodLabel: string;
+      periodSortDate: Date;
+      salespersonName: string;
+      count: number;
+      total: number;
+      lastPosted: Date;
+    }
+  >();
+  for (const w of filteredByWindow) {
+    for (const line of w.lines) {
+      const key = `${w.payPeriodLabel}\t${line.salespersonName}`;
+      const existing = filteredByRepMap.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.total += line.amount;
+        const postedAt = new Date(line.createdAt);
+        if (postedAt > existing.lastPosted) existing.lastPosted = postedAt;
+      } else {
+        filteredByRepMap.set(key, {
+          payPeriodLabel: w.payPeriodLabel,
+          periodSortDate: w.periodSortDate,
+          salespersonName: line.salespersonName,
+          count: 1,
+          total: line.amount,
+          lastPosted: new Date(line.createdAt),
+        });
+      }
+    }
+  }
+  const filteredByRep = [...filteredByRepMap.values()].sort(
+    (a, b) =>
+      b.periodSortDate.getTime() - a.periodSortDate.getTime() ||
+      b.lastPosted.getTime() - a.lastPosted.getTime() ||
+      a.payPeriodLabel.localeCompare(b.payPeriodLabel) ||
+      a.salespersonName.localeCompare(b.salespersonName)
+  );
+  const matchingPayoutLines = filteredByWindow
+    .flatMap((w) =>
+      w.lines.map((line) => ({
+        id: line.id,
+        jobNumber: line.jobNumber,
+        jobName: line.jobName,
+        salespersonName: line.salespersonName,
+        amount: line.amount,
+        postedAt: line.createdAt,
+        payPeriodDate: w.periodSortDate,
+        notes: line.notes,
+      }))
+    )
+    .sort((a, b) => b.postedAt.getTime() - a.postedAt.getTime());
 
-  const payPeriodAllRepsRows = byWindow.map((w) => ({
+  const payPeriodAllRepsRows = filteredByWindow.map((w) => ({
     key: `${w.payPeriodLabel}|${w.lastPosted.toISOString()}`,
     payPeriodLabel: formatDateInEastern(w.periodSortDate),
     count: w.count,
@@ -63,7 +142,7 @@ export default async function PayoutSummaryPage({
       postedLabel: formatDateInEastern(l.createdAt),
     })),
   }));
-  const grandTotalPaid = byWindow.reduce((sum, w) => sum + w.total, 0);
+  const grandTotalPaid = filteredByWindow.reduce((sum, w) => sum + w.total, 0);
   const grandTotalLabel = yearInt === null ? "all years" : String(yearInt);
 
   const money2 = (n: number) =>
@@ -96,6 +175,16 @@ export default async function PayoutSummaryPage({
               <option value="all">All years</option>
             </select>
           </label>
+          <label>
+            Job search
+            <input
+              name="q"
+              defaultValue={jobQuery}
+              placeholder="Job #, name, notes, or salesperson"
+              className="input"
+              style={{ minWidth: 260 }}
+            />
+          </label>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn" type="submit">
               Apply
@@ -113,12 +202,53 @@ export default async function PayoutSummaryPage({
         change the filter to match the year you&apos;re closing payroll for.
       </p>
 
-      {byWindow.length === 0 ? (
+      {filteredByWindow.length === 0 ? (
         <p className="card" style={{ margin: 0, color: "var(--muted)" }}>
           No payout rows for this filter yet.
         </p>
       ) : (
         <div className="card" style={{ display: "grid", gap: "0.85rem" }}>
+          {hasJobQuery ? (
+            <>
+              <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>
+                Matching payout history ({matchingPayoutLines.length})
+              </h2>
+              <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
+                Showing every matching payout line so account managers can review when and how much was paid.
+              </p>
+              <div className="table-responsive">
+                <table className="table table-data">
+                  <thead>
+                    <tr>
+                      <th>Job</th>
+                      <th>Salesperson</th>
+                      <th className="cell-num">Amount</th>
+                      <th>Posted date</th>
+                      <th>Paycheck date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matchingPayoutLines.map((line) => (
+                      <tr key={`match-${line.id}`}>
+                        <td style={{ maxWidth: 320 }}>
+                          {line.jobNumber ? <span className="cell-strong">{line.jobNumber}</span> : <span className="cell-muted">No linked job</span>}
+                          {line.jobName ? (
+                            <div className="cell-sub cell-muted" style={{ marginTop: 2 }}>
+                              {line.jobName}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="cell-nowrap">{line.salespersonName}</td>
+                        <td className="cell-num">{money2(line.amount)}</td>
+                        <td className="cell-muted cell-nowrap">{formatDateInEastern(line.postedAt)}</td>
+                        <td className="cell-muted cell-nowrap">{formatDateInEastern(line.payPeriodDate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : null}
           <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700 }}>By paycheck date (all reps combined)</h2>
           <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
             Click a row to expand and see every posted payout line in that check bucket.
@@ -141,7 +271,7 @@ export default async function PayoutSummaryPage({
                 </tr>
               </thead>
               <tbody>
-                {byRep.map((s) => (
+                {filteredByRep.map((s) => (
                   <tr key={`${s.payPeriodLabel}|${s.salespersonName}`}>
                     <td>{formatDateInEastern(s.periodSortDate)}</td>
                     <td className="cell-nowrap">{s.salespersonName}</td>
