@@ -26,6 +26,13 @@ function num(
   return v.toNumber();
 }
 
+function percentNumber(v: Prisma.Decimal | number | null | undefined): number {
+  const n = num(v);
+  if (!Number.isFinite(n)) return NaN;
+  // Support both stored styles: decimal fraction (0.356) and percent points (35.6).
+  return Math.abs(n) <= 1.05 ? n * 100 : n;
+}
+
 export type JobHighlightRules = {
   strongGpPct: number;
   mediumGpPct: number;
@@ -56,7 +63,7 @@ export function jobRowHighlightClass(job: JobLike, rules?: Partial<JobHighlightR
   const r = { ...DEFAULT_JOB_HIGHLIGHT_RULES, ...rules };
   const gp = num(job.gp);
   const rev = revenue(job);
-  const gpPct = num(job.gpPercent);
+  const gpPct = percentNumber(job.gpPercent);
   const st = job.status.toUpperCase();
 
   if (st.includes("CANCEL")) return "row-hl row-hl--warn";
@@ -71,7 +78,7 @@ export function jobRowHighlightClass(job: JobLike, rules?: Partial<JobHighlightR
 
 export function formatGpPercent(job: JobLike): string {
   if (!hasDisplayableGp(job)) return "—";
-  const n = num(job.gpPercent);
+  const n = percentNumber(job.gpPercent);
   if (!Number.isFinite(n) || n === 0) return "—";
   return `${n.toFixed(1)}%`;
 }

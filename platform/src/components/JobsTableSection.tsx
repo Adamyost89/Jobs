@@ -357,13 +357,13 @@ export function JobsTableSection({
     const isClosedPaidStage =
       closedPaidStageTokens.some((token) => statusNorm.includes(token)) ||
       closedPaidStageTokens.some((token) => shownStatusNorm.includes(token));
-    const active = row.paidInFull === true && (isInBilling || isClosedPaidStage);
-    if (!active) return undefined;
-
     const gpPct = toPercentNumber(row.gpPercent);
     const contractAmount = Number.isFinite(row.contractAmount) ? row.contractAmount : 0;
 
+    // Always flag under-32% GP rows red.
     if (Number.isFinite(gpPct) && gpPct < 32) return rowHighlightStyle(h.colors.bad); // red
+    const active = row.paidInFull === true && (isInBilling || isClosedPaidStage);
+    if (!active) return undefined;
     if ((Number.isFinite(gpPct) && gpPct < 50) || contractAmount < 5000) {
       return rowHighlightStyle(h.colors.warn); // yellow
     }
@@ -542,12 +542,16 @@ export function JobsTableSection({
             </>
           ) : null}
           <br />
-          <strong style={{ color: "var(--text)" }}>Row colors</strong> (only when{" "}
-          <strong style={{ color: "var(--text)" }}>Paid in full</strong> and{" "}
-          <strong style={{ color: "var(--text)" }}>Status = In Billing or Paid &amp; Closed</strong>):{" "}
+          <strong style={{ color: "var(--text)" }}>Row colors</strong>:{" "}
           <span className="row-legend" style={legendBad}>
             {h.labels.bad} (GP% &lt;32%)
           </span>{" "}
+          ·{" "}
+          <span style={{ color: "var(--muted)" }}>
+            (other colors apply when <strong style={{ color: "var(--text)" }}>Paid in full</strong> and{" "}
+            <strong style={{ color: "var(--text)" }}>Status = In Billing or Paid &amp; Closed</strong>)
+          </span>
+          {" "}
           ·{" "}
           <span className="row-legend" style={legendWarn}>
             {h.labels.warn} (GP% &lt;50% or Contract &lt;$5,000)

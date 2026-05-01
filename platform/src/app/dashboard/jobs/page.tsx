@@ -60,6 +60,12 @@ function marginPctForJob(revenue: number, cost: number, gp: number): number | nu
   return gp / revenue * 100;
 }
 
+function normalizePercentValue(v: number): number | null {
+  if (!Number.isFinite(v)) return null;
+  if (Math.abs(v) <= 1.05) return v * 100;
+  return v;
+}
+
 function pickString(v: string | string[] | undefined): string | undefined {
   if (v === undefined) return undefined;
   return Array.isArray(v) ? v[0] : v;
@@ -169,19 +175,6 @@ export default async function JobsPage({
   let where: Prisma.JobWhereInput =
     parts.length === 0 ? {} : parts.length === 1 ? parts[0]! : { AND: parts };
 
-  const salespeople = await prisma.salesperson.findMany({
-    orderBy: { name: "asc" },
-  });
-  const salespersonOptions = (() => {
-    const byName = new Map<string, { id: string; name: string }>();
-    for (const s of salespeople) {
-      const display = displaySalespersonName(s.name);
-      const key = display.toLowerCase();
-      if (!byName.has(key)) byName.set(key, { id: s.id, name: display });
-    }
-    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
-  })();
-
   /** Signed-month slice matches report charts (Chicago calendar month of `contractSignedAt`). */
   let signedMonthFilter: number | undefined;
   if (!signedUndated && signedMonthInt !== undefined) {
@@ -204,6 +197,69 @@ export default async function JobsPage({
       .map((j) => j.id);
     where = { AND: [baseWhere, ids.length > 0 ? { id: { in: ids } } : { id: "__none__" }] };
   }
+
+  // Salesperson filter options should reflect who has jobs in the current sheet slice,
+  // not everyone in historical data. Keep this independent of selected salesperson/search.
+  const salespersonOptionParts: Prisma.JobWhereInput[] = [];
+  if (!canViewAllJobs(user)) {
+    salespersonOptionParts.push(
+      user.salespersonIds.length > 0
+        ? { salespersonId: { in: user.salespersonIds } }
+        : { id: "__none__" }
+    );
+  }
+  if (yearInt !== undefined) salespersonOptionParts.push({ year: yearInt });
+  if (signedUndated) salespersonOptionParts.push({ contractSignedAt: null });
+  salespersonOptionParts.push({
+    NOT: {
+      AND: [
+        { status: "UNKNOWN" },
+        { leadNumber: null },
+        { salespersonId: null },
+        { contractAmount: { equals: 0 } },
+        { invoicedTotal: { equals: 0 } },
+        { changeOrders: { equals: 0 } },
+        { projectRevenue: { equals: 0 } },
+        { OR: [{ name: null }, { name: "" }] },
+      ],
+    },
+  });
+  let salespersonOptionsWhere: Prisma.JobWhereInput =
+    salespersonOptionParts.length === 0
+      ? {}
+      : salespersonOptionParts.length === 1
+        ? salespersonOptionParts[0]!
+        : { AND: salespersonOptionParts };
+  if (!signedUndated && signedMonthInt !== undefined) {
+    const whereWithDate: Prisma.JobWhereInput = {
+      AND: [salespersonOptionsWhere, { contractSignedAt: { not: null } }],
+    };
+    const candidates = await prisma.job.findMany({
+      where: whereWithDate,
+      select: { id: true, contractSignedAt: true },
+    });
+    const ids = candidates
+      .filter((j) => j.contractSignedAt != null && signedCalendarMonthForChart(j.contractSignedAt) === signedMonthInt)
+      .map((j) => j.id);
+    salespersonOptionsWhere = {
+      AND: [salespersonOptionsWhere, ids.length > 0 ? { id: { in: ids } } : { id: "__none__" }],
+    };
+  }
+  const salespersonOptionRows = await prisma.job.findMany({
+    where: salespersonOptionsWhere,
+    select: { salesperson: { select: { id: true, name: true } } },
+    take: 5000,
+  });
+  const salespersonOptions = (() => {
+    const byName = new Map<string, { id: string; name: string }>();
+    for (const row of salespersonOptionRows) {
+      if (!row.salesperson) continue;
+      const display = displaySalespersonName(row.salesperson.name);
+      const key = display.toLowerCase();
+      if (!byName.has(key)) byName.set(key, { id: row.salesperson.id, name: display });
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
 
   // Build status options from the current base slice (before status filtering),
   // using the same display logic as the table column.
@@ -273,12 +329,15 @@ export default async function JobsPage({
     const invoicedTotal = j.invoicedTotal.toNumber();
     const amountPaid = j.amountPaid?.toNumber() ?? null;
     const gp = canSeeGp ? j.gp.toNumber() : 0;
+    const gpPercentRaw = canSeeGp ? j.gpPercent.toNumber() : 0;
+    const gpPercentNormalized = canSeeGp ? normalizePercentValue(gpPercentRaw) : null;
     const cost = j.cost.toNumber();
     const revenue = contractAmount + changeOrders;
     const derivedGpMargin = canSeeGp ? marginPctForJob(revenue, cost, gp) : null;
+    const effectiveMargin = gpPercentNormalized != null ? gpPercentNormalized : derivedGpMargin;
     const insuranceJob = isInsuranceCustomerName(j.name);
-    const retailPercent = derivedGpMargin != null && !insuranceJob ? derivedGpMargin : null;
-    const insurancePercent = derivedGpMargin != null && insuranceJob ? derivedGpMargin : null;
+    const retailPercent = effectiveMargin != null && !insuranceJob ? effectiveMargin : null;
+    const insurancePercent = effectiveMargin != null && insuranceJob ? effectiveMargin : null;
     const paidInFullDerived =
       j.paidInFull ||
       looksPaidAndClosedStatus(j.status) ||
@@ -303,7 +362,7 @@ export default async function JobsPage({
       cost,
       paidInFull: paidInFullDerived,
       gp,
-      gpPercent: canSeeGp ? j.gpPercent.toNumber() : 0,
+      gpPercent: canSeeGp ? (effectiveMargin ?? 0) : 0,
       projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
       commPaid: cx ? cx.paid : null,
       commOwed: cx ? cx.owed : null,
