@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { normalizeChangeOrdersWhenPaidMatchesContract } from "@/lib/job-change-order-normalization";
+import { reconcileChangeOrdersFromPaidAndContract } from "@/lib/job-change-order-normalization";
 import { recalculateAllJobsAndCommissions } from "@/lib/job-workflow";
 
 export async function POST() {
@@ -12,7 +12,7 @@ export async function POST() {
   }
 
   try {
-    const { scanned, matched, updated } = await normalizeChangeOrdersWhenPaidMatchesContract(prisma);
+    const { scanned, matched, updated } = await reconcileChangeOrdersFromPaidAndContract(prisma);
     const { totalJobs } = await recalculateAllJobsAndCommissions();
     await prisma.auditLog.create({
       data: {

@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 import { normalizeStatus } from "@/lib/status";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
 import { pickJobScalarWriteFields } from "@/lib/job-prisma-write-fields";
+import { deriveChangeOrdersNumber, moneyEq, MONEY_EPSILON } from "@/lib/change-orders";
 import {
   buildModernColumnMapManualOnly,
   cell,
@@ -247,24 +248,15 @@ type ParsedRow = {
   paidDate: Date | null;
 };
 
-const MONEY_EPSILON = 0.005;
-
-function moneyEq(a: number | null | undefined, b: number | null | undefined, epsilon = MONEY_EPSILON): boolean {
-  if (a === null || a === undefined || b === null || b === undefined) return false;
-  return Math.abs(a - b) <= epsilon;
-}
-
 /**
  * Import safety net:
  * When Amount Paid is present, derive Change Orders from paid vs contract.
  * This keeps CO aligned even if source CO columns are mis-mapped.
  */
 function normalizeParsedFinancials(p: ParsedRow): ParsedRow {
-  if (p.amountPaid != null) {
-    const derived = p.amountPaid - p.contractAmount;
-    if (!moneyEq(derived, p.changeOrders)) {
-      return { ...p, changeOrders: derived };
-    }
+  const derived = deriveChangeOrdersNumber(p.contractAmount, p.amountPaid);
+  if (derived !== null && !moneyEq(derived, p.changeOrders)) {
+    return { ...p, changeOrders: derived };
   }
   return p;
 }

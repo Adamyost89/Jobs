@@ -6,6 +6,7 @@ import { getSession } from "@/lib/session";
 import { canEditJobs } from "@/lib/rbac";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
 import { normalizeStatus } from "@/lib/status";
+import { deriveChangeOrdersNumber } from "@/lib/change-orders";
 
 const patchSchema = z
   .object({
@@ -80,6 +81,15 @@ export async function PATCH(
         : new Date(p.contractSignedAt as string);
   }
   if (p.drewParticipation !== undefined) data.drewParticipation = p.drewParticipation;
+
+  const effectiveContractAmount =
+    p.contractAmount !== undefined ? p.contractAmount : job.contractAmount.toNumber();
+  const effectiveAmountPaid =
+    p.amountPaid !== undefined ? p.amountPaid : (job.amountPaid ? job.amountPaid.toNumber() : null);
+  const derivedChangeOrders = deriveChangeOrdersNumber(effectiveContractAmount, effectiveAmountPaid);
+  if (derivedChangeOrders !== null) {
+    data.changeOrders = new Prisma.Decimal(derivedChangeOrders.toFixed(2));
+  }
 
   await prisma.job.update({
     where: { id },

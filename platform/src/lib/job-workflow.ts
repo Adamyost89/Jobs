@@ -6,6 +6,7 @@ import { commissionPlanForJobYear } from "./commission-plan-defaults";
 import { loadCommissionTierTotalsForYear } from "./commission-tier-totals";
 import { loadSalespersonFlagsByName } from "./salespeople-kind-db";
 import { resolveOrCreateSalespersonByName } from "./salesperson-name";
+import { deriveChangeOrdersNumber, moneyEq } from "./change-orders";
 
 function dec(n: Prisma.Decimal | number | string): number {
   if (n instanceof Prisma.Decimal) return n.toNumber();
@@ -82,12 +83,23 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
       salesperson: true,
     },
   });
-  const { gp: computedGp, gpPercent: computedGpPct } = computeGpFields(job);
+  const derivedChangeOrders = deriveChangeOrdersNumber(job.contractAmount, job.amountPaid);
+  const effectiveChangeOrders =
+    derivedChangeOrders !== null ? derivedChangeOrders : dec(job.changeOrders);
+  const gpJob = {
+    ...job,
+    changeOrders: new Prisma.Decimal(effectiveChangeOrders.toFixed(2)),
+  };
+  const { gp: computedGp, gpPercent: computedGpPct } = computeGpFields(gpJob);
   const gp = shouldFigureJobGp(job) ? computedGp : job.gp;
   const gpPercent = shouldFigureJobGp(job) ? computedGpPct : job.gpPercent;
+  const updateData: Prisma.JobUpdateInput = { gp, gpPercent };
+  if (derivedChangeOrders !== null && !moneyEq(effectiveChangeOrders, dec(job.changeOrders))) {
+    updateData.changeOrders = new Prisma.Decimal(effectiveChangeOrders.toFixed(2));
+  }
   await prisma.job.update({
     where: { id: jobId },
-    data: { gp, gpPercent },
+    data: updateData,
   });
 
   const cfg = await prisma.systemConfig.findUnique({
@@ -114,7 +126,7 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
 
   const jobIdNum = parseInt(String(job.leadNumber || ""), 10) || 0;
 
-  const basis = dec(job.projectRevenue) > 0 ? dec(job.projectRevenue) : dec(job.contractAmount) + dec(job.changeOrders);
+  const basis = dec(job.projectRevenue) > 0 ? dec(job.projectRevenue) : dec(job.contractAmount) + effectiveChangeOrders;
   const commissionableTotal = dec(job.invoicedTotal) > 0 ? dec(job.invoicedTotal) : basis;
   // Commission earning follows actual customer cash collected (Amount Paid) only.
   const customerPaid = Math.max(0, dec(job.amountPaid ?? 0));

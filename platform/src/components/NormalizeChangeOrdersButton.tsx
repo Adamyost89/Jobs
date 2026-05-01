@@ -39,8 +39,8 @@ export function NormalizeChangeOrdersButton() {
       <div style={{ display: "grid", gap: "0.2rem" }}>
         <strong style={{ fontSize: "0.9rem" }}>Super Admin cleanup</strong>
         <p style={{ margin: 0, fontSize: "0.82rem", color: "var(--muted)" }}>
-          Force <code>changeOrders = 0</code> when <code>amountPaid</code> equals <code>contractAmount</code>.
-          Then recompute all job/commission calculations.
+          Recompute <code>changeOrders</code> as <code>amountPaid - contractAmount</code> (including negatives) when{" "}
+          <code>amountPaid</code> is present. Then recompute all job/commission calculations.
         </p>
       </div>
       <div>
