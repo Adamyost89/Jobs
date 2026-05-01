@@ -37,6 +37,26 @@ function weightedGpMargin(gp: number, revenue: number): number | null {
   return Number.isFinite(v) ? v : null;
 }
 
+function normalizePercentValue(v: number): number | null {
+  if (!Number.isFinite(v)) return null;
+  return Math.abs(v) <= 1.05 ? v * 100 : v;
+}
+
+function effectiveGpForJob(
+  revenue: number,
+  cost: number,
+  gp: number,
+  gpPercent: number,
+  costingComplete: boolean
+): number {
+  if (!Number.isFinite(revenue) || revenue <= 0.005) return 0;
+  if (costingComplete && Number.isFinite(cost) && Math.abs(cost) > 0.005) return revenue - cost;
+  if (Number.isFinite(gp) && Math.abs(gp) > 0.005) return gp;
+  const gpPctNorm = normalizePercentValue(gpPercent);
+  if (gpPctNorm != null) return revenue * (gpPctNorm / 100);
+  return 0;
+}
+
 /**
  * Account-manager style rollup for one work year (matches sheet “AM / # contracts / …” table).
  */
@@ -107,7 +127,13 @@ export async function loadAmSummaryForYear(
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = c + co;
     const paid = num(j.amountPaid);
-    const g = num(j.gp);
+    const g = effectiveGpForJob(
+      revenue,
+      num((j as { cost?: { toNumber: () => number } | null }).cost),
+      num(j.gp),
+      num((j as { gpPercent?: { toNumber: () => number } | null }).gpPercent),
+      (j as { costingComplete?: boolean | null }).costingComplete === true
+    );
     row.jobCount += 1;
     row.contractAmt += c;
     row.changeOrders += co;
@@ -174,7 +200,13 @@ export async function loadAmSummaryForYear(
     const rawCo = num(j.changeOrders);
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = num(j.contractAmount) + co;
-    const gp = num(j.gp);
+    const gp = effectiveGpForJob(
+      revenue,
+      num((j as { cost?: { toNumber: () => number } | null }).cost),
+      num(j.gp),
+      num((j as { gpPercent?: { toNumber: () => number } | null }).gpPercent),
+      (j as { costingComplete?: boolean | null }).costingComplete === true
+    );
     if (isInsuranceCustomerName(j.name)) {
       grandInsRevenue += revenue;
       grandInsGp += gp;
