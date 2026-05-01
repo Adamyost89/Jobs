@@ -47,7 +47,7 @@ function isPaidAndClosedLabel(raw: string | null | undefined): boolean {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
-  return s === "paid closed";
+  return s === "paid closed" || s === "invoice paid";
 }
 
 function marginPctForJob(revenue: number, cost: number, gp: number): number | null {
@@ -64,10 +64,16 @@ function normalizePercentValue(v: number): number | null {
   return v;
 }
 
-function effectiveGpForJob(revenue: number, cost: number, gp: number, gpPercentNormalized: number | null): number {
+function effectiveGpForJob(
+  revenue: number,
+  cost: number,
+  gp: number,
+  gpPercentNormalized: number | null,
+  useRealizedGp: boolean
+): number {
   if (!Number.isFinite(revenue) || revenue <= MONEY_EPSILON) return 0;
-  // Prefer revenue-cost whenever we have a real cost number.
-  if (Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON) return revenue - cost;
+  // Only use realized revenue-cost GP for paid-close lifecycle rows.
+  if (useRealizedGp && Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON) return revenue - cost;
   if (Number.isFinite(gp) && Math.abs(gp) > MONEY_EPSILON) return gp;
   if (gpPercentNormalized != null) return revenue * (gpPercentNormalized / 100);
   return 0;
@@ -340,16 +346,14 @@ export default async function JobsPage({
     const gpPercentNormalized = canSeeGp ? normalizePercentValue(gpPercentRaw) : null;
     const cost = j.cost.toNumber();
     const revenue = contractAmount + changeOrders;
-    const effectiveGp = canSeeGp ? effectiveGpForJob(revenue, cost, gp, gpPercentNormalized) : 0;
-    const effectiveMargin = canSeeGp ? marginPctForJob(revenue, cost, effectiveGp) : null;
+    const shownStatus = statusColumnLabel(j.status, j.prolineStage);
+    const useRealizedGp = isPaidAndClosedLabel(shownStatus);
+    const effectiveGp = canSeeGp ? effectiveGpForJob(revenue, cost, gp, gpPercentNormalized, useRealizedGp) : 0;
+    const effectiveMargin = canSeeGp ? marginPctForJob(revenue, useRealizedGp ? cost : 0, effectiveGp) : null;
     const insuranceJob = isInsuranceCustomerName(j.name);
     const retailPercent = effectiveMargin != null && !insuranceJob ? effectiveMargin : null;
     const insurancePercent = effectiveMargin != null && insuranceJob ? effectiveMargin : null;
-    const paidAndClosed = isPaidAndClosedLabel(j.status) || isPaidAndClosedLabel(j.prolineStage);
-    const paidInFullDerived =
-      paidAndClosed ||
-      j.paidInFull ||
-      (amountPaid != null && invoicedTotal > MONEY_EPSILON && Math.abs(amountPaid - invoicedTotal) <= MONEY_EPSILON);
+    const paidInFullDerived = useRealizedGp;
     return {
       id: j.id,
       jobNumber: j.jobNumber,

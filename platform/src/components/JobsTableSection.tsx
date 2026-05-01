@@ -349,13 +349,13 @@ export function JobsTableSection({
     const shownStatus = statusColumnLabel(row.status, row.prolineStage);
     const normalize = (s: string): string => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const shownStatusNorm = normalize(shownStatus);
-    const isPaidAndClosedStage = shownStatusNorm === "paid closed";
+    const isPaidCloseStage = shownStatusNorm === "paid closed" || shownStatusNorm === "invoice paid";
     const gpPct = toPercentNumber(row.gpPercent);
     const contractAmount = Number.isFinite(row.contractAmount) ? row.contractAmount : 0;
 
     // Always flag under-32% GP rows red.
     if (Number.isFinite(gpPct) && gpPct < 32) return rowHighlightStyle(h.colors.bad); // red
-    const active = isPaidAndClosedStage;
+    const active = isPaidCloseStage;
     if (!active) return undefined;
     if ((Number.isFinite(gpPct) && gpPct < 50) || contractAmount < 5000) {
       return rowHighlightStyle(h.colors.warn); // yellow
@@ -541,7 +541,7 @@ export function JobsTableSection({
           </span>{" "}
           ·{" "}
           <span style={{ color: "var(--muted)" }}>
-            (other colors apply when <strong style={{ color: "var(--text)" }}>Status = Paid &amp; Closed</strong>)
+            (other colors apply when <strong style={{ color: "var(--text)" }}>Status = Paid &amp; Closed or Invoice Paid</strong>)
           </span>
           {" "}
           ·{" "}
