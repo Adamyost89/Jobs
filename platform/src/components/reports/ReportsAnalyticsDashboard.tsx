@@ -146,40 +146,7 @@ export function ReportsAnalyticsDashboard({ defaultYear }: { defaultYear: number
     return keys;
   }, [data]);
 
-  const grand = useMemo(() => {
-    if (!data?.repSummaries.length) return null;
-    const base = data.repSummaries.reduce(
-      (a, r) => ({
-        jobCount: a.jobCount + r.jobCount,
-        contractAmt: a.contractAmt + r.contractAmt,
-        changeOrders: a.changeOrders + r.changeOrders,
-        total: a.total + r.total,
-        gp: a.gp + r.gp,
-        openJobs: a.openJobs + r.openJobs,
-      }),
-      { jobCount: 0, contractAmt: 0, changeOrders: 0, total: 0, gp: 0, openJobs: 0 }
-    );
-    let rw = 0;
-    let rc = 0;
-    let iw = 0;
-    let ic = 0;
-    for (const r of data.repSummaries) {
-      if (r.retailPct != null && r.contractAmt > 0) {
-        rw += r.retailPct * r.contractAmt;
-        rc += r.contractAmt;
-      }
-      if (r.insurancePct != null && r.contractAmt > 0) {
-        iw += r.insurancePct * r.contractAmt;
-        ic += r.contractAmt;
-      }
-    }
-    return {
-      ...base,
-      retailPct: rc > 0 ? rw / rc : null,
-      insurancePct: ic > 0 ? iw / ic : null,
-      gpPctOfTotal: base.total > 0.005 ? (base.gp / base.total) * 100 : null,
-    };
-  }, [data?.repSummaries]);
+  const grand = data?.grandSummary ?? null;
 
   const lineData = data?.yearlyTrend ?? [];
 

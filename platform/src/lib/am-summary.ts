@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { isInsuranceCustomerName } from "@/lib/insurance-job";
 
 export type AmSummaryRow = {
   salespersonId: string | null;
@@ -12,8 +13,9 @@ export type AmSummaryRow = {
   gp: number;
   openJobs: number;
   avgPerContract: number;
-  /** Contract-weighted mean retail %, or null if no data */
+  /** Revenue-weighted (contract + CO) gross profit margin for retail jobs (name does not start with INS). */
   retailPct: number | null;
+  /** Revenue-weighted (contract + CO) gross profit margin for insurance jobs (name starts with INS). */
   insurancePct: number | null;
   /** GP% of total revenue (total > 0) */
   gpPctOfTotal: number | null;
@@ -26,27 +28,11 @@ function num(d: { toNumber: () => number } | null | undefined): number {
   return d.toNumber();
 }
 
-/** Optional Job columns added in schema — present at runtime only after `npx prisma generate`. */
-type JobSheetPct = {
-  retailPercent?: { toNumber: () => number } | null;
-  insurancePercent?: { toNumber: () => number } | null;
-};
-
-function weightedPct(
-  jobs: { contractAmount: { toNumber: () => number }; pct: { toNumber: () => number } | null }[]
-): number | null {
-  let w = 0;
-  let c = 0;
-  for (const j of jobs) {
-    const pct = j.pct;
-    if (!pct) continue;
-    const co = j.contractAmount.toNumber();
-    if (co <= 0) continue;
-    w += pct.toNumber() * co;
-    c += co;
-  }
-  if (c <= 0) return null;
-  const v = w / c;
+function weightedGpMargin(gp: number, revenue: number): number | null {
+  let revenueTotal = 0;
+  if (revenue > 0) revenueTotal += revenue;
+  if (revenueTotal <= 0) return null;
+  const v = (gp / revenueTotal) * 100;
   return Number.isFinite(v) ? v : null;
 }
 
@@ -81,8 +67,10 @@ export async function loadAmSummaryForYear(
     paid: number;
     gp: number;
     openJobs: number;
-    jobsForRetail: { contractAmount: { toNumber: () => number }; pct: { toNumber: () => number } | null }[];
-    jobsForIns: { contractAmount: { toNumber: () => number }; pct: { toNumber: () => number } | null }[];
+    retailRevenue: number;
+    retailGp: number;
+    insRevenue: number;
+    insGp: number;
   };
 
   const map = new Map<string, Agg>();
@@ -103,8 +91,10 @@ export async function loadAmSummaryForYear(
         paid: 0,
         gp: 0,
         openJobs: 0,
-        jobsForRetail: [],
-        jobsForIns: [],
+        retailRevenue: 0,
+        retailGp: 0,
+        insRevenue: 0,
+        insGp: 0,
       } satisfies Agg);
     if (row.salespersonId && sid && row.salespersonId !== sid) {
       // Combined display row represents multiple salesperson ids.
@@ -113,6 +103,7 @@ export async function loadAmSummaryForYear(
 
     const c = num(j.contractAmount);
     const co = num(j.changeOrders);
+    const revenue = c + co;
     const paid = num(j.amountPaid);
     const g = num(j.gp);
     row.jobCount += 1;
@@ -122,9 +113,13 @@ export async function loadAmSummaryForYear(
     row.paid += paid;
     row.gp += g;
     if (!j.paidInFull) row.openJobs += 1;
-    const { retailPercent, insurancePercent } = j as JobSheetPct;
-    if (retailPercent) row.jobsForRetail.push({ contractAmount: j.contractAmount, pct: retailPercent });
-    if (insurancePercent) row.jobsForIns.push({ contractAmount: j.contractAmount, pct: insurancePercent });
+    if (isInsuranceCustomerName(j.name)) {
+      row.insRevenue += revenue;
+      row.insGp += g;
+    } else {
+      row.retailRevenue += revenue;
+      row.retailGp += g;
+    }
     map.set(key, row);
   }
 
@@ -140,8 +135,8 @@ export async function loadAmSummaryForYear(
       gp: r.gp,
       openJobs: r.openJobs,
       avgPerContract: r.jobCount > 0 ? r.total / r.jobCount : 0,
-      retailPct: weightedPct(r.jobsForRetail),
-      insurancePct: weightedPct(r.jobsForIns),
+      retailPct: weightedGpMargin(r.retailGp, r.retailRevenue),
+      insurancePct: weightedGpMargin(r.insGp, r.insRevenue),
       gpPctOfTotal: r.total > 0.005 ? (r.gp / r.total) * 100 : null,
     }))
     .sort((a, b) => b.total - a.total);
@@ -169,22 +164,23 @@ export async function loadAmSummaryForYear(
     grand.openJobs += r.openJobs;
   }
   grand.avgPerContract = grand.jobCount > 0 ? grand.total / grand.jobCount : 0;
-  grand.retailPct = weightedPct(
-    jobs
-      .map((j) => {
-        const { retailPercent } = j as JobSheetPct;
-        return retailPercent ? { contractAmount: j.contractAmount, pct: retailPercent } : null;
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null)
-  );
-  grand.insurancePct = weightedPct(
-    jobs
-      .map((j) => {
-        const { insurancePercent } = j as JobSheetPct;
-        return insurancePercent ? { contractAmount: j.contractAmount, pct: insurancePercent } : null;
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null)
-  );
+  let grandRetailRevenue = 0;
+  let grandRetailGp = 0;
+  let grandInsRevenue = 0;
+  let grandInsGp = 0;
+  for (const j of jobs) {
+    const revenue = num(j.contractAmount) + num(j.changeOrders);
+    const gp = num(j.gp);
+    if (isInsuranceCustomerName(j.name)) {
+      grandInsRevenue += revenue;
+      grandInsGp += gp;
+    } else {
+      grandRetailRevenue += revenue;
+      grandRetailGp += gp;
+    }
+  }
+  grand.retailPct = weightedGpMargin(grandRetailGp, grandRetailRevenue);
+  grand.insurancePct = weightedGpMargin(grandInsGp, grandInsRevenue);
   grand.gpPctOfTotal = grand.total > 0.005 ? (grand.gp / grand.total) * 100 : null;
 
   return { rows, grand };

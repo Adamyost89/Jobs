@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/rbac";
 import { canRunFullReports } from "@/lib/rbac";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { isInsuranceCustomerName } from "@/lib/insurance-job";
 import {
   CONTRACT_SIGN_CHART_TIMEZONE,
   CONTRACT_SIGN_MONTH_LABELS,
@@ -27,8 +28,9 @@ export type RepSummaryRow = {
   gp: number;
   avgPerContract: number;
   openJobs: number;
-  /** Contract-weighted mean, null if no jobs carry the field */
+  /** Revenue-weighted gross profit margin for retail jobs (name does not start with INS). */
   retailPct: number | null;
+  /** Revenue-weighted gross profit margin for insurance jobs (name starts with INS). */
   insurancePct: number | null;
   /** GP as % of total revenue for the rep’s book */
   gpPctOfTotal: number | null;
@@ -42,6 +44,17 @@ export type SignedContractsAnalytics = {
   availableYears: number[];
   yearlyTrend: YearlyTrendPoint[];
   repSummaries: RepSummaryRow[];
+  grandSummary: {
+    jobCount: number;
+    contractAmt: number;
+    changeOrders: number;
+    total: number;
+    gp: number;
+    openJobs: number;
+    retailPct: number | null;
+    insurancePct: number | null;
+    gpPctOfTotal: number | null;
+  };
   /** Rows Jan–Dec with dollars (contract + change orders) per rep + Other */
   monthlyStacked: { monthLabel: string; [key: string]: string | number }[];
   /** Total number of signed jobs per monthly row label (Jan–Dec plus optional Undated). */
@@ -57,11 +70,6 @@ export type SignedContractsAnalytics = {
   undatedSignedRevenue: number;
   /** Rep display name → salesperson id for monthly chart drill-down (excludes unmapped / unassigned). */
   salespersonIdByRepName: Record<string, string>;
-};
-
-type JobSheetPct = {
-  retailPercent?: { toNumber: () => number } | null;
-  insurancePercent?: { toNumber: () => number } | null;
 };
 
 function num(d: { toNumber: () => number }): number {
@@ -105,6 +113,7 @@ export async function getSignedContractsAnalytics(
     const c = num(j.contractAmount);
     const co = num(j.changeOrders);
     const g = num(j.gp);
+    const revenue = c + co;
     const row = yearMap.get(j.year) ?? {
       contracts: 0,
       changeOrders: 0,
@@ -114,7 +123,7 @@ export async function getSignedContractsAnalytics(
     };
     row.contracts += c;
     row.changeOrders += co;
-    row.total += c + co;
+    row.total += revenue;
     row.gp += g;
     row.jobCount += 1;
     yearMap.set(j.year, row);
@@ -148,10 +157,10 @@ export async function getSignedContractsAnalytics(
       total: number;
       gp: number;
       openJobs: number;
-      retailW: number;
-      retailContract: number;
-      insW: number;
-      insContract: number;
+      retailGp: number;
+      retailRevenue: number;
+      insGp: number;
+      insRevenue: number;
     }
   >();
 
@@ -161,6 +170,7 @@ export async function getSignedContractsAnalytics(
     const c = num(j.contractAmount);
     const co = num(j.changeOrders);
     const g = num(j.gp);
+    const revenue = c + co;
     const key = name ? `name:${name.toLowerCase()}` : `__unassigned__`;
     const row = repMap.get(key) ?? {
       salespersonId: sid,
@@ -171,10 +181,10 @@ export async function getSignedContractsAnalytics(
       total: 0,
       gp: 0,
       openJobs: 0,
-      retailW: 0,
-      retailContract: 0,
-      insW: 0,
-      insContract: 0,
+      retailGp: 0,
+      retailRevenue: 0,
+      insGp: 0,
+      insRevenue: 0,
     };
     if (row.salespersonId && sid && row.salespersonId !== sid) {
       row.salespersonId = null;
@@ -182,17 +192,15 @@ export async function getSignedContractsAnalytics(
     row.jobCount += 1;
     row.contractAmt += c;
     row.changeOrders += co;
-    row.total += c + co;
+    row.total += revenue;
     row.gp += g;
     if (!j.paidInFull) row.openJobs += 1;
-    const { retailPercent, insurancePercent } = j as JobSheetPct;
-    if (retailPercent && c > 0) {
-      row.retailW += retailPercent.toNumber() * c;
-      row.retailContract += c;
-    }
-    if (insurancePercent && c > 0) {
-      row.insW += insurancePercent.toNumber() * c;
-      row.insContract += c;
+    if (isInsuranceCustomerName(j.name)) {
+      row.insGp += g;
+      row.insRevenue += revenue;
+    } else {
+      row.retailGp += g;
+      row.retailRevenue += revenue;
     }
     repMap.set(key, row);
   }
@@ -208,11 +216,48 @@ export async function getSignedContractsAnalytics(
       gp: r.gp,
       openJobs: r.openJobs,
       avgPerContract: r.jobCount > 0 ? r.total / r.jobCount : 0,
-      retailPct: r.retailContract > 0 ? r.retailW / r.retailContract : null,
-      insurancePct: r.insContract > 0 ? r.insW / r.insContract : null,
+      retailPct: r.retailRevenue > 0 ? (r.retailGp / r.retailRevenue) * 100 : null,
+      insurancePct: r.insRevenue > 0 ? (r.insGp / r.insRevenue) * 100 : null,
       gpPctOfTotal: r.total > 0.005 ? (r.gp / r.total) * 100 : null,
     }))
     .sort((a, b) => b.total - a.total);
+
+  let grandRetailGp = 0;
+  let grandRetailRevenue = 0;
+  let grandInsGp = 0;
+  let grandInsRevenue = 0;
+  const grandSummary = {
+    jobCount: 0,
+    contractAmt: 0,
+    changeOrders: 0,
+    total: 0,
+    gp: 0,
+    openJobs: 0,
+    retailPct: null as number | null,
+    insurancePct: null as number | null,
+    gpPctOfTotal: null as number | null,
+  };
+  for (const j of jobsSummary) {
+    const c = num(j.contractAmount);
+    const co = num(j.changeOrders);
+    const revenue = c + co;
+    grandSummary.jobCount += 1;
+    grandSummary.contractAmt += c;
+    grandSummary.changeOrders += co;
+    grandSummary.total += revenue;
+    grandSummary.gp += num(j.gp);
+    if (!j.paidInFull) grandSummary.openJobs += 1;
+    if (isInsuranceCustomerName(j.name)) {
+      grandInsGp += num(j.gp);
+      grandInsRevenue += revenue;
+    } else {
+      grandRetailGp += num(j.gp);
+      grandRetailRevenue += revenue;
+    }
+  }
+  grandSummary.retailPct = grandRetailRevenue > 0 ? (grandRetailGp / grandRetailRevenue) * 100 : null;
+  grandSummary.insurancePct = grandInsRevenue > 0 ? (grandInsGp / grandInsRevenue) * 100 : null;
+  grandSummary.gpPctOfTotal = grandSummary.total > 0.005 ? (grandSummary.gp / grandSummary.total) * 100 : null;
 
   const jobsMonthly = await prisma.job.findMany({
     where: { ...signedBaseWhere, year: opts.monthlyYear },
@@ -307,6 +352,7 @@ export async function getSignedContractsAnalytics(
     availableYears,
     yearlyTrend,
     repSummaries,
+    grandSummary,
     monthlyStacked,
     monthlySignedCounts,
     monthlyTopRepNames,
