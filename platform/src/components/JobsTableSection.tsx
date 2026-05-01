@@ -6,7 +6,6 @@ import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { JobCostEditor } from "@/components/JobCostEditor";
 import { JobCostingCompleteToggle } from "@/components/JobCostingCompleteToggle";
 import { JobsDashboardPrefsForm } from "@/components/JobsDashboardPrefsForm";
-import { JobPaidInFullToggle } from "@/components/JobPaidInFullToggle";
 import { formatGpPercent, formatJobGpDisplay } from "@/lib/job-row-highlight";
 import type { JobLike } from "@/lib/job-row-highlight";
 import { hasDisplayableGp } from "@/lib/job-workflow";
@@ -123,7 +122,6 @@ export function JobsTableSection({
     amountPaid: string;
     projectRevenue: string;
     paidDate: string;
-    paidInFull: boolean;
     contractSignedAt: string;
   } | null>(null);
   const [editMsg, setEditMsg] = useState<string | null>(null);
@@ -233,7 +231,6 @@ export function JobsTableSection({
       amountPaid: row.amountPaid == null ? "" : String(row.amountPaid),
       projectRevenue: String(row.projectRevenue),
       paidDate: toDateInputValue(row.paidDate),
-      paidInFull: row.paidInFull,
       contractSignedAt: toDateInputValue(row.contractSignedAt),
     };
   }
@@ -305,7 +302,6 @@ export function JobsTableSection({
           ? {
               amountPaid: editForm.amountPaid.trim() ? amountPaid.value : null,
               paidDate: editForm.paidDate.trim() ? editForm.paidDate.trim() : null,
-              paidInFull: editForm.paidInFull,
             }
           : null),
       };
@@ -492,12 +488,6 @@ export function JobsTableSection({
         return (
           <td key={id}>
             <JobCostingCompleteToggle jobId={row.id} initial={row.costingComplete} canEdit={canEdit} />
-          </td>
-        );
-      case "paidInFull":
-        return (
-          <td key={id}>
-            <JobPaidInFullToggle jobId={row.id} initial={row.paidInFull} canEdit={canEdit} />
           </td>
         );
       case "gp": {
@@ -755,16 +745,6 @@ export function JobsTableSection({
                                       value={editForm.paidDate}
                                       onChange={(e) =>
                                         setEditForm((prev) => (prev ? { ...prev, paidDate: e.target.value } : prev))
-                                      }
-                                    />
-                                  </label>
-                                  <label style={{ alignSelf: "end" }}>
-                                    <span style={{ display: "block", marginBottom: "0.45rem" }}>Paid in full</span>
-                                    <input
-                                      type="checkbox"
-                                      checked={editForm.paidInFull}
-                                      onChange={(e) =>
-                                        setEditForm((prev) => (prev ? { ...prev, paidInFull: e.target.checked } : prev))
                                       }
                                     />
                                   </label>
