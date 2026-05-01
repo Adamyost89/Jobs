@@ -43,6 +43,22 @@ function logProlineWebhook(message: string, data: Record<string, unknown>) {
   );
 }
 
+function parseDateLike(value: unknown): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (!s) return null;
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
 export async function GET() {
   return NextResponse.json({
     ok: true,
@@ -373,6 +389,10 @@ export async function POST(req: Request) {
       data.paidInFull = true;
     }
     if (e.paidDate !== undefined) data.paidDate = e.paidDate ? new Date(e.paidDate) : null;
+    {
+      const signedAt = contractSignedAtFromEvent();
+      if (signedAt) data.contractSignedAt = signedAt;
+    }
 
     if (e.salespersonName) {
       const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {
@@ -451,14 +471,14 @@ export async function POST(req: Request) {
       salespersonId = sp?.id ?? null;
     }
     const contract = new Prisma.Decimal((e.contractAmount ?? 0).toFixed(2));
-    const signedAtNow = new Date();
+    const signedAt = contractSignedAtFromEvent() ?? new Date();
     const job = await prisma.job.create({
       data: {
         jobNumber,
         year,
         leadNumber: e.leadNumber ?? null,
         name: e.name ?? null,
-        contractSignedAt: signedAtNow,
+        contractSignedAt: signedAt,
         contractAmount: contract,
         projectRevenue: contract,
         cost: asDecimal(Math.max(0, e.cost ?? 0)),
@@ -514,6 +534,22 @@ export async function POST(req: Request) {
     const d = new Date(t);
     if (Number.isNaN(d.getTime())) return null;
     return d;
+  }
+
+  function contractSignedAtFromEvent(): Date | null {
+    const approved = approvedDateFromEvent();
+    if (approved) return approved;
+    const raw =
+      e.raw && typeof e.raw === "object" && !Array.isArray(e.raw) ? (e.raw as Record<string, unknown>) : {};
+    return (
+      parseDateLike(raw.contractSignedAt) ??
+      parseDateLike(raw.contract_signed_at) ??
+      parseDateLike(raw.signedAt) ??
+      parseDateLike(raw.signed_at) ??
+      parseDateLike(raw.signedDate) ??
+      parseDateLike(raw.signed_date) ??
+      parseDateLike(raw.approved_date)
+    );
   }
 
   function approvedAmountFromEvent(): Prisma.Decimal {
@@ -596,6 +632,7 @@ export async function POST(req: Request) {
     const data: Prisma.JobUpdateInput = {
       contractAmount: nextContractAmount,
       projectRevenue: nextContractAmount,
+      contractSignedAt: approvedDate,
     };
     if (e.name !== undefined) data.name = e.name;
     if (e.prolineJobId) data.prolineJobId = e.prolineJobId;
