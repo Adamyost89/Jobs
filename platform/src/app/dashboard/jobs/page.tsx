@@ -16,6 +16,7 @@ import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { normalizeStatusBadgeColorMap, statusColumnLabel } from "@/lib/status-badge-colors";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
+import { isInsuranceCustomerName } from "@/lib/insurance-job";
 
 /**
  * Jobs list query params (GET):
@@ -37,6 +38,19 @@ type Search = {
   signedMonth?: string;
   signedUndated?: string;
 };
+
+const MONEY_EPSILON = 0.005;
+
+function looksPaidAndClosedStatus(statusRaw: string): boolean {
+  const s = statusRaw.trim().toLowerCase();
+  if (!s) return false;
+  return (
+    s.includes("paid in full") ||
+    s.includes("invoice paid") ||
+    (s.includes("paid") && s.includes("closed")) ||
+    s.includes("complete")
+  );
+}
 
 function pickString(v: string | string[] | undefined): string | undefined {
   if (v === undefined) return undefined;
@@ -246,6 +260,24 @@ export default async function JobsPage({
 
   const tableRows: JobsTableRowDTO[] = jobs.map((j) => {
     const cx = commByJob.get(j.id);
+    const contractAmount = j.contractAmount.toNumber();
+    const changeOrders = j.changeOrders.toNumber();
+    const invoicedTotal = j.invoicedTotal.toNumber();
+    const amountPaid = j.amountPaid?.toNumber() ?? null;
+    const gp = canSeeGp ? j.gp.toNumber() : 0;
+    const revenue = contractAmount + changeOrders;
+    const derivedGpMargin = canSeeGp && revenue > MONEY_EPSILON ? (gp / revenue) * 100 : null;
+    const insuranceJob = isInsuranceCustomerName(j.name);
+    let retailPercent = j.retailPercent?.toNumber() ?? null;
+    let insurancePercent = j.insurancePercent?.toNumber() ?? null;
+    if (derivedGpMargin != null && retailPercent == null && insurancePercent == null) {
+      if (insuranceJob) insurancePercent = derivedGpMargin;
+      else retailPercent = derivedGpMargin;
+    }
+    const paidInFullDerived =
+      j.paidInFull ||
+      looksPaidAndClosedStatus(j.status) ||
+      (amountPaid != null && invoicedTotal > MONEY_EPSILON && Math.abs(amountPaid - invoicedTotal) <= MONEY_EPSILON);
     return {
       id: j.id,
       jobNumber: j.jobNumber,
@@ -256,16 +288,16 @@ export default async function JobsPage({
       salespersonName: j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : null,
       status: j.status,
       prolineStage: j.prolineStage,
-      contractAmount: j.contractAmount.toNumber(),
-      changeOrders: j.changeOrders.toNumber(),
-      invoicedTotal: j.invoicedTotal.toNumber(),
-      amountPaid: j.amountPaid?.toNumber() ?? null,
+      contractAmount,
+      changeOrders,
+      invoicedTotal,
+      amountPaid,
       paidDate: j.paidDate ? j.paidDate.toISOString() : null,
-      retailPercent: j.retailPercent?.toNumber() ?? null,
-      insurancePercent: j.insurancePercent?.toNumber() ?? null,
+      retailPercent,
+      insurancePercent,
       cost: j.cost.toNumber(),
-      paidInFull: j.paidInFull,
-      gp: canSeeGp ? j.gp.toNumber() : 0,
+      paidInFull: paidInFullDerived,
+      gp,
       gpPercent: canSeeGp ? j.gpPercent.toNumber() : 0,
       projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
       commPaid: cx ? cx.paid : null,

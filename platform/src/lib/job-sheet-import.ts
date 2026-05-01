@@ -18,6 +18,7 @@ import {
   type ModernJobColumnMap,
 } from "@/lib/sheet-job-columns";
 import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
+import { isInsuranceCustomerName } from "@/lib/insurance-job";
 
 export type JobSheetLayout = "modern" | "legacy2024";
 
@@ -196,6 +197,17 @@ function boolish(v: unknown): boolean {
   return v === true || v === "TRUE" || v === "true";
 }
 
+function looksPaidAndClosedStatus(statusRaw: string): boolean {
+  const s = statusRaw.trim().toLowerCase();
+  if (!s) return false;
+  return (
+    s.includes("paid in full") ||
+    s.includes("invoice paid") ||
+    (s.includes("paid") && s.includes("closed")) ||
+    s.includes("complete")
+  );
+}
+
 function normalizeLead(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number" && !isNaN(value)) {
@@ -244,12 +256,15 @@ function moneyEq(a: number | null | undefined, b: number | null | undefined, eps
 
 /**
  * Import safety net:
- * If Amount Paid equals Contract Amount, Change Orders should be zero.
- * This prevents a bad/misaligned CO source column from writing false negatives.
+ * When Amount Paid is present, derive Change Orders from paid vs contract.
+ * This keeps CO aligned even if source CO columns are mis-mapped.
  */
 function normalizeParsedFinancials(p: ParsedRow): ParsedRow {
-  if (moneyEq(p.amountPaid, p.contractAmount) && Math.abs(p.changeOrders) > MONEY_EPSILON) {
-    return { ...p, changeOrders: 0 };
+  if (p.amountPaid != null) {
+    const derived = p.amountPaid - p.contractAmount;
+    if (!moneyEq(derived, p.changeOrders)) {
+      return { ...p, changeOrders: derived };
+    }
   }
   return p;
 }
@@ -288,12 +303,16 @@ function parseModernRow(row: unknown[], col: ReturnType<typeof resolveModernJobC
   const retailPercent = percentCell(cell(row, col.retail));
   const insurancePercent = percentCell(cell(row, col.insurance));
   const invoiceFlag = boolish(cell(row, col.billed));
-  const paidInFull = boolish(cell(row, col.paidInFull));
+  const paidInFullCell = boolish(cell(row, col.paidInFull));
   const commOwedFlag =
     row.length > col.commOwed ? boolish(cell(row, col.commOwed)) : false;
   const updateMarker =
     row.length > col.updateThis ? boolish(cell(row, col.updateThis)) : false;
   const statusRaw = cell(row, col.status) != null ? String(cell(row, col.status)) : "";
+  const paidInFullByStatus = looksPaidAndClosedStatus(statusRaw);
+  const paidInFullByAmounts =
+    amountPaid != null && invoicedTotal > MONEY_EPSILON && Math.abs(amountPaid - invoicedTotal) <= MONEY_EPSILON;
+  const paidInFull = paidInFullCell || paidInFullByStatus || paidInFullByAmounts;
   const drewParticipation =
     row.length > col.drewParticipation &&
     cell(row, col.drewParticipation) != null &&
@@ -309,6 +328,15 @@ function parseModernRow(row: unknown[], col: ReturnType<typeof resolveModernJobC
         ? invoicedTotal
         : contractAmount + changeOrders;
 
+  const revenue = contractAmount + changeOrders;
+  const gpMarginPct = revenue > MONEY_EPSILON ? (gp / revenue) * 100 : null;
+  let retailPercentFinal = retailPercent;
+  let insurancePercentFinal = insurancePercent;
+  if (gpMarginPct != null && retailPercentFinal == null && insurancePercentFinal == null) {
+    if (isInsuranceCustomerName(name)) insurancePercentFinal = gpMarginPct;
+    else retailPercentFinal = gpMarginPct;
+  }
+
   return {
     leadNumber,
     jobNumber,
@@ -323,8 +351,8 @@ function parseModernRow(row: unknown[], col: ReturnType<typeof resolveModernJobC
     cost,
     gp,
     gpPercent,
-    retailPercent,
-    insurancePercent,
+    retailPercent: retailPercentFinal,
+    insurancePercent: insurancePercentFinal,
     invoiceFlag,
     paidInFull,
     updateMarker,
