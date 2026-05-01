@@ -3,6 +3,7 @@ import type { SessionUser } from "@/lib/rbac";
 import { canRunFullReports } from "@/lib/rbac";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
+import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
 import {
   CONTRACT_SIGN_CHART_TIMEZONE,
   CONTRACT_SIGN_MONTH_LABELS,
@@ -76,6 +77,26 @@ function num(d: { toNumber: () => number }): number {
   return d.toNumber();
 }
 
+function normalizePercentValue(v: number): number | null {
+  if (!Number.isFinite(v)) return null;
+  return Math.abs(v) <= 1.05 ? v * 100 : v;
+}
+
+function effectiveGpForJob(
+  revenue: number,
+  cost: number,
+  gp: number,
+  gpPercent: number,
+  costingComplete: boolean
+): number {
+  if (!Number.isFinite(revenue) || revenue <= 0.005) return 0;
+  if (costingComplete && Number.isFinite(cost) && Math.abs(cost) > 0.005) return revenue - cost;
+  if (Number.isFinite(gp) && Math.abs(gp) > 0.005) return gp;
+  const gpPctNorm = normalizePercentValue(gpPercent);
+  if (gpPctNorm != null) return revenue * (gpPctNorm / 100);
+  return 0;
+}
+
 export async function getSignedContractsAnalytics(
   user: SessionUser,
   opts: { summaryYear: number; monthlyYear: number }
@@ -99,9 +120,14 @@ export async function getSignedContractsAnalytics(
     where: signedBaseWhere,
     select: {
       year: true,
+      status: true,
+      prolineStage: true,
       contractAmount: true,
       changeOrders: true,
+      cost: true,
       gp: true,
+      gpPercent: true,
+      costingComplete: true,
     },
   });
 
@@ -111,9 +137,16 @@ export async function getSignedContractsAnalytics(
   >();
   for (const j of jobsTrend) {
     const c = num(j.contractAmount);
-    const co = num(j.changeOrders);
-    const g = num(j.gp);
+    const rawCo = num(j.changeOrders);
+    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = c + co;
+    const g = effectiveGpForJob(
+      revenue,
+      num(j.cost),
+      num(j.gp),
+      num(j.gpPercent),
+      j.costingComplete === true
+    );
     const row = yearMap.get(j.year) ?? {
       contracts: 0,
       changeOrders: 0,
@@ -168,9 +201,16 @@ export async function getSignedContractsAnalytics(
     const sid = j.salespersonId;
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const c = num(j.contractAmount);
-    const co = num(j.changeOrders);
-    const g = num(j.gp);
+    const rawCo = num(j.changeOrders);
+    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = c + co;
+    const g = effectiveGpForJob(
+      revenue,
+      num(j.cost),
+      num(j.gp),
+      num(j.gpPercent),
+      j.costingComplete === true
+    );
     const key = name ? `name:${name.toLowerCase()}` : `__unassigned__`;
     const row = repMap.get(key) ?? {
       salespersonId: sid,
@@ -239,19 +279,27 @@ export async function getSignedContractsAnalytics(
   };
   for (const j of jobsSummary) {
     const c = num(j.contractAmount);
-    const co = num(j.changeOrders);
+    const rawCo = num(j.changeOrders);
+    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = c + co;
     grandSummary.jobCount += 1;
     grandSummary.contractAmt += c;
     grandSummary.changeOrders += co;
     grandSummary.total += revenue;
-    grandSummary.gp += num(j.gp);
+    const gp = effectiveGpForJob(
+      revenue,
+      num(j.cost),
+      num(j.gp),
+      num(j.gpPercent),
+      j.costingComplete === true
+    );
+    grandSummary.gp += gp;
     if (!j.paidInFull) grandSummary.openJobs += 1;
     if (isInsuranceCustomerName(j.name)) {
-      grandInsGp += num(j.gp);
+      grandInsGp += gp;
       grandInsRevenue += revenue;
     } else {
-      grandRetailGp += num(j.gp);
+      grandRetailGp += gp;
       grandRetailRevenue += revenue;
     }
   }
@@ -264,6 +312,8 @@ export async function getSignedContractsAnalytics(
     select: {
       contractSignedAt: true,
       createdAt: true,
+      status: true,
+      prolineStage: true,
       contractAmount: true,
       changeOrders: true,
       salesperson: { select: { id: true, name: true } },
@@ -286,7 +336,9 @@ export async function getSignedContractsAnalytics(
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const sid = j.salesperson?.id;
     if (sid && !salespersonIdByRepName[name]) salespersonIdByRepName[name] = sid;
-    const dollars = num(j.contractAmount) + num(j.changeOrders);
+    const rawCo = num(j.changeOrders);
+    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const dollars = num(j.contractAmount) + co;
     repTotals.set(name, (repTotals.get(name) ?? 0) + dollars);
 
     if (j.contractSignedAt) {
