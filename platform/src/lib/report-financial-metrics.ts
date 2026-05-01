@@ -55,24 +55,18 @@ function num(d: { toNumber: () => number }): number {
   return d.toNumber();
 }
 
-function normalizePercentValue(v: number): number | null {
-  if (!Number.isFinite(v)) return null;
-  return Math.abs(v) <= 1.05 ? v * 100 : v;
-}
-
 function effectiveGpForJob(
   revenue: number,
   cost: number,
-  gp: number,
-  gpPercent: number,
   costingComplete: boolean
 ): number {
   if (!Number.isFinite(revenue) || revenue <= 0.005) return 0;
-  if (costingComplete && Number.isFinite(cost) && Math.abs(cost) > 0.005) return revenue - cost;
-  if (Number.isFinite(gp) && Math.abs(gp) > 0.005) return gp;
-  const gpPctNorm = normalizePercentValue(gpPercent);
-  if (gpPctNorm != null) return revenue * (gpPctNorm / 100);
-  return 0;
+  if (!costingComplete) return 0;
+  return revenue - (Number.isFinite(cost) ? cost : 0);
+}
+
+function hasGpData(costingComplete: boolean): boolean {
+  return costingComplete;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -198,7 +192,8 @@ export async function getFinancialMetricsAnalytics(
     const inv = num(j.invoicedTotal);
     const cost = num(j.cost);
     const revenue = c + co;
-    const g = effectiveGpForJob(revenue, cost, num(j.gp), num(j.gpPercent), j.costingComplete === true);
+    const gpReady = hasGpData(j.costingComplete === true);
+    const g = effectiveGpForJob(revenue, cost, j.costingComplete === true);
     const row =
       yearMap.get(j.year) ??
       {
@@ -216,7 +211,7 @@ export async function getFinancialMetricsAnalytics(
     row.totalRevenue += revenue;
     row.totalInvoiced += inv;
     row.totalCost += cost;
-    row.totalGp += g;
+    if (gpReady) row.totalGp += g;
     yearMap.set(j.year, row);
   }
 
@@ -268,7 +263,8 @@ export async function getFinancialMetricsAnalytics(
     const inv = num(j.invoicedTotal);
     const cost = num(j.cost);
     const revenue = c + co;
-    const g = effectiveGpForJob(revenue, cost, num(j.gp), num(j.gpPercent), j.costingComplete === true);
+    const gpReady = hasGpData(j.costingComplete === true);
+    const g = effectiveGpForJob(revenue, cost, j.costingComplete === true);
     const key = name ? `name:${name.toLowerCase()}` : `__unassigned__`;
     const row =
       repMap.get(key) ??
@@ -292,7 +288,7 @@ export async function getFinancialMetricsAnalytics(
     row.totalRevenue += revenue;
     row.totalInvoiced += inv;
     row.totalCost += cost;
-    row.totalGp += g;
+    if (gpReady) row.totalGp += g;
     repMap.set(key, row);
   }
 

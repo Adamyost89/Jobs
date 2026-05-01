@@ -37,24 +37,18 @@ function weightedGpMargin(gp: number, revenue: number): number | null {
   return Number.isFinite(v) ? v : null;
 }
 
-function normalizePercentValue(v: number): number | null {
-  if (!Number.isFinite(v)) return null;
-  return Math.abs(v) <= 1.05 ? v * 100 : v;
-}
-
 function effectiveGpForJob(
   revenue: number,
   cost: number,
-  gp: number,
-  gpPercent: number,
   costingComplete: boolean
 ): number {
   if (!Number.isFinite(revenue) || revenue <= 0.005) return 0;
-  if (costingComplete && Number.isFinite(cost) && Math.abs(cost) > 0.005) return revenue - cost;
-  if (Number.isFinite(gp) && Math.abs(gp) > 0.005) return gp;
-  const gpPctNorm = normalizePercentValue(gpPercent);
-  if (gpPctNorm != null) return revenue * (gpPctNorm / 100);
-  return 0;
+  if (!costingComplete) return 0;
+  return revenue - (Number.isFinite(cost) ? cost : 0);
+}
+
+function hasGpData(costingComplete: boolean): boolean {
+  return costingComplete;
 }
 
 /**
@@ -87,6 +81,7 @@ export async function loadAmSummaryForYear(
     total: number;
     paid: number;
     gp: number;
+    gpRevenue: number;
     openJobs: number;
     retailRevenue: number;
     retailGp: number;
@@ -111,6 +106,7 @@ export async function loadAmSummaryForYear(
         total: 0,
         paid: 0,
         gp: 0,
+        gpRevenue: 0,
         openJobs: 0,
         retailRevenue: 0,
         retailGp: 0,
@@ -127,26 +123,31 @@ export async function loadAmSummaryForYear(
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = c + co;
     const paid = num(j.amountPaid);
+    const costingComplete = (j as { costingComplete?: boolean | null }).costingComplete === true;
+    const gpReady = hasGpData(costingComplete);
     const g = effectiveGpForJob(
       revenue,
       num((j as { cost?: { toNumber: () => number } | null }).cost),
-      num(j.gp),
-      num((j as { gpPercent?: { toNumber: () => number } | null }).gpPercent),
-      (j as { costingComplete?: boolean | null }).costingComplete === true
+      costingComplete
     );
     row.jobCount += 1;
     row.contractAmt += c;
     row.changeOrders += co;
     row.total += c + co;
     row.paid += paid;
-    row.gp += g;
+    if (gpReady) {
+      row.gp += g;
+      row.gpRevenue += revenue;
+    }
     if (!j.paidInFull) row.openJobs += 1;
-    if (isInsuranceCustomerName(j.name)) {
-      row.insRevenue += revenue;
-      row.insGp += g;
-    } else {
-      row.retailRevenue += revenue;
-      row.retailGp += g;
+    if (gpReady) {
+      if (isInsuranceCustomerName(j.name)) {
+        row.insRevenue += revenue;
+        row.insGp += g;
+      } else {
+        row.retailRevenue += revenue;
+        row.retailGp += g;
+      }
     }
     map.set(key, row);
   }
@@ -165,7 +166,7 @@ export async function loadAmSummaryForYear(
       avgPerContract: r.jobCount > 0 ? r.total / r.jobCount : 0,
       retailPct: weightedGpMargin(r.retailGp, r.retailRevenue),
       insurancePct: weightedGpMargin(r.insGp, r.insRevenue),
-      gpPctOfTotal: r.total > 0.005 ? (r.gp / r.total) * 100 : null,
+      gpPctOfTotal: r.gpRevenue > 0.005 ? (r.gp / r.gpRevenue) * 100 : null,
     }))
     .sort((a, b) => b.total - a.total);
 
@@ -200,24 +201,28 @@ export async function loadAmSummaryForYear(
     const rawCo = num(j.changeOrders);
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = num(j.contractAmount) + co;
+    const costingComplete = (j as { costingComplete?: boolean | null }).costingComplete === true;
+    const gpReady = hasGpData(costingComplete);
     const gp = effectiveGpForJob(
       revenue,
       num((j as { cost?: { toNumber: () => number } | null }).cost),
-      num(j.gp),
-      num((j as { gpPercent?: { toNumber: () => number } | null }).gpPercent),
-      (j as { costingComplete?: boolean | null }).costingComplete === true
+      costingComplete
     );
-    if (isInsuranceCustomerName(j.name)) {
-      grandInsRevenue += revenue;
-      grandInsGp += gp;
-    } else {
-      grandRetailRevenue += revenue;
-      grandRetailGp += gp;
+    if (gpReady) {
+      if (isInsuranceCustomerName(j.name)) {
+        grandInsRevenue += revenue;
+        grandInsGp += gp;
+      } else {
+        grandRetailRevenue += revenue;
+        grandRetailGp += gp;
+      }
     }
   }
   grand.retailPct = weightedGpMargin(grandRetailGp, grandRetailRevenue);
   grand.insurancePct = weightedGpMargin(grandInsGp, grandInsRevenue);
-  grand.gpPctOfTotal = grand.total > 0.005 ? (grand.gp / grand.total) * 100 : null;
+  grand.gpPctOfTotal = (grandRetailRevenue + grandInsRevenue) > 0.005
+    ? (grand.gp / (grandRetailRevenue + grandInsRevenue)) * 100
+    : null;
 
   return { rows, grand };
 }

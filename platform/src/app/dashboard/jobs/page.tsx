@@ -50,25 +50,14 @@ function marginPctForJob(revenue: number, cost: number, gp: number): number | nu
   return gp / revenue * 100;
 }
 
-function normalizePercentValue(v: number): number | null {
-  if (!Number.isFinite(v)) return null;
-  if (Math.abs(v) <= 1.05) return v * 100;
-  return v;
-}
-
 function effectiveGpForJob(
   revenue: number,
   cost: number,
-  gp: number,
-  gpPercentNormalized: number | null,
   useRealizedGp: boolean
 ): number {
   if (!Number.isFinite(revenue) || revenue <= MONEY_EPSILON) return 0;
-  // Only use realized revenue-cost GP for paid-close lifecycle rows.
-  if (useRealizedGp && Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON) return revenue - cost;
-  if (Number.isFinite(gp) && Math.abs(gp) > MONEY_EPSILON) return gp;
-  if (gpPercentNormalized != null) return revenue * (gpPercentNormalized / 100);
-  return 0;
+  if (!useRealizedGp) return 0;
+  return revenue - (Number.isFinite(cost) ? cost : 0);
 }
 
 function pickString(v: string | string[] | undefined): string | undefined {
@@ -334,14 +323,11 @@ export default async function JobsPage({
     const changeOrders = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawChangeOrders : 0;
     const invoicedTotal = j.invoicedTotal.toNumber();
     const amountPaid = j.amountPaid?.toNumber() ?? null;
-    const gp = canSeeGp ? j.gp.toNumber() : 0;
-    const gpPercentRaw = canSeeGp ? j.gpPercent.toNumber() : 0;
-    const gpPercentNormalized = canSeeGp ? normalizePercentValue(gpPercentRaw) : null;
     const cost = j.cost.toNumber();
     const revenue = contractAmount + changeOrders;
     const useRealizedGp = j.costingComplete === true;
-    const effectiveGp = canSeeGp ? effectiveGpForJob(revenue, cost, gp, gpPercentNormalized, useRealizedGp) : 0;
-    const effectiveMargin = canSeeGp ? marginPctForJob(revenue, useRealizedGp ? cost : 0, effectiveGp) : null;
+    const effectiveGp = canSeeGp ? effectiveGpForJob(revenue, cost, useRealizedGp) : 0;
+    const effectiveMargin = canSeeGp && useRealizedGp ? marginPctForJob(revenue, cost, effectiveGp) : null;
     const insuranceJob = isInsuranceCustomerName(j.name);
     const retailPercent = effectiveMargin != null && !insuranceJob ? effectiveMargin : null;
     const insurancePercent = effectiveMargin != null && insuranceJob ? effectiveMargin : null;

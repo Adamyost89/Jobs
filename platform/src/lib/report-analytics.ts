@@ -77,24 +77,18 @@ function num(d: { toNumber: () => number }): number {
   return d.toNumber();
 }
 
-function normalizePercentValue(v: number): number | null {
-  if (!Number.isFinite(v)) return null;
-  return Math.abs(v) <= 1.05 ? v * 100 : v;
-}
-
 function effectiveGpForJob(
   revenue: number,
   cost: number,
-  gp: number,
-  gpPercent: number,
   costingComplete: boolean
 ): number {
   if (!Number.isFinite(revenue) || revenue <= 0.005) return 0;
-  if (costingComplete && Number.isFinite(cost) && Math.abs(cost) > 0.005) return revenue - cost;
-  if (Number.isFinite(gp) && Math.abs(gp) > 0.005) return gp;
-  const gpPctNorm = normalizePercentValue(gpPercent);
-  if (gpPctNorm != null) return revenue * (gpPctNorm / 100);
-  return 0;
+  if (!costingComplete) return 0;
+  return revenue - (Number.isFinite(cost) ? cost : 0);
+}
+
+function hasGpData(costingComplete: boolean): boolean {
+  return costingComplete;
 }
 
 export async function getSignedContractsAnalytics(
@@ -140,13 +134,8 @@ export async function getSignedContractsAnalytics(
     const rawCo = num(j.changeOrders);
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = c + co;
-    const g = effectiveGpForJob(
-      revenue,
-      num(j.cost),
-      num(j.gp),
-      num(j.gpPercent),
-      j.costingComplete === true
-    );
+    const gpReady = hasGpData(j.costingComplete === true);
+    const g = effectiveGpForJob(revenue, num(j.cost), j.costingComplete === true);
     const row = yearMap.get(j.year) ?? {
       contracts: 0,
       changeOrders: 0,
@@ -157,7 +146,7 @@ export async function getSignedContractsAnalytics(
     row.contracts += c;
     row.changeOrders += co;
     row.total += revenue;
-    row.gp += g;
+    if (gpReady) row.gp += g;
     row.jobCount += 1;
     yearMap.set(j.year, row);
   }
@@ -204,13 +193,8 @@ export async function getSignedContractsAnalytics(
     const rawCo = num(j.changeOrders);
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = c + co;
-    const g = effectiveGpForJob(
-      revenue,
-      num(j.cost),
-      num(j.gp),
-      num(j.gpPercent),
-      j.costingComplete === true
-    );
+    const gpReady = hasGpData(j.costingComplete === true);
+    const g = effectiveGpForJob(revenue, num(j.cost), j.costingComplete === true);
     const key = name ? `name:${name.toLowerCase()}` : `__unassigned__`;
     const row = repMap.get(key) ?? {
       salespersonId: sid,
@@ -233,14 +217,16 @@ export async function getSignedContractsAnalytics(
     row.contractAmt += c;
     row.changeOrders += co;
     row.total += revenue;
-    row.gp += g;
+    if (gpReady) row.gp += g;
     if (!j.paidInFull) row.openJobs += 1;
-    if (isInsuranceCustomerName(j.name)) {
-      row.insGp += g;
-      row.insRevenue += revenue;
-    } else {
-      row.retailGp += g;
-      row.retailRevenue += revenue;
+    if (gpReady) {
+      if (isInsuranceCustomerName(j.name)) {
+        row.insGp += g;
+        row.insRevenue += revenue;
+      } else {
+        row.retailGp += g;
+        row.retailRevenue += revenue;
+      }
     }
     repMap.set(key, row);
   }
@@ -258,7 +244,7 @@ export async function getSignedContractsAnalytics(
       avgPerContract: r.jobCount > 0 ? r.total / r.jobCount : 0,
       retailPct: r.retailRevenue > 0 ? (r.retailGp / r.retailRevenue) * 100 : null,
       insurancePct: r.insRevenue > 0 ? (r.insGp / r.insRevenue) * 100 : null,
-      gpPctOfTotal: r.total > 0.005 ? (r.gp / r.total) * 100 : null,
+      gpPctOfTotal: (r.retailRevenue + r.insRevenue) > 0.005 ? (r.gp / (r.retailRevenue + r.insRevenue)) * 100 : null,
     }))
     .sort((a, b) => b.total - a.total);
 
@@ -286,26 +272,25 @@ export async function getSignedContractsAnalytics(
     grandSummary.contractAmt += c;
     grandSummary.changeOrders += co;
     grandSummary.total += revenue;
-    const gp = effectiveGpForJob(
-      revenue,
-      num(j.cost),
-      num(j.gp),
-      num(j.gpPercent),
-      j.costingComplete === true
-    );
-    grandSummary.gp += gp;
+    const gpReady = hasGpData(j.costingComplete === true);
+    const gp = effectiveGpForJob(revenue, num(j.cost), j.costingComplete === true);
+    if (gpReady) grandSummary.gp += gp;
     if (!j.paidInFull) grandSummary.openJobs += 1;
-    if (isInsuranceCustomerName(j.name)) {
-      grandInsGp += gp;
-      grandInsRevenue += revenue;
-    } else {
-      grandRetailGp += gp;
-      grandRetailRevenue += revenue;
+    if (gpReady) {
+      if (isInsuranceCustomerName(j.name)) {
+        grandInsGp += gp;
+        grandInsRevenue += revenue;
+      } else {
+        grandRetailGp += gp;
+        grandRetailRevenue += revenue;
+      }
     }
   }
   grandSummary.retailPct = grandRetailRevenue > 0 ? (grandRetailGp / grandRetailRevenue) * 100 : null;
   grandSummary.insurancePct = grandInsRevenue > 0 ? (grandInsGp / grandInsRevenue) * 100 : null;
-  grandSummary.gpPctOfTotal = grandSummary.total > 0.005 ? (grandSummary.gp / grandSummary.total) * 100 : null;
+  grandSummary.gpPctOfTotal = (grandRetailRevenue + grandInsRevenue) > 0.005
+    ? (grandSummary.gp / (grandRetailRevenue + grandInsRevenue)) * 100
+    : null;
 
   const jobsMonthly = await prisma.job.findMany({
     where: { ...signedBaseWhere, year: opts.monthlyYear },
