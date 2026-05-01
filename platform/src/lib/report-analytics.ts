@@ -4,6 +4,7 @@ import { canRunFullReports } from "@/lib/rbac";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
 import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { statusColumnLabel } from "@/lib/status-badge-colors";
 import {
   CONTRACT_SIGN_CHART_TIMEZONE,
   CONTRACT_SIGN_MONTH_LABELS,
@@ -89,6 +90,19 @@ function effectiveGpForJob(
 
 function hasGpData(costingComplete: boolean): boolean {
   return costingComplete;
+}
+
+function isOpenJobByStatus(status: string, prolineStage?: string | null): boolean {
+  const shown = statusColumnLabel(status, prolineStage)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return !(
+    shown === "invoice paid" ||
+    shown === "paid closed" ||
+    shown === "paid and closed"
+  );
 }
 
 export async function getSignedContractsAnalytics(
@@ -218,7 +232,7 @@ export async function getSignedContractsAnalytics(
     row.changeOrders += co;
     row.total += revenue;
     if (gpReady) row.gp += g;
-    if (!j.paidInFull) row.openJobs += 1;
+    if (isOpenJobByStatus(j.status, j.prolineStage)) row.openJobs += 1;
     if (gpReady) {
       if (isInsuranceCustomerName(j.name)) {
         row.insGp += g;
@@ -275,7 +289,7 @@ export async function getSignedContractsAnalytics(
     const gpReady = hasGpData(j.costingComplete === true);
     const gp = effectiveGpForJob(revenue, num(j.cost), j.costingComplete === true);
     if (gpReady) grandSummary.gp += gp;
-    if (!j.paidInFull) grandSummary.openJobs += 1;
+    if (isOpenJobByStatus(j.status, j.prolineStage)) grandSummary.openJobs += 1;
     if (gpReady) {
       if (isInsuranceCustomerName(j.name)) {
         grandInsGp += gp;

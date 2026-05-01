@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
 import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { statusColumnLabel } from "@/lib/status-badge-colors";
 
 export type AmSummaryRow = {
   salespersonId: string | null;
@@ -49,6 +50,19 @@ function effectiveGpForJob(
 
 function hasGpData(costingComplete: boolean): boolean {
   return costingComplete;
+}
+
+function isOpenJobByStatus(status: string, prolineStage?: string | null): boolean {
+  const shown = statusColumnLabel(status, prolineStage)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return !(
+    shown === "invoice paid" ||
+    shown === "paid closed" ||
+    shown === "paid and closed"
+  );
 }
 
 /**
@@ -139,7 +153,7 @@ export async function loadAmSummaryForYear(
       row.gp += g;
       row.gpRevenue += revenue;
     }
-    if (!j.paidInFull) row.openJobs += 1;
+    if (isOpenJobByStatus(j.status, j.prolineStage)) row.openJobs += 1;
     if (gpReady) {
       if (isInsuranceCustomerName(j.name)) {
         row.insRevenue += revenue;
