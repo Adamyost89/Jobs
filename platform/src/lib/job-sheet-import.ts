@@ -8,7 +8,7 @@ import { Prisma } from "@prisma/client";
 import { normalizeStatus } from "@/lib/status";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
 import { pickJobScalarWriteFields } from "@/lib/job-prisma-write-fields";
-import { deriveChangeOrdersNumber, moneyEq, MONEY_EPSILON } from "@/lib/change-orders";
+import { deriveChangeOrdersNumber, moneyEq, MONEY_EPSILON, shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
 import {
   buildModernColumnMapManualOnly,
   cell,
@@ -264,10 +264,14 @@ type ParsedRow = {
 
 /**
  * Import safety net:
- * When Amount Paid is present, derive Change Orders from paid vs contract.
- * This keeps CO aligned even if source CO columns are mis-mapped.
+ * Auto-derive Change Orders only for paid/closed stages.
+ * Otherwise force Change Orders to zero.
  */
 function normalizeParsedFinancials(p: ParsedRow): ParsedRow {
+  if (!shouldAutoDeriveChangeOrders(p.statusRaw)) {
+    if (moneyEq(p.changeOrders, 0)) return p;
+    return { ...p, changeOrders: 0 };
+  }
   const derived = deriveChangeOrdersNumber(p.contractAmount, p.invoicedTotal, p.amountPaid);
   if (derived !== null && !moneyEq(derived, p.changeOrders)) {
     return { ...p, changeOrders: derived };

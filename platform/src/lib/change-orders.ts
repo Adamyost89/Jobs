@@ -12,6 +12,29 @@ function decOrNull(n: Prisma.Decimal | number | string | null | undefined): numb
   return dec(n);
 }
 
+function normalizeStatusText(raw: string | null | undefined): string {
+  return String(raw || "")
+    .trim()
+    .toUpperCase()
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+export function shouldAutoDeriveChangeOrders(
+  status: string | null | undefined,
+  prolineStage?: string | null
+): boolean {
+  const statusText = normalizeStatusText(status);
+  const stageText = normalizeStatusText(prolineStage);
+  const isPaidClosed =
+    statusText === "PAID & CLOSED" ||
+    statusText === "PAID AND CLOSED" ||
+    stageText === "PAID & CLOSED" ||
+    stageText === "PAID AND CLOSED";
+  const isInvoicePaid = statusText === "INVOICE PAID" || stageText === "INVOICE PAID";
+  return isPaidClosed || isInvoicePaid;
+}
+
 export function moneyEq(a: number | null | undefined, b: number | null | undefined, epsilon = MONEY_EPSILON): boolean {
   if (a === null || a === undefined || b === null || b === undefined) return false;
   return Math.abs(a - b) <= epsilon;

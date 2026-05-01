@@ -6,7 +6,7 @@ import { commissionPlanForJobYear } from "./commission-plan-defaults";
 import { loadCommissionTierTotalsForYear } from "./commission-tier-totals";
 import { loadSalespersonFlagsByName } from "./salespeople-kind-db";
 import { resolveOrCreateSalespersonByName } from "./salesperson-name";
-import { deriveChangeOrdersNumber, moneyEq } from "./change-orders";
+import { deriveChangeOrdersNumber, moneyEq, shouldAutoDeriveChangeOrders } from "./change-orders";
 
 function dec(n: Prisma.Decimal | number | string): number {
   if (n instanceof Prisma.Decimal) return n.toNumber();
@@ -83,9 +83,13 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
       salesperson: true,
     },
   });
-  const derivedChangeOrders = deriveChangeOrdersNumber(job.contractAmount, job.invoicedTotal, job.amountPaid);
-  const effectiveChangeOrders =
-    derivedChangeOrders !== null ? derivedChangeOrders : dec(job.changeOrders);
+  const shouldDeriveChangeOrders = shouldAutoDeriveChangeOrders(job.status, job.prolineStage);
+  const derivedChangeOrders = shouldDeriveChangeOrders
+    ? deriveChangeOrdersNumber(job.contractAmount, job.invoicedTotal, job.amountPaid)
+    : null;
+  const effectiveChangeOrders = shouldDeriveChangeOrders
+    ? (derivedChangeOrders ?? dec(job.changeOrders))
+    : 0;
   const gpJob = {
     ...job,
     changeOrders: new Prisma.Decimal(effectiveChangeOrders.toFixed(2)),
@@ -94,7 +98,7 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
   const gp = shouldFigureJobGp(job) ? computedGp : job.gp;
   const gpPercent = shouldFigureJobGp(job) ? computedGpPct : job.gpPercent;
   const updateData: Prisma.JobUpdateInput = { gp, gpPercent };
-  if (derivedChangeOrders !== null && !moneyEq(effectiveChangeOrders, dec(job.changeOrders))) {
+  if (!moneyEq(effectiveChangeOrders, dec(job.changeOrders))) {
     updateData.changeOrders = new Prisma.Decimal(effectiveChangeOrders.toFixed(2));
   }
   await prisma.job.update({

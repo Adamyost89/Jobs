@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { deriveChangeOrdersNumber, MONEY_EPSILON } from "@/lib/change-orders";
+import { deriveChangeOrdersNumber, MONEY_EPSILON, shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
 
 export async function reconcileChangeOrdersFromPaidAndContract(
   db: Pick<PrismaClient, "job">
@@ -15,15 +15,21 @@ export async function reconcileChangeOrdersFromPaidAndContract(
       invoicedTotal: true,
       amountPaid: true,
       changeOrders: true,
+      status: true,
+      prolineStage: true,
     },
     take: 20_000,
   });
 
   const toUpdate = rows
     .map((row) => {
-      const paid = row.amountPaid?.toNumber();
       const contract = row.contractAmount.toNumber();
       const changeOrders = row.changeOrders.toNumber();
+      if (!shouldAutoDeriveChangeOrders(row.status, row.prolineStage)) {
+        if (Math.abs(changeOrders) <= MONEY_EPSILON) return null;
+        return { id: row.id, derived: 0 };
+      }
+      const paid = row.amountPaid?.toNumber();
       const invoiced = row.invoicedTotal.toNumber();
       const derived = deriveChangeOrdersNumber(contract, invoiced, paid);
       if (derived === null) return null;
