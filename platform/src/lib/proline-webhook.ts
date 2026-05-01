@@ -161,6 +161,13 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
   }
 
   // Stage is stored separately from lifecycle `status` (never copy stage into `status`).
+  if (
+    (body.status === undefined || body.status === null || String(body.status).trim() === "") &&
+    typeof body.project_status === "string" &&
+    body.project_status.trim()
+  ) {
+    body.status = body.project_status.trim();
+  }
 
   if ((body.paidDate === undefined || body.paidDate === null || body.paidDate === "") && typeof body.paid_date === "string") {
     body.paidDate = body.paid_date;
