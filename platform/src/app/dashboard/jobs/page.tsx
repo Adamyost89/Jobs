@@ -3,7 +3,7 @@ import { getSession } from "@/lib/session";
 import { canEditJobs, canViewAllJobs } from "@/lib/rbac";
 import { JobsTableSection, type JobsTableRowDTO } from "@/components/JobsTableSection";
 import { Prisma } from "@prisma/client";
-import { sortJobsByJobNumber } from "@/lib/job-sort";
+import { normalizeJobsSortParam, sortJobs } from "@/lib/job-sort";
 import {
   defaultDashboardYear,
   distinctJobYearsForSelect,
@@ -73,7 +73,8 @@ export default async function JobsPage({
   const spId = pickString(sp.sp)?.trim();
   const spNameToken = pickString(sp.spn)?.trim();
   const status = pickString(sp.status)?.trim();
-  const sortDir = pickString(sp.sort) === "asc" ? "asc" : "desc";
+  const sortKey = normalizeJobsSortParam(pickString(sp.sort));
+  const effectiveSortKey = !canSeeGp && (sortKey === "gp_desc" || sortKey === "gp_asc") ? "job_desc" : sortKey;
 
   const signedMonthRaw = pickString(sp.signedMonth)?.trim();
   let signedMonthInt: number | undefined;
@@ -227,7 +228,7 @@ export default async function JobsPage({
     include: { salesperson: true },
   });
 
-  const jobs = sortJobsByJobNumber(jobsRaw, sortDir);
+  const jobs = sortJobs(jobsRaw, effectiveSortKey);
   const quoteLinksByJob = await quoteLinksByJobIds(jobs.map((j) => j.id));
 
   const jobIds = jobs.map((j) => j.id);
@@ -251,7 +252,7 @@ export default async function JobsPage({
       spId ||
       spNameToken ||
       status ||
-      sortDir === "asc" ||
+      effectiveSortKey !== "job_desc" ||
       yearParam === "all" ||
       (yearParam && /^\d{4}$/.test(yearParam) && parseInt(yearParam, 10) !== preferredY) ||
       signedUndated ||
@@ -268,12 +269,8 @@ export default async function JobsPage({
     const revenue = contractAmount + changeOrders;
     const derivedGpMargin = canSeeGp && revenue > MONEY_EPSILON ? (gp / revenue) * 100 : null;
     const insuranceJob = isInsuranceCustomerName(j.name);
-    let retailPercent = j.retailPercent?.toNumber() ?? null;
-    let insurancePercent = j.insurancePercent?.toNumber() ?? null;
-    if (derivedGpMargin != null && retailPercent == null && insurancePercent == null) {
-      if (insuranceJob) insurancePercent = derivedGpMargin;
-      else retailPercent = derivedGpMargin;
-    }
+    const retailPercent = derivedGpMargin != null && !insuranceJob ? derivedGpMargin : null;
+    const insurancePercent = derivedGpMargin != null && insuranceJob ? derivedGpMargin : null;
     const paidInFullDerived =
       j.paidInFull ||
       looksPaidAndClosedStatus(j.status) ||
@@ -376,10 +373,18 @@ export default async function JobsPage({
             </select>
           </label>
           <label>
-            Sort job #
-            <select name="sort" defaultValue={sortDir} style={{ minWidth: 200 }}>
-              <option value="desc">Newest first (high → low)</option>
-              <option value="asc">Oldest first</option>
+            Sort
+            <select name="sort" defaultValue={sortKey} style={{ minWidth: 230 }}>
+              <option value="job_desc">Job # newest first (high → low)</option>
+              <option value="job_asc">Job # oldest first (low → high)</option>
+              <option value="amount_paid_desc">Amount paid high → low</option>
+              <option value="amount_paid_asc">Amount paid low → high</option>
+              <option value="contract_desc">Contract amount high → low</option>
+              <option value="contract_asc">Contract amount low → high</option>
+              <option value="invoiced_desc">Invoiced total high → low</option>
+              <option value="invoiced_asc">Invoiced total low → high</option>
+              {canSeeGp ? <option value="gp_desc">GP high → low</option> : null}
+              {canSeeGp ? <option value="gp_asc">GP low → high</option> : null}
             </select>
           </label>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -401,7 +406,26 @@ export default async function JobsPage({
 
       <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)" }}>
         <strong style={{ color: "var(--text)" }}>{jobs.length}</strong> job{jobs.length === 1 ? "" : "s"}
-        {hasFilters ? " match filters" : ""} · sort {sortDir === "desc" ? "newest first" : "oldest first"}
+        {hasFilters ? " match filters" : ""} · sort{" "}
+        {effectiveSortKey === "job_desc"
+          ? "job # newest first"
+          : effectiveSortKey === "job_asc"
+            ? "job # oldest first"
+            : effectiveSortKey === "amount_paid_desc"
+              ? "amount paid high to low"
+              : effectiveSortKey === "amount_paid_asc"
+                ? "amount paid low to high"
+                : effectiveSortKey === "contract_desc"
+                  ? "contract amount high to low"
+                  : effectiveSortKey === "contract_asc"
+                    ? "contract amount low to high"
+                    : effectiveSortKey === "invoiced_desc"
+                      ? "invoiced total high to low"
+                      : effectiveSortKey === "invoiced_asc"
+                        ? "invoiced total low to high"
+                        : effectiveSortKey === "gp_desc"
+                          ? "gp high to low"
+                          : "gp low to high"}
         <span style={{ display: "block", marginTop: "0.35rem", fontSize: "0.82rem" }}>
           Commission columns = <strong>all reps</strong> on that job (incl. manager lines).
         </span>
