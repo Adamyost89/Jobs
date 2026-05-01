@@ -63,7 +63,7 @@ jobs:
               holder_id="${holder%% *}"
               holder_name="${holder#* }"
               # Keep this project's current app container if present; compose will recreate it.
-              if [ "$holder_name" = "elevated-app-1" ]; then
+              if [ "$holder_name" = "elevated-app-1" ] || [ "$holder_name" = "platform-app-1" ]; then
                 continue
               fi
               echo "Stopping conflicting container $holder_name ($holder_id)"
@@ -72,8 +72,31 @@ jobs:
             done
           fi
 
-          docker compose -f "$compose_file" -p elevated up -d --build --force-recreate --remove-orphans
-          docker compose -f "$compose_file" -p elevated ps
+          # Ensure DB is up first, then apply migrations with safe baseline fallback.
+          docker compose -f "$compose_file" up -d db
+          docker compose -f "$compose_file" ps
+
+          set +e
+          migrate_output="$(docker compose -f "$compose_file" run --rm --no-deps app npx prisma migrate deploy 2>&1)"
+          migrate_code=$?
+          set -e
+          echo "$migrate_output"
+
+          if [ "$migrate_code" -ne 0 ]; then
+            if printf '%s\n' "$migrate_output" | awk '/Error: P3005/ {found=1} END{exit !found}'; then
+              echo "Detected Prisma P3005; baselining existing migrations once."
+              for m in $(ls -1 prisma/migrations | awk '/^[0-9]{14}_.+/ {print $0}'); do
+                docker compose -f "$compose_file" run --rm --no-deps app npx prisma migrate resolve --applied "$m"
+              done
+              docker compose -f "$compose_file" run --rm --no-deps app npx prisma migrate deploy
+            else
+              echo "migrate deploy failed with non-baseline error."
+              exit "$migrate_code"
+            fi
+          fi
+
+          docker compose -f "$compose_file" up -d --build --force-recreate --remove-orphans
+          docker compose -f "$compose_file" ps
 
           # Wait for the app to be reachable from inside the server first.
           # This avoids failing immediately on transient public 502s while the app boots.
@@ -83,8 +106,8 @@ jobs:
             fi
             if [ "$i" -eq 30 ]; then
               echo "App did not become ready on 127.0.0.1:3301"
-              docker compose -f "$compose_file" -p elevated logs --tail=200 app || true
-              docker compose -f "$compose_file" -p elevated logs --tail=200 db || true
+              docker compose -f "$compose_file" logs --tail=200 app || true
+              docker compose -f "$compose_file" logs --tail=200 db || true
               exit 1
             fi
             sleep 2
