@@ -378,7 +378,7 @@ export default async function JobsPage({
       gpPercent: canSeeGp ? (effectiveMargin ?? 0) : 0,
       projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
       commPaid: cx ? cx.paid : null,
-      commOwed: cx ? cx.owed : null,
+      commOwed: cx ? (j.salesperson?.active === false ? 0 : cx.owed) : null,
       quoteLinks: quoteLinksByJob.get(j.id) ?? [],
     };
   });
