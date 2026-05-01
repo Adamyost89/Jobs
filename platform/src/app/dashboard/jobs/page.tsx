@@ -171,7 +171,6 @@ export default async function JobsPage({
 
   const salespeople = await prisma.salesperson.findMany({
     orderBy: { name: "asc" },
-    where: { active: true },
   });
   const salespersonOptions = (() => {
     const byName = new Map<string, { id: string; name: string }>();
