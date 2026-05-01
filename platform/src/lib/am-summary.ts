@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
+import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
 
 export type AmSummaryRow = {
   salespersonId: string | null;
@@ -102,7 +103,8 @@ export async function loadAmSummaryForYear(
     }
 
     const c = num(j.contractAmount);
-    const co = num(j.changeOrders);
+    const rawCo = num(j.changeOrders);
+    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = c + co;
     const paid = num(j.amountPaid);
     const g = num(j.gp);
@@ -169,7 +171,9 @@ export async function loadAmSummaryForYear(
   let grandInsRevenue = 0;
   let grandInsGp = 0;
   for (const j of jobs) {
-    const revenue = num(j.contractAmount) + num(j.changeOrders);
+    const rawCo = num(j.changeOrders);
+    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const revenue = num(j.contractAmount) + co;
     const gp = num(j.gp);
     if (isInsuranceCustomerName(j.name)) {
       grandInsRevenue += revenue;
