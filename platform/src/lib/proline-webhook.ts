@@ -139,6 +139,10 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
         const parsed = boolFromUnknown(m[1]);
         if (parsed !== undefined) body.costingComplete = parsed;
       }
+    } else {
+      // Some ProLine/Zap payloads encode cost-complete as project_cost_2=1.
+      const cost2 = numberFromUnknown(body.project_cost_2);
+      if (cost2 === 1) body.costingComplete = true;
     }
   }
 
