@@ -352,11 +352,10 @@ export function JobsTableSection({
     const isPaidCloseStage = shownStatusNorm === "paid closed" || shownStatusNorm === "invoice paid";
     const gpPct = toPercentNumber(row.gpPercent);
     const contractAmount = Number.isFinite(row.contractAmount) ? row.contractAmount : 0;
-
-    // Always flag under-32% GP rows red.
-    if (Number.isFinite(gpPct) && gpPct < 32) return rowHighlightStyle(h.colors.bad); // red
     const active = isPaidCloseStage;
     if (!active) return undefined;
+    // Within paid-close statuses, keep strong red for under-32% GP.
+    if (Number.isFinite(gpPct) && gpPct < 32) return rowHighlightStyle(h.colors.bad); // red
     if ((Number.isFinite(gpPct) && gpPct < 50) || contractAmount < 5000) {
       return rowHighlightStyle(h.colors.warn); // yellow
     }
