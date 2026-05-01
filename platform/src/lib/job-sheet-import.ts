@@ -336,7 +336,10 @@ function parseModernRow(row: unknown[], col: ReturnType<typeof resolveModernJobC
 
   const revenue = contractAmount + changeOrders;
   const gpPercentNormalized = normalizePercentValue(gpPercent);
-  const gpMarginPct = gpPercentNormalized ?? marginPctFromFinancials(revenue, cost, gp);
+  const gpMarginPct =
+    (Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON)
+      ? ((revenue - cost) / revenue) * 100
+      : (gpPercentNormalized ?? marginPctFromFinancials(revenue, cost, gp));
   let retailPercentFinal: number | null = null;
   let insurancePercentFinal: number | null = null;
   if (gpMarginPct != null) {
@@ -395,7 +398,10 @@ function parseLegacy2024Row(row: unknown[]): ParsedRow | null {
     boolish(row[15]) || statusRaw.toLowerCase().includes("paid in full");
   const revenue = contractAmount + changeOrders;
   const gpPercentNormalized = normalizePercentValue(gpPercent);
-  const gpMarginPct = gpPercentNormalized ?? marginPctFromFinancials(revenue, cost, gp);
+  const gpMarginPct =
+    (Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON)
+      ? ((revenue - cost) / revenue) * 100
+      : (gpPercentNormalized ?? marginPctFromFinancials(revenue, cost, gp));
   let retailPercent: number | null = null;
   let insurancePercent: number | null = null;
   if (gpMarginPct != null) {

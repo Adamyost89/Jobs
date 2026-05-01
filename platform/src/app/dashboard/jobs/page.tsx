@@ -66,6 +66,15 @@ function normalizePercentValue(v: number): number | null {
   return v;
 }
 
+function effectiveGpForJob(revenue: number, cost: number, gp: number, gpPercentNormalized: number | null): number {
+  if (!Number.isFinite(revenue) || revenue <= MONEY_EPSILON) return 0;
+  // Prefer revenue-cost whenever we have a real cost number.
+  if (Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON) return revenue - cost;
+  if (Number.isFinite(gp) && Math.abs(gp) > MONEY_EPSILON) return gp;
+  if (gpPercentNormalized != null) return revenue * (gpPercentNormalized / 100);
+  return 0;
+}
+
 function pickString(v: string | string[] | undefined): string | undefined {
   if (v === undefined) return undefined;
   return Array.isArray(v) ? v[0] : v;
@@ -333,8 +342,8 @@ export default async function JobsPage({
     const gpPercentNormalized = canSeeGp ? normalizePercentValue(gpPercentRaw) : null;
     const cost = j.cost.toNumber();
     const revenue = contractAmount + changeOrders;
-    const derivedGpMargin = canSeeGp ? marginPctForJob(revenue, cost, gp) : null;
-    const effectiveMargin = gpPercentNormalized != null ? gpPercentNormalized : derivedGpMargin;
+    const effectiveGp = canSeeGp ? effectiveGpForJob(revenue, cost, gp, gpPercentNormalized) : 0;
+    const effectiveMargin = canSeeGp ? marginPctForJob(revenue, cost, effectiveGp) : null;
     const insuranceJob = isInsuranceCustomerName(j.name);
     const retailPercent = effectiveMargin != null && !insuranceJob ? effectiveMargin : null;
     const insurancePercent = effectiveMargin != null && insuranceJob ? effectiveMargin : null;
@@ -361,7 +370,7 @@ export default async function JobsPage({
       insurancePercent,
       cost,
       paidInFull: paidInFullDerived,
-      gp,
+      gp: effectiveGp,
       gpPercent: canSeeGp ? (effectiveMargin ?? 0) : 0,
       projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
       commPaid: cx ? cx.paid : null,
