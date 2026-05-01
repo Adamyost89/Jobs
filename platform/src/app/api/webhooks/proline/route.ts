@@ -108,6 +108,15 @@ export async function POST(req: Request) {
     return t === "" ? undefined : t;
   }
 
+  function isPaidAndClosedLabel(raw: string | null | undefined): boolean {
+    const s = String(raw ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+    return s === "paid closed";
+  }
+
   function skipProlineCreate(): boolean {
     const incoming = incomingLifecycleFromEvent();
     if (incoming === undefined) return true;
@@ -345,6 +354,9 @@ export async function POST(req: Request) {
     {
       const incoming = incomingLifecycleFromEvent();
       if (incoming !== undefined) data.status = normalizeStatus(incoming);
+      if (isPaidAndClosedLabel(incoming) || isPaidAndClosedLabel(e.prolineStage)) {
+        data.paidInFull = true;
+      }
     }
     if (e.prolineStage !== undefined) {
       const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
@@ -357,6 +369,9 @@ export async function POST(req: Request) {
       data.amountPaid = asDecimal(paid);
     }
     if (e.paidInFull !== undefined) data.paidInFull = e.paidInFull;
+    if (isPaidAndClosedLabel(incomingLifecycleFromEvent()) || isPaidAndClosedLabel(e.prolineStage)) {
+      data.paidInFull = true;
+    }
     if (e.paidDate !== undefined) data.paidDate = e.paidDate ? new Date(e.paidDate) : null;
 
     if (e.salespersonName) {
@@ -453,7 +468,10 @@ export async function POST(req: Request) {
         prolineJobId: e.prolineJobId,
         status: normalizeStatus(lifecycle),
         prolineStage: e.prolineStage ?? null,
-        paidInFull: e.paidInFull ?? false,
+        paidInFull:
+          isPaidAndClosedLabel(incomingLifecycleFromEvent()) || isPaidAndClosedLabel(e.prolineStage)
+            ? true
+            : (e.paidInFull ?? false),
         paidDate: e.paidDate ? new Date(e.paidDate) : null,
       },
     });
@@ -529,7 +547,10 @@ export async function POST(req: Request) {
         prolineJobId: e.prolineJobId,
         status: normalizeStatus(statusRaw ?? "UNKNOWN"),
         prolineStage: e.prolineStage ?? null,
-        paidInFull: e.paidInFull ?? false,
+        paidInFull:
+          isPaidAndClosedLabel(incomingLifecycleFromEvent()) || isPaidAndClosedLabel(e.prolineStage)
+            ? true
+            : (e.paidInFull ?? false),
         paidDate: e.paidDate ? new Date(e.paidDate) : null,
       },
     });
@@ -596,6 +617,9 @@ export async function POST(req: Request) {
       data.prolineStage = s === "" ? null : s;
     }
     if (e.paidInFull !== undefined) data.paidInFull = e.paidInFull;
+    if (isPaidAndClosedLabel(incomingLifecycleFromEvent()) || isPaidAndClosedLabel(e.prolineStage)) {
+      data.paidInFull = true;
+    }
     if (e.paidDate !== undefined) data.paidDate = e.paidDate ? new Date(e.paidDate) : null;
     if (e.salespersonName) {
       const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {

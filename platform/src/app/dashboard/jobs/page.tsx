@@ -41,6 +41,15 @@ type Search = {
 
 const MONEY_EPSILON = 0.005;
 
+function isPaidAndClosedLabel(raw: string | null | undefined): boolean {
+  const s = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return s === "paid closed";
+}
+
 function marginPctForJob(revenue: number, cost: number, gp: number): number | null {
   if (!Number.isFinite(revenue) || revenue <= MONEY_EPSILON) return null;
   if (Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON) {
@@ -336,7 +345,9 @@ export default async function JobsPage({
     const insuranceJob = isInsuranceCustomerName(j.name);
     const retailPercent = effectiveMargin != null && !insuranceJob ? effectiveMargin : null;
     const insurancePercent = effectiveMargin != null && insuranceJob ? effectiveMargin : null;
+    const paidAndClosed = isPaidAndClosedLabel(j.status) || isPaidAndClosedLabel(j.prolineStage);
     const paidInFullDerived =
+      paidAndClosed ||
       j.paidInFull ||
       (amountPaid != null && invoicedTotal > MONEY_EPSILON && Math.abs(amountPaid - invoicedTotal) <= MONEY_EPSILON);
     return {
