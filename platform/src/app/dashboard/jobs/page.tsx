@@ -41,17 +41,6 @@ type Search = {
 
 const MONEY_EPSILON = 0.005;
 
-function looksPaidAndClosedStatus(statusRaw: string): boolean {
-  const s = statusRaw.trim().toLowerCase();
-  if (!s) return false;
-  return (
-    s.includes("paid in full") ||
-    s.includes("invoice paid") ||
-    (s.includes("paid") && s.includes("closed")) ||
-    s.includes("complete")
-  );
-}
-
 function marginPctForJob(revenue: number, cost: number, gp: number): number | null {
   if (!Number.isFinite(revenue) || revenue <= MONEY_EPSILON) return null;
   if (Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON) {
@@ -349,7 +338,6 @@ export default async function JobsPage({
     const insurancePercent = effectiveMargin != null && insuranceJob ? effectiveMargin : null;
     const paidInFullDerived =
       j.paidInFull ||
-      looksPaidAndClosedStatus(j.status) ||
       (amountPaid != null && invoicedTotal > MONEY_EPSILON && Math.abs(amountPaid - invoicedTotal) <= MONEY_EPSILON);
     return {
       id: j.id,

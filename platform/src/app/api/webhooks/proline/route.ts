@@ -108,12 +108,6 @@ export async function POST(req: Request) {
     return t === "" ? undefined : t;
   }
 
-  function isClosedLifecycleStatus(raw: string | undefined): boolean {
-    if (!raw) return false;
-    const s = raw.trim().toLowerCase();
-    return s.includes("complete") || s.includes("closed");
-  }
-
   function skipProlineCreate(): boolean {
     const incoming = incomingLifecycleFromEvent();
     if (incoming === undefined) return true;
@@ -310,10 +304,6 @@ export async function POST(req: Request) {
     {
       const incoming = incomingLifecycleFromEvent();
       if (incoming !== undefined) data.status = normalizeStatus(incoming);
-      if (isClosedLifecycleStatus(incoming)) {
-        data.paidInFull = true;
-        if (e.paidDate === undefined) data.paidDate = new Date();
-      }
     }
     if (e.prolineStage !== undefined) {
       const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
@@ -325,9 +315,7 @@ export async function POST(req: Request) {
       const paid = Math.max(0, e.amountPaid);
       data.amountPaid = asDecimal(paid);
     }
-    const closedLifecycle = isClosedLifecycleStatus(incomingLifecycleFromEvent());
-    if (e.paidInFull !== undefined && !closedLifecycle) data.paidInFull = e.paidInFull;
-    if (closedLifecycle) data.paidInFull = true;
+    if (e.paidInFull !== undefined) data.paidInFull = e.paidInFull;
     if (e.paidDate !== undefined) data.paidDate = e.paidDate ? new Date(e.paidDate) : null;
 
     if (e.salespersonName) {
@@ -398,7 +386,6 @@ export async function POST(req: Request) {
     if (!lifecycle) {
       return { kind: "skipped_status" as const };
     }
-    const closedLifecycle = isClosedLifecycleStatus(lifecycle);
     const jobNumber = await allocateNextJobNumber(year);
     let salespersonId: string | null = null;
     if (e.salespersonName) {
@@ -425,8 +412,8 @@ export async function POST(req: Request) {
         prolineJobId: e.prolineJobId,
         status: normalizeStatus(lifecycle),
         prolineStage: e.prolineStage ?? null,
-        paidInFull: closedLifecycle ? true : (e.paidInFull ?? false),
-        paidDate: e.paidDate ? new Date(e.paidDate) : (closedLifecycle ? new Date() : null),
+        paidInFull: e.paidInFull ?? false,
+        paidDate: e.paidDate ? new Date(e.paidDate) : null,
       },
     });
     await prisma.jobEvent.create({
@@ -485,7 +472,6 @@ export async function POST(req: Request) {
     }
     const contract = approvedAmountFromEvent();
     const statusRaw = incomingLifecycleFromEvent();
-    const closedLifecycle = isClosedLifecycleStatus(statusRaw);
     const job = await prisma.job.create({
       data: {
         jobNumber,
@@ -502,8 +488,8 @@ export async function POST(req: Request) {
         prolineJobId: e.prolineJobId,
         status: normalizeStatus(statusRaw ?? "UNKNOWN"),
         prolineStage: e.prolineStage ?? null,
-        paidInFull: closedLifecycle ? true : (e.paidInFull ?? false),
-        paidDate: e.paidDate ? new Date(e.paidDate) : (closedLifecycle ? new Date() : null),
+        paidInFull: e.paidInFull ?? false,
+        paidDate: e.paidDate ? new Date(e.paidDate) : null,
       },
     });
     await prisma.jobEvent.create({
@@ -549,7 +535,6 @@ export async function POST(req: Request) {
       contractAmount: nextContractAmount,
       projectRevenue: nextContractAmount,
     };
-    const closedLifecycle = isClosedLifecycleStatus(incomingLifecycleFromEvent());
     if (e.name !== undefined) data.name = e.name;
     if (e.prolineJobId) data.prolineJobId = e.prolineJobId;
     if (e.leadNumber !== undefined) {
@@ -569,13 +554,8 @@ export async function POST(req: Request) {
       const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
       data.prolineStage = s === "" ? null : s;
     }
-    if (closedLifecycle) {
-      data.paidInFull = true;
-      if (e.paidDate === undefined) data.paidDate = new Date();
-    } else {
-      if (e.paidInFull !== undefined) data.paidInFull = e.paidInFull;
-      if (e.paidDate !== undefined) data.paidDate = e.paidDate ? new Date(e.paidDate) : null;
-    }
+    if (e.paidInFull !== undefined) data.paidInFull = e.paidInFull;
+    if (e.paidDate !== undefined) data.paidDate = e.paidDate ? new Date(e.paidDate) : null;
     if (e.salespersonName) {
       const sp = await resolveOrCreateSalespersonByName(prisma, e.salespersonName, {
         preferFirstToken: false,
