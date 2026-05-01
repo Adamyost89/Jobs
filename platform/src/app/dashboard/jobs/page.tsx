@@ -52,6 +52,14 @@ function looksPaidAndClosedStatus(statusRaw: string): boolean {
   );
 }
 
+function marginPctForJob(revenue: number, cost: number, gp: number): number | null {
+  if (!Number.isFinite(revenue) || revenue <= MONEY_EPSILON) return null;
+  if (Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON) {
+    return ((revenue - cost) / revenue) * 100;
+  }
+  return gp / revenue * 100;
+}
+
 function pickString(v: string | string[] | undefined): string | undefined {
   if (v === undefined) return undefined;
   return Array.isArray(v) ? v[0] : v;
@@ -266,8 +274,9 @@ export default async function JobsPage({
     const invoicedTotal = j.invoicedTotal.toNumber();
     const amountPaid = j.amountPaid?.toNumber() ?? null;
     const gp = canSeeGp ? j.gp.toNumber() : 0;
+    const cost = j.cost.toNumber();
     const revenue = contractAmount + changeOrders;
-    const derivedGpMargin = canSeeGp && revenue > MONEY_EPSILON ? (gp / revenue) * 100 : null;
+    const derivedGpMargin = canSeeGp ? marginPctForJob(revenue, cost, gp) : null;
     const insuranceJob = isInsuranceCustomerName(j.name);
     const retailPercent = derivedGpMargin != null && !insuranceJob ? derivedGpMargin : null;
     const insurancePercent = derivedGpMargin != null && insuranceJob ? derivedGpMargin : null;
@@ -292,7 +301,7 @@ export default async function JobsPage({
       paidDate: j.paidDate ? j.paidDate.toISOString() : null,
       retailPercent,
       insurancePercent,
-      cost: j.cost.toNumber(),
+      cost,
       paidInFull: paidInFullDerived,
       gp,
       gpPercent: canSeeGp ? j.gpPercent.toNumber() : 0,

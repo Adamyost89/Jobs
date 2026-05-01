@@ -209,6 +209,14 @@ function looksPaidAndClosedStatus(statusRaw: string): boolean {
   );
 }
 
+function marginPctFromFinancials(revenue: number, cost: number, gp: number): number | null {
+  if (!Number.isFinite(revenue) || revenue <= MONEY_EPSILON) return null;
+  if (Number.isFinite(cost) && Math.abs(cost) > MONEY_EPSILON) {
+    return ((revenue - cost) / revenue) * 100;
+  }
+  return (gp / revenue) * 100;
+}
+
 function normalizeLead(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number" && !isNaN(value)) {
@@ -321,7 +329,7 @@ function parseModernRow(row: unknown[], col: ReturnType<typeof resolveModernJobC
         : contractAmount + changeOrders;
 
   const revenue = contractAmount + changeOrders;
-  const gpMarginPct = revenue > MONEY_EPSILON ? (gp / revenue) * 100 : null;
+  const gpMarginPct = marginPctFromFinancials(revenue, cost, gp);
   let retailPercentFinal: number | null = null;
   let insurancePercentFinal: number | null = null;
   if (gpMarginPct != null) {
@@ -379,7 +387,7 @@ function parseLegacy2024Row(row: unknown[]): ParsedRow | null {
   const paidInFull =
     boolish(row[15]) || statusRaw.toLowerCase().includes("paid in full");
   const revenue = contractAmount + changeOrders;
-  const gpMarginPct = revenue > MONEY_EPSILON ? (gp / revenue) * 100 : null;
+  const gpMarginPct = marginPctFromFinancials(revenue, cost, gp);
   let retailPercent: number | null = null;
   let insurancePercent: number | null = null;
   if (gpMarginPct != null) {
