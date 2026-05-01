@@ -348,19 +348,14 @@ export function JobsTableSection({
 
     const shownStatus = statusColumnLabel(row.status, row.prolineStage);
     const normalize = (s: string): string => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    const statusNorm = normalize(String(row.status ?? ""));
     const shownStatusNorm = normalize(shownStatus);
-    const closedPaidStageTokens = ["paid closed", "invoice paid", "complete", "closed"];
-    const isInBilling = statusNorm === "in billing" || shownStatusNorm === "in billing";
-    const isClosedPaidStage =
-      closedPaidStageTokens.some((token) => statusNorm.includes(token)) ||
-      closedPaidStageTokens.some((token) => shownStatusNorm.includes(token));
+    const isPaidAndClosedStage = shownStatusNorm === "paid closed";
     const gpPct = toPercentNumber(row.gpPercent);
     const contractAmount = Number.isFinite(row.contractAmount) ? row.contractAmount : 0;
 
     // Always flag under-32% GP rows red.
     if (Number.isFinite(gpPct) && gpPct < 32) return rowHighlightStyle(h.colors.bad); // red
-    const active = row.paidInFull === true && (isInBilling || isClosedPaidStage);
+    const active = isPaidAndClosedStage;
     if (!active) return undefined;
     if ((Number.isFinite(gpPct) && gpPct < 50) || contractAmount < 5000) {
       return rowHighlightStyle(h.colors.warn); // yellow
@@ -546,8 +541,7 @@ export function JobsTableSection({
           </span>{" "}
           ·{" "}
           <span style={{ color: "var(--muted)" }}>
-            (other colors apply when <strong style={{ color: "var(--text)" }}>Paid in full</strong> and{" "}
-            <strong style={{ color: "var(--text)" }}>Status = In Billing or Paid &amp; Closed</strong>)
+            (other colors apply when <strong style={{ color: "var(--text)" }}>Status = Paid &amp; Closed</strong>)
           </span>
           {" "}
           ·{" "}
