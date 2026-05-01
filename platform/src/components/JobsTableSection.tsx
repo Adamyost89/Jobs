@@ -351,18 +351,21 @@ export function JobsTableSection({
     const shownStatusNorm = normalize(shownStatus);
     const isPaidCloseStage = shownStatusNorm === "paid closed" || shownStatusNorm === "invoice paid";
     const gpPct = toPercentNumber(row.gpPercent);
-    const contractAmount = Number.isFinite(row.contractAmount) ? row.contractAmount : 0;
+    const revenueByContract = (Number.isFinite(row.contractAmount) ? row.contractAmount : 0) + (Number.isFinite(row.changeOrders) ? row.changeOrders : 0);
+    const revenueByInvoiced = Number.isFinite(row.invoicedTotal) ? row.invoicedTotal : 0;
+    const revenueByProject = Number.isFinite(row.projectRevenue) ? row.projectRevenue : 0;
+    const effectiveRevenue = Math.max(revenueByContract, revenueByInvoiced, revenueByProject, 0);
     const active = isPaidCloseStage;
     if (!active) return undefined;
     // Within paid-close statuses, keep strong red for under-32% GP.
     if (Number.isFinite(gpPct) && gpPct < 32) return rowHighlightStyle(h.colors.bad); // red
-    if ((Number.isFinite(gpPct) && gpPct < 50) || contractAmount < 5000) {
+    if ((Number.isFinite(gpPct) && gpPct < 50) || effectiveRevenue < h.minRevenue) {
       return rowHighlightStyle(h.colors.warn); // yellow
     }
-    if (Number.isFinite(gpPct) && gpPct >= 50 && gpPct < 60 && contractAmount > 5000) {
+    if (Number.isFinite(gpPct) && gpPct >= 50 && gpPct < 60 && effectiveRevenue >= h.minRevenue) {
       return rowHighlightStyle(h.colors.medium); // blue
     }
-    if (Number.isFinite(gpPct) && gpPct >= 60 && contractAmount > 5000) {
+    if (Number.isFinite(gpPct) && gpPct >= 60 && effectiveRevenue >= h.minRevenue) {
       return rowHighlightStyle(h.colors.good); // green
     }
     return undefined;
