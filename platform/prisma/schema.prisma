@@ -85,6 +85,8 @@ model Job {
   amountPaid       Decimal?  @db.Decimal(14, 2)
   projectRevenue   Decimal   @default(0) @db.Decimal(14, 2)
   cost             Decimal   @default(0) @db.Decimal(14, 2)
+  /** Costing process complete for this job. */
+  costingComplete  Boolean   @default(false)
   gp               Decimal   @default(0) @db.Decimal(14, 2)
   gpPercent        Decimal   @default(0) @db.Decimal(14, 4)
   /** Sheet retail % (0–100), when present on modern tabs. */

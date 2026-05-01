@@ -320,6 +320,7 @@ export async function POST(req: Request) {
       data.prolineStage = s === "" ? null : s;
     }
     if (e.cost !== undefined) data.cost = asDecimal(e.cost);
+    if (e.costingComplete !== undefined) data.costingComplete = e.costingComplete;
     if (e.amountPaid !== undefined) {
       const paid = Math.max(0, e.amountPaid);
       data.amountPaid = asDecimal(paid);
@@ -418,6 +419,7 @@ export async function POST(req: Request) {
         contractAmount: contract,
         projectRevenue: contract,
         cost: asDecimal(Math.max(0, e.cost ?? 0)),
+        costingComplete: e.costingComplete ?? false,
         amountPaid: e.amountPaid !== undefined ? asDecimal(Math.max(0, e.amountPaid)) : null,
         salespersonId,
         prolineJobId: e.prolineJobId,
@@ -494,6 +496,7 @@ export async function POST(req: Request) {
         contractAmount: contract,
         projectRevenue: contract,
         cost: asDecimal(Math.max(0, e.cost ?? 0)),
+        costingComplete: e.costingComplete ?? false,
         amountPaid: e.amountPaid !== undefined ? asDecimal(Math.max(0, e.amountPaid)) : null,
         salespersonId,
         prolineJobId: e.prolineJobId,

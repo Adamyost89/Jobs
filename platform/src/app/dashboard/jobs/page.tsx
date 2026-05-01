@@ -369,6 +369,7 @@ export default async function JobsPage({
       retailPercent,
       insurancePercent,
       cost,
+      costingComplete: j.costingComplete,
       paidInFull: paidInFullDerived,
       gp: effectiveGp,
       gpPercent: canSeeGp ? (effectiveMargin ?? 0) : 0,

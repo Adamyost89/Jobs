@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { JobCostEditor } from "@/components/JobCostEditor";
+import { JobCostingCompleteToggle } from "@/components/JobCostingCompleteToggle";
 import { JobsDashboardPrefsForm } from "@/components/JobsDashboardPrefsForm";
 import { JobPaidInFullToggle } from "@/components/JobPaidInFullToggle";
 import { formatGpPercent, formatJobGpDisplay } from "@/lib/job-row-highlight";
@@ -48,6 +49,7 @@ export type JobsTableRowDTO = {
   retailPercent: number | null;
   insurancePercent: number | null;
   cost: number;
+  costingComplete: boolean;
   paidInFull: boolean;
   gp: number;
   gpPercent: number;
@@ -484,6 +486,12 @@ export function JobsTableSection({
         return (
           <td key={id} className="cell-num">
             <JobCostEditor jobId={row.id} initialCost={row.cost} canEdit={canEdit} />
+          </td>
+        );
+      case "costingComplete":
+        return (
+          <td key={id}>
+            <JobCostingCompleteToggle jobId={row.id} initial={row.costingComplete} canEdit={canEdit} />
           </td>
         );
       case "paidInFull":

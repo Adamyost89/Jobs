@@ -18,6 +18,7 @@ const patchSchema = z
     amountPaid: z.union([z.number(), z.null()]).optional(),
     projectRevenue: z.number().optional(),
     cost: z.number().optional(),
+    costingComplete: z.boolean().optional(),
     status: z.string().optional(),
     paidInFull: z.boolean().optional(),
     invoiceFlag: z.boolean().optional(),
@@ -65,6 +66,7 @@ export async function PATCH(
   }
   if (p.projectRevenue !== undefined) data.projectRevenue = new Prisma.Decimal(p.projectRevenue.toFixed(2));
   if (p.cost !== undefined) data.cost = new Prisma.Decimal(p.cost.toFixed(2));
+  if (p.costingComplete !== undefined) data.costingComplete = p.costingComplete;
   if (p.status !== undefined) data.status = normalizeStatus(p.status);
   if (p.paidInFull !== undefined) data.paidInFull = p.paidInFull;
   if (p.invoiceFlag !== undefined) data.invoiceFlag = p.invoiceFlag;

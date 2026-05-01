@@ -1,0 +1,2 @@
+ALTER TABLE "Job"
+ADD COLUMN "costingComplete" BOOLEAN NOT NULL DEFAULT false;

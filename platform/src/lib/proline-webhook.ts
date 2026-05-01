@@ -50,6 +50,7 @@ export type NormalizedProlineEvent = {
   paidInFull?: boolean;
   paidDate?: string | null;
   cost?: number;
+  costingComplete?: boolean;
   salespersonName?: string;
   raw: unknown;
 };
@@ -59,6 +60,18 @@ function numberFromUnknown(v: unknown): number | undefined {
   if (typeof v === "string" && v.trim()) {
     const n = Number(v.replace(/[$,]/g, ""));
     if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function boolFromUnknown(v: unknown): boolean | undefined {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number" && Number.isFinite(v)) return v !== 0;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (!s) return undefined;
+    if (["true", "1", "yes", "y", "on"].includes(s)) return true;
+    if (["false", "0", "no", "n", "off"].includes(s)) return false;
   }
   return undefined;
 }
@@ -110,6 +123,23 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
   if (body.cost === undefined) {
     const c = numberFromUnknown(body.project_cost_actual);
     if (c !== undefined) body.cost = c;
+  }
+
+  if (body.costingComplete === undefined) {
+    const direct =
+      boolFromUnknown(body.costingComplete) ??
+      boolFromUnknown(body.cost_complete) ??
+      boolFromUnknown(body.project_cost_complete) ??
+      boolFromUnknown(body.project_costing_complete);
+    if (direct !== undefined) {
+      body.costingComplete = direct;
+    } else if (typeof body.webhook_content === "string") {
+      const m = body.webhook_content.match(/cost\s*complete\s*=\s*(true|false|1|0|yes|no)/i);
+      if (m?.[1]) {
+        const parsed = boolFromUnknown(m[1]);
+        if (parsed !== undefined) body.costingComplete = parsed;
+      }
+    }
   }
 
   const aid = body.assigned_to_id;
@@ -358,6 +388,7 @@ export function normalizeProlineWebhookBody(
       paidDate: (body.paidDate as string | null | undefined) ?? null,
       approvedDate: (body.approvedDate as string | null | undefined) ?? null,
       cost: typeof body.cost === "number" ? body.cost : undefined,
+      costingComplete: typeof body.costingComplete === "boolean" ? body.costingComplete : undefined,
       salespersonName,
       raw: json,
     },
