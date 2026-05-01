@@ -36,6 +36,11 @@ type EntryDTO = {
   isDefault: boolean;
 };
 
+type JobStatusRow = {
+  status: string;
+  prolineStage: string | null;
+};
+
 async function readStatusColorMap(): Promise<StatusBadgeColorMap> {
   const rows = await prisma.$queryRaw<Row[]>(
     Prisma.sql`SELECT "statusBadgeColors" FROM "SystemConfig" WHERE "id" = 'singleton' LIMIT 1`
@@ -57,7 +62,7 @@ function toEntries(map: StatusBadgeColorMap): EntryDTO[] {
     }));
 }
 
-function defaultEntries(): EntryDTO[] {
+function staticDefaultEntries(): EntryDTO[] {
   return STATUS_BADGE_DEFAULT_KEYS.map((key) => {
     const c = resolveStatusBadgeColors({ status: key });
     return {
@@ -71,6 +76,41 @@ function defaultEntries(): EntryDTO[] {
   });
 }
 
+async function dynamicDefaultEntries(): Promise<EntryDTO[]> {
+  const staticDefaults = staticDefaultEntries();
+  const staticKeys = new Set(staticDefaults.map((entry) => normalizeStatusBadgeKey(entry.key)));
+
+  const jobStatuses = await prisma.job.findMany({
+    select: { status: true, prolineStage: true },
+    take: 5000,
+  });
+
+  const dynamicLabels = new Set<string>();
+  for (const row of jobStatuses as JobStatusRow[]) {
+    const label = statusColumnLabel(row.status, row.prolineStage).trim();
+    if (!label) continue;
+    const key = normalizeStatusBadgeKey(label);
+    if (!key || staticKeys.has(key)) continue;
+    dynamicLabels.add(label);
+  }
+
+  const dynamicDefaults: EntryDTO[] = [...dynamicLabels]
+    .sort((a, b) => a.localeCompare(b))
+    .map((label) => {
+      const c = resolveStatusBadgeColors({ status: label });
+      return {
+        key: normalizeStatusBadgeKey(label),
+        label,
+        background: c.background,
+        text: c.text,
+        border: c.border,
+        isDefault: true,
+      };
+    });
+
+  return [...staticDefaults, ...dynamicDefaults];
+}
+
 export async function GET() {
   const user = await getSession();
   if (!user || user.role !== Role.SUPER_ADMIN) {
@@ -78,10 +118,11 @@ export async function GET() {
   }
 
   const map = await readStatusColorMap();
+  const defaults = await dynamicDefaultEntries();
   return NextResponse.json({
     map,
     entries: toEntries(map),
-    defaults: defaultEntries(),
+    defaults,
   });
 }
 
@@ -97,9 +138,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const defaults = await dynamicDefaultEntries();
+  const allowedKeys = new Set(defaults.map((row) => normalizeStatusBadgeKey(row.key)));
+
   const rawMap: StatusBadgeColorMap = {};
   for (const entry of parsed.data.entries) {
-    rawMap[normalizeStatusBadgeKey(entry.key)] = {
+    const key = normalizeStatusBadgeKey(entry.key);
+    if (!allowedKeys.has(key)) {
+      return NextResponse.json(
+        { error: `Unknown status key "${entry.key}". Refresh settings to load current ProLine statuses.` },
+        { status: 400 }
+      );
+    }
+    rawMap[key] = {
       background: entry.background,
       text: entry.text,
       border: entry.border,
@@ -127,5 +178,5 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json({ ok: true, map: normalized, entries: toEntries(normalized), defaults: defaultEntries() });
+  return NextResponse.json({ ok: true, map: normalized, entries: toEntries(normalized), defaults });
 }

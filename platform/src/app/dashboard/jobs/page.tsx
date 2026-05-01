@@ -14,7 +14,7 @@ import Link from "next/link";
 import { signedCalendarMonthForChart } from "@/lib/contract-signed-month";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { displaySalespersonName } from "@/lib/salesperson-name";
-import { normalizeStatusBadgeColorMap } from "@/lib/status-badge-colors";
+import { normalizeStatusBadgeColorMap, statusColumnLabel } from "@/lib/status-badge-colors";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 
 /**
@@ -113,11 +113,6 @@ export default async function JobsPage({
       ],
     });
   }
-  if (status) {
-    parts.push({
-      status: { contains: status, mode: Prisma.QueryMode.insensitive },
-    });
-  }
   if (q) {
     parts.push({
       OR: [
@@ -186,6 +181,30 @@ export default async function JobsPage({
       )
       .map((j) => j.id);
     where = { AND: [baseWhere, ids.length > 0 ? { id: { in: ids } } : { id: "__none__" }] };
+  }
+
+  // Build status options from the current base slice (before status filtering),
+  // using the same display logic as the table column.
+  const whereBeforeStatus = where;
+  const statusSourceRows = await prisma.job.findMany({
+    where: whereBeforeStatus,
+    select: { status: true, prolineStage: true },
+    take: 5000,
+  });
+  const statusOptions = [...new Set(
+    statusSourceRows
+      .map((row) => statusColumnLabel(row.status, row.prolineStage).trim())
+      .filter((label) => label.length > 0)
+  )].sort((a, b) => a.localeCompare(b));
+
+  if (status) {
+    const withStatus: Prisma.JobWhereInput = {
+      OR: [
+        { prolineStage: { equals: status, mode: Prisma.QueryMode.insensitive } },
+        { status: { equals: status, mode: Prisma.QueryMode.insensitive } },
+      ],
+    };
+    where = { AND: [whereBeforeStatus, withStatus] };
   }
 
   const jobsRaw = await prisma.job.findMany({
@@ -314,8 +333,15 @@ export default async function JobsPage({
             </label>
           )}
           <label>
-            Status contains
-            <input name="status" defaultValue={status || ""} placeholder="Billing, Sold…" style={{ minWidth: 140 }} />
+            Status
+            <select name="status" defaultValue={status || ""} style={{ minWidth: 180 }}>
+              <option value="">All</option>
+              {statusOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Sort job #
@@ -349,7 +375,7 @@ export default async function JobsPage({
         </span>
       </p>
 
-      <JobsTableSection rows={tableRows} user={user} statusBadgeColors={statusBadgeColors} />
+      <JobsTableSection rows={tableRows} user={user} statusBadgeColors={statusBadgeColors} statusOptions={statusOptions} />
     </div>
   );
 }

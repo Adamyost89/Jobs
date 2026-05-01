@@ -89,10 +89,12 @@ export function JobsTableSection({
   rows,
   user,
   statusBadgeColors,
+  statusOptions,
 }: {
   rows: JobsTableRowDTO[];
   user: SessionUser;
   statusBadgeColors: StatusBadgeColorMap;
+  statusOptions: string[];
 }) {
   const router = useRouter();
   const canEdit = canEditJobs(user);
@@ -655,12 +657,19 @@ export function JobsTableSection({
                               </label>
                               <label>
                                 Status
-                                <input
+                                <select
                                   className="input"
                                   value={editForm.status}
                                   onChange={(e) => setEditForm((prev) => (prev ? { ...prev, status: e.target.value } : prev))}
-                                  placeholder="Status"
-                                />
+                                >
+                                  {[...new Set([editForm.status, ...statusOptions].filter((s) => s.trim().length > 0))]
+                                    .sort((a, b) => a.localeCompare(b))
+                                    .map((opt) => (
+                                      <option key={opt} value={opt}>
+                                        {opt}
+                                      </option>
+                                    ))}
+                                </select>
                               </label>
                               <label>
                                 Contract amount

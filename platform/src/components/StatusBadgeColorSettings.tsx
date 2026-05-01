@@ -18,27 +18,13 @@ type ApiResponse = {
   error?: string;
 };
 
-function blankRow(): ColorRow {
-  return {
-    key: "",
-    label: "",
-    background: "rgba(59, 130, 246, 0.15)",
-    text: "#93c5fd",
-    border: "rgba(59, 130, 246, 0.35)",
-    isDefault: false,
-  };
-}
-
 function mergeRows(defaults: ColorRow[], entries: ColorRow[]): ColorRow[] {
   const byKey = new Map(entries.map((row) => [normalizeStatusBadgeKey(row.key), row] as const));
-  const base = defaults.map((d) => {
+  return defaults.map((d) => {
     const k = normalizeStatusBadgeKey(d.key);
     const current = byKey.get(k);
     return current ? { ...current, isDefault: true } : d;
   });
-  const defaultKeys = new Set(base.map((row) => normalizeStatusBadgeKey(row.key)));
-  const customs = entries.filter((row) => !defaultKeys.has(normalizeStatusBadgeKey(row.key)));
-  return [...base, ...customs];
 }
 
 export function StatusBadgeColorSettings() {
@@ -57,7 +43,7 @@ export function StatusBadgeColorSettings() {
       const j = (await res.json().catch(() => ({}))) as ApiResponse;
       if (!alive) return;
       if (!res.ok) {
-        setRows([blankRow()]);
+        setRows([]);
         setDefaults([]);
         setBusy(false);
         setMsg(typeof j.error === "string" ? j.error : "Could not load status colors.");
@@ -67,11 +53,11 @@ export function StatusBadgeColorSettings() {
       const entryRows = Array.isArray(j.entries) ? j.entries : [];
       const merged = mergeRows(defaultRows, entryRows);
       setDefaults(defaultRows);
-      setRows(merged.length > 0 ? merged : [blankRow()]);
+      setRows(merged);
       setBusy(false);
     })().catch((e: unknown) => {
       if (!alive) return;
-      setRows([blankRow()]);
+      setRows([]);
       setDefaults([]);
       setBusy(false);
       setMsg(e instanceof Error ? e.message : "Could not load status colors.");
@@ -99,22 +85,9 @@ export function StatusBadgeColorSettings() {
     );
   }
 
-  function addCustomRow() {
-    setRows((prev) => [...prev, blankRow()]);
-  }
-
-  function removeRow(idx: number) {
-    setRows((prev) => {
-      const row = prev[idx];
-      if (!row || row.isDefault) return prev;
-      const next = prev.filter((_, i) => i !== idx);
-      return next.length ? next : [blankRow()];
-    });
-  }
-
   function resetToDefaults() {
     const next = defaults.length > 0 ? defaults : [];
-    setRows(next.length ? next : [blankRow()]);
+    setRows(next);
     setMsg("Reset local editor to default rows. Save to apply.");
   }
 
@@ -145,7 +118,7 @@ export function StatusBadgeColorSettings() {
     const entryRows = Array.isArray(j.entries) ? j.entries : [];
     const merged = mergeRows(defaultRows, entryRows);
     setDefaults(defaultRows);
-    setRows(merged.length > 0 ? merged : [blankRow()]);
+    setRows(merged);
     setMsg("Saved.");
   }
 
@@ -153,7 +126,8 @@ export function StatusBadgeColorSettings() {
     <div style={{ display: "grid", gap: "0.75rem" }}>
       <p className="help" style={{ margin: 0 }}>
         Colors are shared for all users. Matching checks the displayed status text first (for example{" "}
-        <code>PAID &amp; CLOSED</code>, <code>INVOICE SENT</code>), then falls back to lifecycle status.
+        <code>PAID &amp; CLOSED</code>, <code>INVOICE SENT</code>), then falls back to lifecycle status. Status keys are
+        dynamic and come from current ProLine/job statuses.
       </p>
 
       <div style={{ overflowX: "auto" }}>
@@ -175,10 +149,10 @@ export function StatusBadgeColorSettings() {
                   <input
                     className="input"
                     maxLength={80}
-                    disabled={busy || saving || row.isDefault}
+                    disabled
                     value={row.key}
                     placeholder="PAID & CLOSED"
-                    onChange={(e) => setRow(idx, { key: e.target.value })}
+                    readOnly
                   />
                 </td>
                 <td>
@@ -221,18 +195,7 @@ export function StatusBadgeColorSettings() {
                   </span>
                 </td>
                 <td style={{ width: 100 }}>
-                  {row.isDefault ? (
-                    <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Default</span>
-                  ) : (
-                    <button
-                      className="btn secondary"
-                      type="button"
-                      disabled={busy || saving}
-                      onClick={() => removeRow(idx)}
-                    >
-                      Remove
-                    </button>
-                  )}
+                  <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Dynamic</span>
                 </td>
               </tr>
             ))}
@@ -241,9 +204,6 @@ export function StatusBadgeColorSettings() {
       </div>
 
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-        <button className="btn secondary" type="button" disabled={busy || saving} onClick={addCustomRow}>
-          Add custom stage
-        </button>
         <button className="btn secondary" type="button" disabled={busy || saving} onClick={resetToDefaults}>
           Reset editor to defaults
         </button>
