@@ -7,6 +7,11 @@ function dec(n: Prisma.Decimal | number | string): number {
   return Number(n) || 0;
 }
 
+function decOrNull(n: Prisma.Decimal | number | string | null | undefined): number | null {
+  if (n === null || n === undefined) return null;
+  return dec(n);
+}
+
 export function moneyEq(a: number | null | undefined, b: number | null | undefined, epsilon = MONEY_EPSILON): boolean {
   if (a === null || a === undefined || b === null || b === undefined) return false;
   return Math.abs(a - b) <= epsilon;
@@ -14,9 +19,18 @@ export function moneyEq(a: number | null | undefined, b: number | null | undefin
 
 export function deriveChangeOrdersNumber(
   contractAmount: Prisma.Decimal | number | string,
+  invoicedTotal: Prisma.Decimal | number | string | null | undefined,
   amountPaid: Prisma.Decimal | number | string | null | undefined
 ): number | null {
-  if (amountPaid === null || amountPaid === undefined) return null;
-  return dec(amountPaid) - dec(contractAmount);
+  const contract = dec(contractAmount);
+  const invoiced = decOrNull(invoicedTotal);
+  if (invoiced !== null && Math.abs(invoiced) > MONEY_EPSILON) {
+    return invoiced - contract;
+  }
+  const paid = decOrNull(amountPaid);
+  if (paid !== null) {
+    return paid - contract;
+  }
+  return null;
 }
 

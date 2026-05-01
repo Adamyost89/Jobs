@@ -83,7 +83,7 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
       salesperson: true,
     },
   });
-  const derivedChangeOrders = deriveChangeOrdersNumber(job.contractAmount, job.amountPaid);
+  const derivedChangeOrders = deriveChangeOrdersNumber(job.contractAmount, job.invoicedTotal, job.amountPaid);
   const effectiveChangeOrders =
     derivedChangeOrders !== null ? derivedChangeOrders : dec(job.changeOrders);
   const gpJob = {

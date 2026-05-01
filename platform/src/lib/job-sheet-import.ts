@@ -268,7 +268,7 @@ type ParsedRow = {
  * This keeps CO aligned even if source CO columns are mis-mapped.
  */
 function normalizeParsedFinancials(p: ParsedRow): ParsedRow {
-  const derived = deriveChangeOrdersNumber(p.contractAmount, p.amountPaid);
+  const derived = deriveChangeOrdersNumber(p.contractAmount, p.invoicedTotal, p.amountPaid);
   if (derived !== null && !moneyEq(derived, p.changeOrders)) {
     return { ...p, changeOrders: derived };
   }

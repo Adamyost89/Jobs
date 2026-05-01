@@ -86,9 +86,15 @@ export async function PATCH(
 
   const effectiveContractAmount =
     p.contractAmount !== undefined ? p.contractAmount : job.contractAmount.toNumber();
+  const effectiveInvoicedTotal =
+    p.invoicedTotal !== undefined ? p.invoicedTotal : job.invoicedTotal.toNumber();
   const effectiveAmountPaid =
     p.amountPaid !== undefined ? p.amountPaid : (job.amountPaid ? job.amountPaid.toNumber() : null);
-  const derivedChangeOrders = deriveChangeOrdersNumber(effectiveContractAmount, effectiveAmountPaid);
+  const derivedChangeOrders = deriveChangeOrdersNumber(
+    effectiveContractAmount,
+    effectiveInvoicedTotal,
+    effectiveAmountPaid
+  );
   if (derivedChangeOrders !== null) {
     data.changeOrders = new Prisma.Decimal(derivedChangeOrders.toFixed(2));
   }

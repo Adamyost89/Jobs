@@ -6,12 +6,13 @@ export async function reconcileChangeOrdersFromPaidAndContract(
 ): Promise<{ scanned: number; matched: number; updated: number }> {
   const rows = await db.job.findMany({
     where: {
-      amountPaid: { not: null },
+      OR: [{ amountPaid: { not: null } }, { invoicedTotal: { not: 0 } }],
       NOT: { changeOrders: { equals: 0 } },
     },
     select: {
       id: true,
       contractAmount: true,
+      invoicedTotal: true,
       amountPaid: true,
       changeOrders: true,
     },
@@ -21,10 +22,10 @@ export async function reconcileChangeOrdersFromPaidAndContract(
   const toUpdate = rows
     .map((row) => {
       const paid = row.amountPaid?.toNumber();
-      if (paid == null) return null;
       const contract = row.contractAmount.toNumber();
       const changeOrders = row.changeOrders.toNumber();
-      const derived = deriveChangeOrdersNumber(contract, paid);
+      const invoiced = row.invoicedTotal.toNumber();
+      const derived = deriveChangeOrdersNumber(contract, invoiced, paid);
       if (derived === null) return null;
       if (Math.abs(changeOrders - derived) <= MONEY_EPSILON) return null;
       return { id: row.id, derived };
@@ -37,11 +38,11 @@ export async function reconcileChangeOrdersFromPaidAndContract(
 
   let updated = 0;
   for (const row of toUpdate) {
-    await db.job.update({
+    const result = await db.job.updateMany({
       where: { id: row.id },
       data: { changeOrders: new Prisma.Decimal(row.derived.toFixed(2)) },
     });
-    updated += 1;
+    updated += result.count;
   }
 
   return {

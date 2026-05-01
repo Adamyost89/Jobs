@@ -1,6 +1,7 @@
 /**
  * Reconcile Change Orders data:
- * when Amount Paid is present, Change Orders should equal Amount Paid - Contract Amount.
+ * prefer Invoiced Total - Contract Amount when invoiced is present;
+ * otherwise fall back to Amount Paid - Contract Amount.
  *
  * Run:
  *   npx tsx scripts/normalize-change-orders-when-paid-equals-contract.ts
