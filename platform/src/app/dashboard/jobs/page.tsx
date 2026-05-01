@@ -17,6 +17,7 @@ import { displaySalespersonName } from "@/lib/salesperson-name";
 import { normalizeStatusBadgeColorMap, statusColumnLabel } from "@/lib/status-badge-colors";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
+import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
 
 /**
  * Jobs list query params (GET):
@@ -329,7 +330,8 @@ export default async function JobsPage({
   const tableRows: JobsTableRowDTO[] = jobs.map((j) => {
     const cx = commByJob.get(j.id);
     const contractAmount = j.contractAmount.toNumber();
-    const changeOrders = j.changeOrders.toNumber();
+    const rawChangeOrders = j.changeOrders.toNumber();
+    const changeOrders = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawChangeOrders : 0;
     const invoicedTotal = j.invoicedTotal.toNumber();
     const amountPaid = j.amountPaid?.toNumber() ?? null;
     const gp = canSeeGp ? j.gp.toNumber() : 0;
