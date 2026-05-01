@@ -24,6 +24,14 @@ type PreviewResponse = {
   sheets: PreviewSheet[];
 };
 
+type RunResponse = {
+  ok?: true;
+  error?: string;
+  requiresOverwriteConfirmation?: boolean;
+  overwriteCount?: number;
+  createCount?: number;
+};
+
 type TabMapping = {
   enabled: boolean;
   headerMode: "auto" | "manual";
@@ -84,12 +92,14 @@ export function PayoutImportForm() {
   const [runLoading, setRunLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runJson, setRunJson] = useState<string | null>(null);
+  const [overwritePrompt, setOverwritePrompt] = useState<{ overwriteCount: number; createCount: number } | null>(null);
 
   const hasPreview = preview?.ok && preview.sheets.length > 0;
 
   const loadPreview = useCallback(async (f: File) => {
     setError(null);
     setRunJson(null);
+    setOverwritePrompt(null);
     setPreviewLoading(true);
     try {
       const fd = new FormData();
@@ -146,7 +156,7 @@ export function PayoutImportForm() {
     [hasPreview, preview, mappings]
   );
 
-  const runImport = useCallback(async () => {
+  const runImport = useCallback(async (allowOverwrite = false) => {
     if (!file || !preview) return;
     setError(null);
     setRunJson(null);
@@ -220,20 +230,37 @@ export function PayoutImportForm() {
 
       const fd = new FormData();
       fd.set("file", file);
-      fd.set("config", JSON.stringify({ tabs }));
+      fd.set(
+        "config",
+        JSON.stringify({
+          tabs,
+          allowOverwrite,
+          expectedOverwriteCount: allowOverwrite ? overwritePrompt?.overwriteCount : undefined,
+        })
+      );
       const res = await fetch("/api/commissions/payouts/import/run", { method: "POST", body: fd });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as RunResponse;
+      if (res.status === 409 && data.requiresOverwriteConfirmation) {
+        const overwriteCount = typeof data.overwriteCount === "number" ? data.overwriteCount : 0;
+        const createCount = typeof data.createCount === "number" ? data.createCount : 0;
+        setOverwritePrompt({ overwriteCount, createCount });
+        setError(
+          `Safety check: this import would overwrite ${overwriteCount} existing payout row(s). Confirm to continue.`
+        );
+        return;
+      }
       if (!res.ok) {
         setError(typeof data.error === "string" ? data.error : "Import failed");
         return;
       }
+      setOverwritePrompt(null);
       setRunJson(JSON.stringify(data, null, 2));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
     } finally {
       setRunLoading(false);
     }
-  }, [file, preview, mappings]);
+  }, [file, preview, mappings, overwritePrompt]);
 
   return (
     <div style={{ display: "grid", gap: "1.25rem", maxWidth: "min(1100px, 100%)" }}>
@@ -488,7 +515,7 @@ export function PayoutImportForm() {
               type="button"
               className="btn"
               disabled={runLoading || selectedCount === 0}
-              onClick={() => void runImport()}
+              onClick={() => void runImport(false)}
             >
               {runLoading ? "Importing…" : `Import ${selectedCount} tab(s)`}
             </button>
@@ -496,6 +523,28 @@ export function PayoutImportForm() {
               Upsert by <code>importSourceKey</code> (per-row default <code>PAYOUT_UI:…</code> if not mapped).
             </span>
           </div>
+          {overwritePrompt ? (
+            <div
+              className="card"
+              style={{ borderColor: "#b45309", background: "rgba(180,83,9,0.08)", display: "grid", gap: "0.55rem" }}
+            >
+              <strong style={{ color: "#fcd34d" }}>Overwrite confirmation required</strong>
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--muted)" }}>
+                This import will update <strong>{overwritePrompt.overwriteCount}</strong> existing payout row(s) and
+                create <strong>{overwritePrompt.createCount}</strong> new row(s).
+              </p>
+              <div>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={runLoading}
+                  onClick={() => void runImport(true)}
+                >
+                  {runLoading ? "Importing…" : `Confirm overwrite ${overwritePrompt.overwriteCount} row(s)`}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

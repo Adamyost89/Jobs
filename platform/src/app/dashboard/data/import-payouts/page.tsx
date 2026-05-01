@@ -27,6 +27,7 @@ export default async function ImportPayoutsPage() {
         Tabular payout sheets map columns to <code>CommissionPayout</code>. Tabs named <strong>Total Commissions YYYY</strong>{" "}
         (e.g. Commissions.xlsx) use the wide layout automatically — pay period in column A, one column per rep, multiline{" "}
         <code>job - customer - $amount</code> per cell — same as <code>npm run import:payouts</code>.
+        The importer now runs a safety check first and requires explicit confirmation before overwriting existing payout rows.
       </p>
       <PayoutImportForm />
     </div>

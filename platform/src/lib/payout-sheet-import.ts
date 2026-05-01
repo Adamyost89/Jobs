@@ -36,6 +36,7 @@ export type PayoutImportTabOptions = {
    */
   columnMapMode?: "merge" | "manual_only";
   recordedByUserId?: string | null;
+  dryRun?: boolean;
 };
 
 export type PayoutImportTabResult = {
@@ -44,6 +45,8 @@ export type PayoutImportTabResult = {
   dataEndExclusive: number;
   imported: number;
   skipped: number;
+  created: number;
+  updated: number;
 };
 
 function num(v: unknown): number {
@@ -110,6 +113,7 @@ export async function importPayoutSheetTab(
       dataStartRow0Based: opts.dataStartRow0Based,
       dataEndExclusive: opts.dataEndExclusive,
       recordedByUserId: opts.recordedByUserId ?? null,
+      dryRun: opts.dryRun,
     });
     const firstData = detectTotalCommissionsFirstDataRow0Based(rowsInput);
     return {
@@ -118,6 +122,8 @@ export async function importPayoutSheetTab(
       dataEndExclusive: wide.dataEndExclusive,
       imported: wide.imported,
       skipped: wide.skipped,
+      created: wide.created,
+      updated: wide.updated,
     };
   }
 
@@ -152,6 +158,8 @@ export async function importPayoutSheetTab(
 
   let imported = 0;
   let skipped = 0;
+  let created = 0;
+  let updated = 0;
 
   for (let i = dataStart; i < dataEnd; i++) {
     const row = rowsInput[i] as unknown[];
@@ -234,11 +242,19 @@ export async function importPayoutSheetTab(
       recordedByUserId: opts.recordedByUserId ?? null,
     };
 
-    await db.commissionPayout.upsert({
+    const existing = await db.commissionPayout.findUnique({
       where: { importSourceKey },
-      create: pickCommissionPayoutScalarWriteFields(createRaw as Record<string, unknown>) as Prisma.CommissionPayoutCreateInput,
-      update: pickCommissionPayoutScalarWriteFields(updateRaw as Record<string, unknown>) as Prisma.CommissionPayoutUpdateInput,
+      select: { id: true },
     });
+    if (existing) updated += 1;
+    else created += 1;
+    if (!opts.dryRun) {
+      await db.commissionPayout.upsert({
+        where: { importSourceKey },
+        create: pickCommissionPayoutScalarWriteFields(createRaw as Record<string, unknown>) as Prisma.CommissionPayoutCreateInput,
+        update: pickCommissionPayoutScalarWriteFields(updateRaw as Record<string, unknown>) as Prisma.CommissionPayoutUpdateInput,
+      });
+    }
     imported++;
   }
 
@@ -248,6 +264,8 @@ export async function importPayoutSheetTab(
     dataEndExclusive: dataEnd,
     imported,
     skipped,
+    created,
+    updated,
   };
 }
 

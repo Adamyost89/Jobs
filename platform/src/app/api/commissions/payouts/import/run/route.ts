@@ -45,6 +45,8 @@ const tabSchema = z
 
 const configSchema = z.object({
   tabs: z.array(tabSchema).min(1).max(25),
+  allowOverwrite: z.boolean().optional(),
+  expectedOverwriteCount: z.number().int().min(0).optional(),
 });
 
 export async function POST(req: Request) {
@@ -78,6 +80,7 @@ export async function POST(req: Request) {
     );
   }
   const config = parsedConfig.data;
+  const allowOverwrite = config.allowOverwrite === true;
 
   if (!/\.xlsx$/i.test(file.name)) {
     return NextResponse.json({ error: "Only .xlsx workbooks are supported." }, { status: 400 });
@@ -101,6 +104,72 @@ export async function POST(req: Request) {
     | { ok: false; sheetName: string; error: string };
 
   const results: RunTabResult[] = [];
+  const dryRunResults: RunTabResult[] = [];
+
+  for (const tab of config.tabs) {
+    if (!wb.SheetNames.includes(tab.sheetName)) {
+      dryRunResults.push({
+        ok: false,
+        sheetName: tab.sheetName,
+        error: `Sheet "${tab.sheetName}" not found in workbook`,
+      });
+      continue;
+    }
+    const sh = wb.Sheets[tab.sheetName];
+    if (!sh) {
+      dryRunResults.push({ ok: false, sheetName: tab.sheetName, error: "Missing sheet object" });
+      continue;
+    }
+    const rows = sheetToRows(sh);
+    try {
+      const stats = await importPayoutSheetTab(prisma, rows, {
+        sheetName: tab.sheetName,
+        headerMode: tab.headerMode,
+        headerRow0Based: tab.headerRow0Based,
+        dataStartRow0Based: tab.dataStartRow0Based,
+        dataEndExclusive: tab.dataEndExclusive,
+        columnMap: tab.columnMap ?? {},
+        columnMapMode: tab.columnMapMode,
+        recordedByUserId: user.id,
+        dryRun: true,
+      });
+      dryRunResults.push({ ok: true, sheetName: tab.sheetName, stats });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      dryRunResults.push({ ok: false, sheetName: tab.sheetName, error: message });
+    }
+  }
+
+  const overwriteCount = dryRunResults.reduce((sum, r) => sum + (r.ok ? r.stats.updated : 0), 0);
+  const createCount = dryRunResults.reduce((sum, r) => sum + (r.ok ? r.stats.created : 0), 0);
+  if (overwriteCount > 0 && !allowOverwrite) {
+    return NextResponse.json(
+      {
+        error: "Import would overwrite existing payout rows. Confirm overwrite to continue.",
+        requiresOverwriteConfirmation: true,
+        overwriteCount,
+        createCount,
+        dryRunResults,
+      },
+      { status: 409 }
+    );
+  }
+  if (
+    overwriteCount > 0 &&
+    config.expectedOverwriteCount !== undefined &&
+    config.expectedOverwriteCount !== overwriteCount
+  ) {
+    return NextResponse.json(
+      {
+        error: "Overwrite count changed since confirmation. Please review and confirm again.",
+        requiresOverwriteConfirmation: true,
+        overwriteCount,
+        createCount,
+        dryRunResults,
+      },
+      { status: 409 }
+    );
+  }
 
   for (const tab of config.tabs) {
     if (!wb.SheetNames.includes(tab.sheetName)) {
@@ -127,6 +196,7 @@ export async function POST(req: Request) {
         columnMap: tab.columnMap ?? {},
         columnMapMode: tab.columnMapMode,
         recordedByUserId: user.id,
+        dryRun: false,
       });
       results.push({ ok: true, sheetName: tab.sheetName, stats });
     } catch (e) {
@@ -135,5 +205,27 @@ export async function POST(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true as const, fileName: file.name, results });
+  await prisma.auditLog.create({
+    data: {
+      userId: user.id,
+      action: "PAYOUT_IMPORT_RUN",
+      entityType: "CommissionPayout",
+      payload: {
+        fileName: file.name,
+        tabCount: config.tabs.length,
+        allowOverwrite,
+        overwriteCount,
+        createCount,
+        results,
+      },
+    },
+  });
+
+  return NextResponse.json({
+    ok: true as const,
+    fileName: file.name,
+    overwriteCount,
+    createCount,
+    results,
+  });
 }

@@ -14,6 +14,8 @@ export type TotalCommissionsWideImportResult = {
   dataEndExclusive: number;
   imported: number;
   skipped: number;
+  created: number;
+  updated: number;
 };
 
 export function totalCommissionsWideSheetYear(sheetName: string): number | null {
@@ -60,6 +62,7 @@ export async function importTotalCommissionsWideSheet(
     dataStartRow0Based?: number;
     dataEndExclusive?: number;
     recordedByUserId?: string | null;
+    dryRun?: boolean;
   } = {}
 ): Promise<TotalCommissionsWideImportResult> {
   const sheetYear = totalCommissionsWideSheetYear(sheetName);
@@ -90,6 +93,8 @@ export async function importTotalCommissionsWideSheet(
 
   let imported = 0;
   let skipped = 0;
+  let created = 0;
+  let updated = 0;
 
   for (let r = dataStart; r < dataEnd; r++) {
     const row = rowsInput[r] as unknown[];
@@ -147,11 +152,19 @@ export async function importTotalCommissionsWideSheet(
           recordedByUserId: opts.recordedByUserId ?? null,
         };
 
-        await db.commissionPayout.upsert({
+        const existing = await db.commissionPayout.findUnique({
           where: { importSourceKey },
-          create: pickCommissionPayoutScalarWriteFields(createRaw as Record<string, unknown>) as Prisma.CommissionPayoutCreateInput,
-          update: pickCommissionPayoutScalarWriteFields(updateRaw as Record<string, unknown>) as Prisma.CommissionPayoutUpdateInput,
+          select: { id: true },
         });
+        if (existing) updated += 1;
+        else created += 1;
+        if (!opts.dryRun) {
+          await db.commissionPayout.upsert({
+            where: { importSourceKey },
+            create: pickCommissionPayoutScalarWriteFields(createRaw as Record<string, unknown>) as Prisma.CommissionPayoutCreateInput,
+            update: pickCommissionPayoutScalarWriteFields(updateRaw as Record<string, unknown>) as Prisma.CommissionPayoutUpdateInput,
+          });
+        }
         imported++;
       }
     }
@@ -163,5 +176,7 @@ export async function importTotalCommissionsWideSheet(
     dataEndExclusive: dataEnd,
     imported,
     skipped,
+    created,
+    updated,
   };
 }

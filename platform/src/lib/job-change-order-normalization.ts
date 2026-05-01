@@ -16,7 +16,6 @@ export async function reconcileChangeOrdersFromPaidAndContract(
       amountPaid: true,
       changeOrders: true,
       status: true,
-      prolineStage: true,
     },
     take: 20_000,
   });
@@ -25,7 +24,7 @@ export async function reconcileChangeOrdersFromPaidAndContract(
     .map((row) => {
       const contract = row.contractAmount.toNumber();
       const changeOrders = row.changeOrders.toNumber();
-      if (!shouldAutoDeriveChangeOrders(row.status, row.prolineStage)) {
+      if (!shouldAutoDeriveChangeOrders(row.status)) {
         if (Math.abs(changeOrders) <= MONEY_EPSILON) return null;
         return { id: row.id, derived: 0 };
       }
