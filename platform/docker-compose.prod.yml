@@ -29,7 +29,7 @@ services:
         condition: service_healthy
     ports:
       - "3301:3301"
-    command: sh -c "npx prisma db push && npm run start -- -p 3301 -H 0.0.0.0"
+    command: sh -c "npx prisma migrate deploy && npm run start -- -p 3301 -H 0.0.0.0"
 
 volumes:
   elevated_pg:
