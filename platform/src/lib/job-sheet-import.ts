@@ -292,8 +292,8 @@ function parseModernRow(row: unknown[], col: ReturnType<typeof resolveModernJobC
   const cost = num(cell(row, col.cost));
   const gp = num(cell(row, col.gp));
   const gpPercent = num(cell(row, col.gpPercent));
-  const retailPercent = percentCell(cell(row, col.retail));
-  const insurancePercent = percentCell(cell(row, col.insurance));
+  const retailPercentRaw = percentCell(cell(row, col.retail));
+  const insurancePercentRaw = percentCell(cell(row, col.insurance));
   const invoiceFlag = boolish(cell(row, col.billed));
   const paidInFullCell = boolish(cell(row, col.paidInFull));
   const commOwedFlag =
@@ -322,11 +322,15 @@ function parseModernRow(row: unknown[], col: ReturnType<typeof resolveModernJobC
 
   const revenue = contractAmount + changeOrders;
   const gpMarginPct = revenue > MONEY_EPSILON ? (gp / revenue) * 100 : null;
-  let retailPercentFinal = retailPercent;
-  let insurancePercentFinal = insurancePercent;
-  if (gpMarginPct != null && retailPercentFinal == null && insurancePercentFinal == null) {
+  let retailPercentFinal: number | null = null;
+  let insurancePercentFinal: number | null = null;
+  if (gpMarginPct != null) {
     if (isInsuranceCustomerName(name)) insurancePercentFinal = gpMarginPct;
     else retailPercentFinal = gpMarginPct;
+  } else {
+    // Keep raw values only when GP margin cannot be computed.
+    retailPercentFinal = retailPercentRaw;
+    insurancePercentFinal = insurancePercentRaw;
   }
 
   return {
@@ -374,6 +378,14 @@ function parseLegacy2024Row(row: unknown[]): ParsedRow | null {
   const updateMarker = row.length > 17 ? boolish(row[17]) : false;
   const paidInFull =
     boolish(row[15]) || statusRaw.toLowerCase().includes("paid in full");
+  const revenue = contractAmount + changeOrders;
+  const gpMarginPct = revenue > MONEY_EPSILON ? (gp / revenue) * 100 : null;
+  let retailPercent: number | null = null;
+  let insurancePercent: number | null = null;
+  if (gpMarginPct != null) {
+    if (isInsuranceCustomerName(name)) insurancePercent = gpMarginPct;
+    else retailPercent = gpMarginPct;
+  }
 
   return {
     leadNumber: null,
@@ -389,8 +401,8 @@ function parseLegacy2024Row(row: unknown[]): ParsedRow | null {
     cost,
     gp,
     gpPercent,
-    retailPercent: null,
-    insurancePercent: null,
+    retailPercent,
+    insurancePercent,
     invoiceFlag,
     paidInFull,
     updateMarker,
