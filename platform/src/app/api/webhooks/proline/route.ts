@@ -115,6 +115,14 @@ export async function POST(req: Request) {
   }
 
   function skipProlineUpdate(existing: { status: string }): boolean {
+    const hasFinancialOrCostingPatch =
+      e.cost !== undefined ||
+      e.costingComplete !== undefined ||
+      e.amountPaid !== undefined ||
+      e.paidInFull !== undefined ||
+      e.paidDate !== undefined ||
+      e.invoicedDelta !== undefined;
+    if (hasFinancialOrCostingPatch) return false;
     // Financial webhooks can carry payment/invoice statuses (e.g. Paid/Failed)
     // that are unrelated to project lifecycle and must not block recording.
     if (e.internalType === "invoice" || e.internalType === "payment") return false;
@@ -136,6 +144,13 @@ export async function POST(req: Request) {
   } | null> {
     const leadNorm = e.leadNumber?.trim() || null;
     const pid = e.prolineJobId?.trim() || null;
+    const parsedJobNumberFromName = (() => {
+      const name = e.name?.trim() || "";
+      if (!name) return null;
+      const m = name.match(/\b(\d{6,10})\b/g);
+      if (!m || m.length === 0) return null;
+      return m[m.length - 1] ?? null;
+    })();
 
     // 1) ProLine project_number (leadNumber) is the primary identifier for jobs.
     if (leadNorm) {
@@ -207,6 +222,32 @@ export async function POST(req: Request) {
           leadNumber: byId.leadNumber,
         });
         return byId;
+      }
+    }
+
+    // 3) Final fallback: job number parsed from project name like "Dave Nelson - 20265098".
+    if (parsedJobNumberFromName) {
+      const byJobNumber = await prisma.job.findFirst({
+        where: { jobNumber: parsedJobNumberFromName },
+        select: {
+          id: true,
+          jobNumber: true,
+          leadNumber: true,
+          prolineJobId: true,
+          contractAmount: true,
+          status: true,
+          invoicedTotal: true,
+          amountPaid: true,
+          updatedAt: true,
+        },
+      });
+      if (byJobNumber) {
+        logProlineWebhook("match_by_job_number_from_name_fallback", {
+          jobId: byJobNumber.id,
+          jobNumber: byJobNumber.jobNumber,
+          sourceName: e.name ?? null,
+        });
+        return byJobNumber;
       }
     }
 
