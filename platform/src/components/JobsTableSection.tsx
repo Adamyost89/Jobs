@@ -349,7 +349,8 @@ export function JobsTableSection({
     const shownStatus = statusColumnLabel(row.status, row.prolineStage);
     const normalize = (s: string): string => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const shownStatusNorm = normalize(shownStatus);
-    const isPaidCloseStage = shownStatusNorm === "paid closed" || shownStatusNorm === "invoice paid";
+    const highlightStatuses = new Set(["paid closed", "invoice paid", "completed warranties"]);
+    const isPaidCloseStage = highlightStatuses.has(shownStatusNorm);
     const gpPct = toPercentNumber(row.gpPercent);
     const revenueByContract = (Number.isFinite(row.contractAmount) ? row.contractAmount : 0) + (Number.isFinite(row.changeOrders) ? row.changeOrders : 0);
     const revenueByInvoiced = Number.isFinite(row.invoicedTotal) ? row.invoicedTotal : 0;
