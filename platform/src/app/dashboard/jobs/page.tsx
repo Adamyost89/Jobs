@@ -290,16 +290,32 @@ export default async function JobsPage({
 
   const jobIds = jobs.map((j) => j.id);
   const commByJob = new Map<string, { paid: number; owed: number }>();
+  const payoutByJob = new Map<string, { paid: number; count: number }>();
   if (jobIds.length > 0) {
-    const sums = await prisma.commission.groupBy({
-      by: ["jobId"],
-      where: { jobId: { in: jobIds } },
-      _sum: { paidAmount: true, owedAmount: true },
-    });
-    for (const g of sums) {
+    const [commissionSums, payoutSums] = await Promise.all([
+      prisma.commission.groupBy({
+        by: ["jobId"],
+        where: { jobId: { in: jobIds } },
+        _sum: { paidAmount: true, owedAmount: true },
+      }),
+      prisma.commissionPayout.groupBy({
+        by: ["jobId"],
+        where: { jobId: { in: jobIds } },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+    ]);
+    for (const g of commissionSums) {
       commByJob.set(g.jobId, {
         paid: g._sum.paidAmount?.toNumber() ?? 0,
         owed: g._sum.owedAmount?.toNumber() ?? 0,
+      });
+    }
+    for (const g of payoutSums) {
+      if (!g.jobId) continue;
+      payoutByJob.set(g.jobId, {
+        paid: g._sum.amount?.toNumber() ?? 0,
+        count: g._count._all ?? 0,
       });
     }
   }
@@ -318,6 +334,7 @@ export default async function JobsPage({
 
   const tableRows: JobsTableRowDTO[] = jobs.map((j) => {
     const cx = commByJob.get(j.id);
+    const payout = payoutByJob.get(j.id);
     const contractAmount = j.contractAmount.toNumber();
     const rawChangeOrders = j.changeOrders.toNumber();
     const changeOrders = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawChangeOrders : 0;
@@ -355,7 +372,7 @@ export default async function JobsPage({
       gp: effectiveGp,
       gpPercent: canSeeGp ? (effectiveMargin ?? 0) : 0,
       projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
-      commPaid: cx ? cx.paid : null,
+      commPaid: payout ? payout.paid : cx ? cx.paid : null,
       commOwed: cx ? (j.salesperson?.active === false ? 0 : cx.owed) : null,
       quoteLinks: quoteLinksByJob.get(j.id) ?? [],
     };
