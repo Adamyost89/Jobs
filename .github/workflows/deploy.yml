@@ -76,6 +76,24 @@ jobs:
           docker compose -f "$compose_file" up -d db
           docker compose -f "$compose_file" ps
 
+          backup_dir="/opt/elevated-sheets/db-backups"
+          mkdir -p "$backup_dir"
+          backup_file="$backup_dir/elevated_jobs_$(date +%Y%m%d_%H%M%S).sql"
+          echo "Creating DB backup: $backup_file"
+          docker compose -f "$compose_file" exec -T db sh -lc 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$backup_file"
+
+          before_user_count="$(
+            docker compose -f "$compose_file" exec -T db sh -lc \
+              'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT COUNT(*) FROM \"User\";" 2>/dev/null || true' \
+              | tr -d "[:space:]"
+          )"
+          if [[ "$before_user_count" =~ ^[0-9]+$ ]]; then
+            echo "User count before migration: $before_user_count"
+          else
+            before_user_count=""
+            echo "User table count unavailable before migration (likely first-time setup)."
+          fi
+
           set +e
           migrate_output="$(docker compose -f "$compose_file" run --rm --no-deps app npx prisma migrate deploy 2>&1)"
           migrate_code=$?
@@ -97,6 +115,22 @@ jobs:
 
           docker compose -f "$compose_file" up -d --build --force-recreate --remove-orphans
           docker compose -f "$compose_file" ps
+
+          after_user_count="$(
+            docker compose -f "$compose_file" exec -T db sh -lc \
+              'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT COUNT(*) FROM \"User\";" 2>/dev/null || true' \
+              | tr -d "[:space:]"
+          )"
+          if [[ "$after_user_count" =~ ^[0-9]+$ ]]; then
+            echo "User count after deploy: $after_user_count"
+            if [[ -n "$before_user_count" ]] && (( after_user_count < before_user_count )); then
+              echo "Safety check failed: user count dropped from $before_user_count to $after_user_count."
+              echo "Deploy stopped. Review DB state and restore from backup if needed: $backup_file"
+              exit 1
+            fi
+          else
+            echo "User count unavailable after deploy."
+          fi
 
           # Wait for the app to be reachable from inside the server first.
           # This avoids failing immediately on transient public 502s while the app boots.

@@ -84,6 +84,14 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Safety guard: accidental hard-delete of users is disabled unless explicitly enabled.
+  if (process.env.ALLOW_USER_DELETE !== "1") {
+    return NextResponse.json(
+      { error: "User deletion is disabled. Set ALLOW_USER_DELETE=1 to enable." },
+      { status: 403 }
+    );
+  }
+
   const { id } = await ctx.params;
   if (id === me.id) {
     return NextResponse.json({ error: "You cannot delete your own account" }, { status: 400 });
