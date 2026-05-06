@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -30,6 +30,7 @@ export function DashboardTopNav({
   email: string;
   roleLabel: string;
 }) {
+  const router = useRouter();
   const pathname = usePathname() || "";
   const headerRef = useRef<HTMLElement | null>(null);
 
@@ -77,6 +78,23 @@ export function DashboardTopNav({
           );
         })}
       </nav>
+      <label className="dash-nav-mobile" aria-label="Open section">
+        <span className="dash-nav-mobile__label">Go to</span>
+        <select
+          className="dash-nav-mobile__select"
+          value={activeHref ?? links[0]?.href ?? ""}
+          onChange={(e) => {
+            const href = e.target.value;
+            if (href) router.push(href);
+          }}
+        >
+          {links.map((l) => (
+            <option key={`mobile-${l.href}`} value={l.href}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="dash-header__user">
         <span className="dash-header__email" title={email}>
           {email}

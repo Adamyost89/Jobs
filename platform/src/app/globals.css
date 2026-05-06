@@ -397,6 +397,25 @@ a.signed-month-drill-link:hover {
   min-width: 0;
 }
 
+.dash-nav-mobile {
+  display: none;
+}
+
+.dash-nav-mobile__label {
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.dash-nav-mobile__select {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: var(--text);
+  padding: 0.45rem 0.55rem;
+}
+
 .dash-nav__link {
   text-decoration: none;
   color: var(--muted);
@@ -655,12 +674,14 @@ a.signed-month-drill-link:hover {
   }
 
   .dash-nav {
+    display: none;
+  }
+
+  .dash-nav-mobile {
+    display: grid;
+    gap: 0.25rem;
     order: 3;
     width: 100%;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 0.15rem;
   }
 
   .dash-header__user {
