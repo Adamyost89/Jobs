@@ -32,7 +32,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 420, margin: "4rem auto", padding: "0 1rem" }}>
+    <main className="auth-page" style={{ maxWidth: 420, margin: "4rem auto", padding: "0 1rem" }}>
       <div className="card">
         <h1 style={{ marginTop: 0 }}>Elevated Job Operations</h1>
         <p style={{ color: "var(--muted)" }}>Sign in with your role account.</p>

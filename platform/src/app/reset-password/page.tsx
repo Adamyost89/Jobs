@@ -58,7 +58,7 @@ function ResetPasswordForm() {
   }
 
   return (
-    <main style={{ maxWidth: 420, margin: "4rem auto", padding: "0 1rem" }}>
+    <main className="auth-page" style={{ maxWidth: 420, margin: "4rem auto", padding: "0 1rem" }}>
       <div className="card">
         <h1 style={{ marginTop: 0 }}>Set your password</h1>
         <p style={{ color: "var(--muted)" }}>Choose a new password for your account.</p>

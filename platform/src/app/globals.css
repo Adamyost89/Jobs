@@ -371,7 +371,8 @@ a.signed-month-drill-link:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.65rem 1.25rem;
-  padding: 0.65rem 1.25rem;
+  padding: calc(0.65rem + env(safe-area-inset-top, 0px)) max(1.25rem, env(safe-area-inset-right, 0px)) 0.65rem
+    max(1.25rem, env(safe-area-inset-left, 0px));
   border-bottom: 1px solid #2a3545;
   background: rgba(15, 20, 25, 0.92);
   position: fixed;
@@ -502,6 +503,35 @@ a.signed-month-drill-link:hover {
   min-width: 0;
 }
 
+.filter-bar__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+@media (min-width: 761px) {
+  .filter-bar input[name="q"] {
+    min-width: 200px;
+  }
+
+  .filter-bar select[name="year"] {
+    min-width: 120px;
+  }
+
+  .filter-bar select[name="sp"] {
+    min-width: 140px;
+  }
+
+  .filter-bar select[name="status"] {
+    min-width: 180px;
+  }
+
+  .filter-bar select[name="sort"] {
+    min-width: 230px;
+  }
+}
+
 .filter-check {
   display: flex;
   align-items: center;
@@ -600,7 +630,8 @@ a.signed-month-drill-link:hover {
 
   .dash-header {
     gap: 0.55rem 0.75rem;
-    padding: 0.55rem 0.85rem;
+    padding: calc(0.55rem + env(safe-area-inset-top, 0px)) max(0.85rem, env(safe-area-inset-right, 0px)) 0.55rem
+      max(0.85rem, env(safe-area-inset-left, 0px));
   }
 
   .dash-header__email {
@@ -613,6 +644,12 @@ a.signed-month-drill-link:hover {
 }
 
 @media (max-width: 760px) {
+  .auth-page input[type="email"],
+  .auth-page input[type="password"],
+  .auth-page input[type="text"] {
+    font-size: 16px;
+  }
+
   .dash-header {
     align-items: stretch;
   }
@@ -674,5 +711,45 @@ a.signed-month-drill-link:hover {
   .page-actions-inline > label > input,
   .page-actions-inline > label > select {
     width: 100%;
+  }
+
+  /* Jobs table: bounded horizontal scroll on narrow viewports */
+  .table-scroll--jobs {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .table-scroll--jobs .table-data {
+    width: auto;
+    min-width: max-content;
+  }
+
+  .table-scroll--jobs .table-data thead th {
+    position: static;
+  }
+
+  /* Jobs and other filter rows: full-width fields */
+  .filter-bar label {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .filter-bar input,
+  .filter-bar select {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .filter-bar .filter-bar__actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .filter-bar .filter-bar__actions > .btn,
+  .filter-bar .filter-bar__actions > a.btn {
+    flex: 1;
+    justify-content: center;
   }
 }

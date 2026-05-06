@@ -29,7 +29,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main style={{ maxWidth: 420, margin: "4rem auto", padding: "0 1rem" }}>
+    <main className="auth-page" style={{ maxWidth: 420, margin: "4rem auto", padding: "0 1rem" }}>
       <div className="card">
         <h1 style={{ marginTop: 0 }}>Reset password</h1>
         <p style={{ color: "var(--muted)" }}>Enter your email to receive a reset link.</p>

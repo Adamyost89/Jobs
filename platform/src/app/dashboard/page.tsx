@@ -184,13 +184,15 @@ export default async function DashboardHome({
           <p style={{ margin: "0 1rem 0.5rem", fontSize: "0.8rem", color: "var(--muted)" }}>
             Click a cell to open matching jobs (same filters as Reports).
           </p>
-          <SignedMonthlyDrillGrid
-            monthlyYear={workYear}
-            monthlyTopRepNames={monthly.monthlyTopRepNames}
-            monthlyStacked={monthly.monthlyStacked}
-            monthlySignedCounts={monthly.monthlySignedCounts}
-            salespersonIdByRepName={monthly.salespersonIdByRepName}
-          />
+          <div className="table-responsive">
+            <SignedMonthlyDrillGrid
+              monthlyYear={workYear}
+              monthlyTopRepNames={monthly.monthlyTopRepNames}
+              monthlyStacked={monthly.monthlyStacked}
+              monthlySignedCounts={monthly.monthlySignedCounts}
+              salespersonIdByRepName={monthly.salespersonIdByRepName}
+            />
+          </div>
         </div>
       )}
 

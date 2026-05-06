@@ -410,11 +410,11 @@ export default async function JobsPage({
           {signedUndated ? <input type="hidden" name="signedUndated" value="1" /> : null}
           <label>
             Search
-            <input name="q" defaultValue={q || ""} placeholder="Job #, lead, customer…" style={{ minWidth: 200 }} />
+            <input name="q" defaultValue={q || ""} placeholder="Job #, lead, customer…" />
           </label>
           <label>
             Year
-            <select name="year" defaultValue={yearSelectDefault} style={{ minWidth: 120 }}>
+            <select name="year" defaultValue={yearSelectDefault}>
               {yearOpts.map((y) => (
                 <option key={y} value={String(y)}>
                   {y}
@@ -426,7 +426,7 @@ export default async function JobsPage({
           {canViewAllJobs(user) && (
             <label>
               Salesperson
-              <select name="sp" defaultValue={spId || ""} style={{ minWidth: 140 }}>
+              <select name="sp" defaultValue={spId || ""}>
                 <option value="">All</option>
                 {salespersonOptions.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -438,7 +438,7 @@ export default async function JobsPage({
           )}
           <label>
             Status
-            <select name="status" defaultValue={status || ""} style={{ minWidth: 180 }}>
+            <select name="status" defaultValue={status || ""}>
               <option value="">All</option>
               {statusOptions.map((opt) => (
                 <option key={opt} value={opt}>
@@ -449,7 +449,7 @@ export default async function JobsPage({
           </label>
           <label>
             Sort
-            <select name="sort" defaultValue={sortKey} style={{ minWidth: 230 }}>
+            <select name="sort" defaultValue={sortKey}>
               <option value="job_desc">Job # newest first (high → low)</option>
               <option value="job_asc">Job # oldest first (low → high)</option>
               <option value="amount_paid_desc">Amount paid high → low</option>
@@ -462,7 +462,7 @@ export default async function JobsPage({
               {canSeeGp ? <option value="gp_asc">GP low → high</option> : null}
             </select>
           </label>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+          <div className="filter-bar__actions">
             <button className="btn" type="submit">
               Apply
             </button>
