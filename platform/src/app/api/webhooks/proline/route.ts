@@ -26,6 +26,19 @@ function invoiceDeltaMarkerType(invoiceId: string): string {
   return `PROLINE_INVOICE_DELTA_${safe || "UNKNOWN"}`;
 }
 
+function hasQuoteContextInRaw(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const body = raw as Record<string, unknown>;
+  const trigger = typeof body.trigger === "string" ? body.trigger.trim().toLowerCase() : "";
+  return (
+    trigger.includes("quote") ||
+    body.quote_id !== undefined ||
+    body.quote_name !== undefined ||
+    body.approved_total !== undefined ||
+    body.approved_date !== undefined
+  );
+}
+
 function prolineWebhookDebugEnabled(): boolean {
   const v = (process.env.PROLINE_WEBHOOK_DEBUG || "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
@@ -337,6 +350,7 @@ export async function POST(req: Request) {
   async function computeUpdateForExistingJob(existing: {
     id: string;
     leadNumber: string | null;
+    contractAmount: Prisma.Decimal;
     status: string;
     invoicedTotal: Prisma.Decimal;
     amountPaid: Prisma.Decimal | null;
@@ -364,8 +378,17 @@ export async function POST(req: Request) {
     if (e.prolineJobId) data.prolineJobId = e.prolineJobId;
     if (e.contractAmount !== undefined) {
       const c = asDecimal(e.contractAmount);
-      data.contractAmount = c;
-      data.projectRevenue = c;
+      const shouldAccumulateContract =
+        e.internalType === "job.upsert" &&
+        (e.quoteId !== undefined || e.quoteName !== undefined || e.approvedDate !== undefined || hasQuoteContextInRaw(e.raw));
+      if (shouldAccumulateContract) {
+        const nextContractAmount = existing.contractAmount.plus(c);
+        data.contractAmount = nextContractAmount;
+        data.projectRevenue = nextContractAmount;
+      } else {
+        data.contractAmount = c;
+        data.projectRevenue = c;
+      }
     }
     {
       const incoming = incomingLifecycleFromEvent();
