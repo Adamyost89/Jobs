@@ -28,6 +28,7 @@ model User {
   role         Role
   salespersonId String? @unique
   salesperson   Salesperson? @relation(fields: [salespersonId], references: [id])
+  lastLoginAt  DateTime?
   passwordTokens PasswordToken[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

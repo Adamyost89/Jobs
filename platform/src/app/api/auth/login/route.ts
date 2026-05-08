@@ -29,6 +29,13 @@ export async function POST(req: Request) {
   if (!ok) {
     return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
+  // Best effort: login should still succeed even if audit field update fails.
+  prisma.user
+    .update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    })
+    .catch(() => undefined);
   const token = await signToken(tokenPayloadFromUser(user));
   const jar = await cookies();
   jar.set(cookieName(), token, {

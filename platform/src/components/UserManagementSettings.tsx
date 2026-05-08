@@ -9,6 +9,7 @@ type Row = {
   role: Role;
   salespersonId: string | null;
   salespersonName: string | null;
+  lastLoginAt?: string | null;
 };
 
 export function UserManagementSettings({
@@ -161,6 +162,7 @@ export function UserManagementSettings({
               <th>Email</th>
               <th>Role</th>
               <th>Salesperson</th>
+              <th>Last login</th>
               <th style={{ minWidth: "16rem" }}>Change</th>
             </tr>
           </thead>
@@ -214,6 +216,9 @@ function UserRow({
         </select>
       </td>
       <td>{u.salespersonName ?? "—"}</td>
+      <td style={{ whiteSpace: "nowrap" }}>
+        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "Never"}
+      </td>
       <td>
         <div style={{ display: "grid", gap: 6 }}>
           {role === Role.SALESMAN && (

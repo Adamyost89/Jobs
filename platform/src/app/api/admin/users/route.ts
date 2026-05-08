@@ -27,6 +27,7 @@ export async function GET() {
       role: u.role,
       salespersonId: u.salespersonId,
       salespersonName: u.salesperson?.name ? displaySalespersonName(u.salesperson.name) : null,
+      lastLoginAt: u.lastLoginAt,
       createdAt: u.createdAt,
     })),
   });
