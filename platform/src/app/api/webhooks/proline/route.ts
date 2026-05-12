@@ -104,6 +104,7 @@ export async function POST(req: Request) {
       shareLink: e.shareLink ?? null,
       approvedDate: e.approvedDate ?? null,
       approvedTotal: e.approvedTotal ?? e.contractAmount ?? null,
+      approvedValue: e.approvedValue ?? null,
       ...(extra ?? {}),
     } as Prisma.InputJsonObject;
   }
@@ -114,7 +115,8 @@ export async function POST(req: Request) {
     leadNumber: e.leadNumber ?? null,
     status: e.status ?? null,
     prolineStage: e.prolineStage ?? null,
-    hasContract: e.contractAmount !== undefined,
+    hasContract:
+      e.contractAmount !== undefined || e.approvedValue !== undefined || e.approvedTotal !== undefined,
     hasCost: e.cost !== undefined,
   });
 
@@ -525,6 +527,7 @@ export async function POST(req: Request) {
       body.quote_id !== undefined ||
       body.quote_name !== undefined ||
       body.approved_total !== undefined ||
+      body.approved_value !== undefined ||
       body.approved_date !== undefined
     );
   }
@@ -555,7 +558,11 @@ export async function POST(req: Request) {
   }
 
   function approvedAmountFromEvent(): Prisma.Decimal {
-    return asDecimal(Math.max(0, e.approvedTotal ?? e.contractAmount ?? 0));
+    const basis =
+      e.approvedValue !== undefined && Number.isFinite(e.approvedValue)
+        ? e.approvedValue
+        : (e.contractAmount ?? e.approvedTotal ?? 0);
+    return asDecimal(Math.max(0, basis));
   }
 
   async function createQuoteApprovedJob(approvedDate: Date): Promise<{ id: string; jobNumber: string }> {
@@ -633,7 +640,7 @@ export async function POST(req: Request) {
     const data: Prisma.JobUpdateInput = {
       contractSignedAt: approvedDate,
     };
-    if (e.approvedTotal !== undefined || e.contractAmount !== undefined) {
+    if (e.approvedValue !== undefined || e.approvedTotal !== undefined || e.contractAmount !== undefined) {
       const nextContract = approvedAmountFromEvent();
       data.contractAmount = nextContract;
       data.projectRevenue = nextContract;

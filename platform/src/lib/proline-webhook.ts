@@ -34,7 +34,9 @@ export type NormalizedProlineEvent = {
   year?: number;
   leadNumber?: string | null;
   name?: string | null;
-  contractAmount?: number;
+ contractAmount?: number;
+  /** Native ProLine `approved_value` (authoritative contract $ when present). */
+  approvedValue?: number;
   approvedDate?: string | null;
   approvedTotal?: number;
   quoteId?: string;
@@ -111,13 +113,15 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
   }
   if (typeof body.leadNumber === "string") body.leadNumber = body.leadNumber.trim();
 
-  if (body.contractAmount === undefined) {
+  // ProLine native payloads: `approved_value` is the authoritative contract amount when present.
+  const approvedValueNum = numberFromUnknown(body.approved_value);
+  if (approvedValueNum !== undefined) {
+    body.contractAmount = approvedValueNum;
+  } else if (body.contractAmount === undefined) {
     const at = numberFromUnknown(body.approved_total);
-    const av = body.approved_value;
-    const qv = body.quoted_value;
+    const qv = numberFromUnknown(body.quoted_value);
     if (at !== undefined) body.contractAmount = at;
-    else if (typeof av === "number" && Number.isFinite(av)) body.contractAmount = av;
-    else if (typeof qv === "number" && Number.isFinite(qv)) body.contractAmount = qv;
+    else if (qv !== undefined) body.contractAmount = qv;
   }
 
   if (body.cost === undefined) {
@@ -384,8 +388,9 @@ export function normalizeProlineWebhookBody(
         return s || null;
       })(),
       name: (body.name as string | null | undefined) ?? null,
-      contractAmount: typeof body.contractAmount === "number" ? body.contractAmount : undefined,
-      approvedTotal: typeof body.approvedTotal === "number" ? body.approvedTotal : undefined,
+      approvedValue: numberFromUnknown(body.approved_value),
+      contractAmount: numberFromUnknown(body.contractAmount),
+      approvedTotal: numberFromUnknown(body.approvedTotal),
       quoteId: typeof body.quoteId === "string" ? body.quoteId : undefined,
       quoteName: (body.quoteName as string | null | undefined) ?? null,
       shareLink: typeof body.shareLink === "string" ? body.shareLink : undefined,

@@ -147,6 +147,7 @@ export async function syncProlineJobsFromApi(
       }
       const stageStr = pickProlineStageFromRecord(flat);
       const contractAmount = pickOptionalMoney(flat, [
+        "approved_value",
         "approved_total",
         "contract_amount",
         "contractAmount",
