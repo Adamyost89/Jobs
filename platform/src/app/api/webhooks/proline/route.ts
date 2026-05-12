@@ -26,19 +26,6 @@ function invoiceDeltaMarkerType(invoiceId: string): string {
   return `PROLINE_INVOICE_DELTA_${safe || "UNKNOWN"}`;
 }
 
-function hasQuoteContextInRaw(raw: unknown): boolean {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-  const body = raw as Record<string, unknown>;
-  const trigger = typeof body.trigger === "string" ? body.trigger.trim().toLowerCase() : "";
-  return (
-    trigger.includes("quote") ||
-    body.quote_id !== undefined ||
-    body.quote_name !== undefined ||
-    body.approved_total !== undefined ||
-    body.approved_date !== undefined
-  );
-}
-
 function prolineWebhookDebugEnabled(): boolean {
   const v = (process.env.PROLINE_WEBHOOK_DEBUG || "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
@@ -378,17 +365,9 @@ export async function POST(req: Request) {
     if (e.prolineJobId) data.prolineJobId = e.prolineJobId;
     if (e.contractAmount !== undefined) {
       const c = asDecimal(e.contractAmount);
-      const shouldAccumulateContract =
-        e.internalType === "job.upsert" &&
-        (e.quoteId !== undefined || e.quoteName !== undefined || e.approvedDate !== undefined || hasQuoteContextInRaw(e.raw));
-      if (shouldAccumulateContract) {
-        const nextContractAmount = existing.contractAmount.plus(c);
-        data.contractAmount = nextContractAmount;
-        data.projectRevenue = nextContractAmount;
-      } else {
-        data.contractAmount = c;
-        data.projectRevenue = c;
-      }
+      // ProLine sends the authoritative project total (e.g. approved_total), not a delta to add.
+      data.contractAmount = c;
+      data.projectRevenue = c;
     }
     {
       const incoming = incomingLifecycleFromEvent();
@@ -651,12 +630,14 @@ export async function POST(req: Request) {
       });
     }
 
-    const nextContractAmount = existing.contractAmount.plus(approvedAmountFromEvent());
     const data: Prisma.JobUpdateInput = {
-      contractAmount: nextContractAmount,
-      projectRevenue: nextContractAmount,
       contractSignedAt: approvedDate,
     };
+    if (e.approvedTotal !== undefined || e.contractAmount !== undefined) {
+      const nextContract = approvedAmountFromEvent();
+      data.contractAmount = nextContract;
+      data.projectRevenue = nextContract;
+    }
     if (e.name !== undefined) data.name = e.name;
     if (e.prolineJobId) data.prolineJobId = e.prolineJobId;
     if (e.leadNumber !== undefined) {
