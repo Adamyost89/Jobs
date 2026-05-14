@@ -278,6 +278,43 @@ a.signed-month-drill-link:hover {
   color: var(--muted);
 }
 
+/** Job contract / paid under commission job cells — readable vs body-muted sublines */
+.job-financial-hints {
+  margin-top: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(59, 130, 246, 0.38);
+  font-size: 0.84rem;
+  line-height: 1.45;
+  max-width: 14rem;
+}
+
+.job-financial-hints__line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  align-items: baseline;
+}
+
+.job-financial-hints__line + .job-financial-hints__line {
+  margin-top: 0.15rem;
+}
+
+.job-financial-hints__label {
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.job-financial-hints__value {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
 /* Jobs row highlights (conditional formatting); defaults also used outside Jobs */
 .table-data tbody tr.row-hl--good {
   box-shadow: inset 3px 0 0 0 #22c55e;

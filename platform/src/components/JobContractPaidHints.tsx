@@ -15,13 +15,17 @@ export function JobContractPaidHints({
   amountPaid: number | null;
 }) {
   return (
-    <>
-      <div className="cell-muted" style={{ fontSize: "0.75rem", marginTop: "0.2rem" }}>
-        Contract: {moneyUsd(contractAmount)}
+    <div className="job-financial-hints" aria-label="Job contract and amount paid">
+      <div className="job-financial-hints__line">
+        <span className="job-financial-hints__label">Contract</span>
+        <span className="job-financial-hints__value">{moneyUsd(contractAmount)}</span>
       </div>
-      <div className="cell-muted" style={{ fontSize: "0.75rem" }}>
-        Paid: {amountPaid == null ? "—" : moneyUsd(amountPaid)}
+      <div className="job-financial-hints__line">
+        <span className="job-financial-hints__label">Paid</span>
+        <span className="job-financial-hints__value">
+          {amountPaid == null ? "—" : moneyUsd(amountPaid)}
+        </span>
       </div>
-    </>
+    </div>
   );
 }
