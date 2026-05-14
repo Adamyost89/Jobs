@@ -17,6 +17,7 @@ import { commissionDisplayAmounts, roundMoney } from "@/lib/commission-display";
 import { jobNumberSortKey } from "@/lib/job-sort";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { CommissionExplainButton } from "@/components/CommissionExplainButton";
+import { commissionJobAllowedForPayoutSheetWhere } from "@/lib/end-of-job-form";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
 import { JobContractPaidHints } from "@/components/JobContractPaidHints";
@@ -46,6 +47,7 @@ export default async function CommissionsPage({
 
   const parts: Prisma.CommissionWhereInput[] = [];
   parts.push({ owedAmount: { gt: 0 } });
+  parts.push(commissionJobAllowedForPayoutSheetWhere);
   if (!canViewAllJobs(user)) {
     parts.push(
       user.salespersonIds.length > 0

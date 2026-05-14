@@ -109,6 +109,10 @@ model Job {
   salesperson      Salesperson? @relation("PrimarySalesperson", fields: [salespersonId], references: [id])
   prolineJobId     String?
   sourceSheet      String?
+  /** ProLine stage matched configured trigger (e.g. End of Job Checklist); first set time only. */
+  endOfJobFormRequiredAt DateTime?
+  endOfJobFormSubmittedAt DateTime?
+  endOfJobFormResponses   Json?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -211,6 +215,10 @@ model SystemConfig {
   prolineNameAliases Json @default("{}")
   /** Shared status badge color overrides keyed by normalized status/stage labels. */
   statusBadgeColors Json @default("{}")
+  /** End-of-job checklist form definition: `{ version, fields[] }`. */
+  endOfJobForm       Json @default("{\"version\":1,\"fields\":[]}")
+  /** Match rule for `Job.prolineStage`, e.g. `{ \"match\": \"substring\", \"value\": \"End of Job Checklist\" }`. */
+  endOfJobFormTrigger Json @default("{\"match\":\"substring\",\"value\":\"End of Job Checklist\"}")
 }
 
 /** Full raw grid for one Excel tab — captures every sheet so nothing is left only in .xlsx. */

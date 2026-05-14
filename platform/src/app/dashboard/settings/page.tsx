@@ -11,6 +11,7 @@ import { loadSalespeopleWithKindForAdmin } from "@/lib/salespeople-kind-db";
 import { ProLineConnectionAssistant } from "@/components/ProLineConnectionAssistant";
 import { ProlineNameAliasSettings } from "@/components/ProlineNameAliasSettings";
 import { StatusBadgeColorSettings } from "@/components/StatusBadgeColorSettings";
+import { EndOfJobFormSettingsCard } from "@/components/EndOfJobFormSettingsCard";
 import { SyncCommissionLedgerButton } from "@/components/SyncCommissionLedgerButton";
 import Link from "next/link";
 import { displaySalespersonName } from "@/lib/salesperson-name";
@@ -153,6 +154,7 @@ export default async function SettingsPage({
             </p>
             <StatusBadgeColorSettings />
           </div>
+          <EndOfJobFormSettingsCard />
           <div className="card">
             <h2 style={{ marginTop: 0 }}>Commission ledger sync</h2>
             <p style={{ color: "var(--muted)" }}>
@@ -197,6 +199,10 @@ export default async function SettingsPage({
             <li>
               Zapier bridge: <code>POST /api/integrations/zapier-bridge</code> (Bearer{" "}
               <code>ZAPIER_BRIDGE_SECRET</code>)
+            </li>
+            <li>
+              End-of-job checklist (after submit): optional <code>END_OF_JOB_FORM_ZAP_URL</code> Catch Hook; optional{" "}
+              <code>END_OF_JOB_FORM_ZAP_SECRET</code> as Bearer / <code>X-Bridge-Secret</code>
             </li>
           </ul>
           <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />

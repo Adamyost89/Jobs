@@ -13,6 +13,10 @@ import {
   jobQualifiesForProlineAutomation,
 } from "@/lib/proline-lifecycle-status";
 import { normalizeStatus } from "@/lib/status";
+import {
+  endOfJobFormRequiredAtIfNewlyTriggered,
+  parseEndOfJobFormTrigger,
+} from "@/lib/end-of-job-form";
 
 function asDecimal(n: number): Prisma.Decimal {
   return new Prisma.Decimal(n.toFixed(2));
@@ -79,6 +83,11 @@ export async function POST(req: Request) {
   const cfgRows = await prisma.$queryRaw<Array<{ prolineNameAliases: unknown }>>(
     Prisma.sql`SELECT "prolineNameAliases" FROM "SystemConfig" WHERE "id" = 'singleton' LIMIT 1`
   );
+  const eojCfg = await prisma.systemConfig.findUnique({
+    where: { id: "singleton" },
+    select: { endOfJobFormTrigger: true },
+  });
+  const endOfJobFormTrigger = parseEndOfJobFormTrigger(eojCfg?.endOfJobFormTrigger);
   const normalized = normalizeProlineWebhookBody(json, {
     PROLINE_USER_MAP: process.env.PROLINE_USER_MAP,
     PROLINE_NAME_ALIASES: cfgRows[0]?.prolineNameAliases,
@@ -168,6 +177,9 @@ export async function POST(req: Request) {
     status: string;
     invoicedTotal: Prisma.Decimal;
     amountPaid: Prisma.Decimal | null;
+    prolineStage: string | null;
+    endOfJobFormRequiredAt: Date | null;
+    endOfJobFormSubmittedAt: Date | null;
   } | null> {
     const leadNorm = e.leadNumber?.trim() || null;
     const pid = e.prolineJobId?.trim() || null;
@@ -197,6 +209,9 @@ export async function POST(req: Request) {
           status: true,
           invoicedTotal: true,
           amountPaid: true,
+          prolineStage: true,
+          endOfJobFormRequiredAt: true,
+          endOfJobFormSubmittedAt: true,
           updatedAt: true,
         },
         orderBy: [{ updatedAt: "desc" }],
@@ -239,6 +254,9 @@ export async function POST(req: Request) {
           status: true,
           invoicedTotal: true,
           amountPaid: true,
+          prolineStage: true,
+          endOfJobFormRequiredAt: true,
+          endOfJobFormSubmittedAt: true,
           updatedAt: true,
         },
       });
@@ -265,6 +283,9 @@ export async function POST(req: Request) {
           status: true,
           invoicedTotal: true,
           amountPaid: true,
+          prolineStage: true,
+          endOfJobFormRequiredAt: true,
+          endOfJobFormSubmittedAt: true,
           updatedAt: true,
         },
       });
@@ -343,6 +364,9 @@ export async function POST(req: Request) {
     status: string;
     invoicedTotal: Prisma.Decimal;
     amountPaid: Prisma.Decimal | null;
+    prolineStage: string | null;
+    endOfJobFormRequiredAt: Date | null;
+    endOfJobFormSubmittedAt: Date | null;
   }): Promise<{
     data: Prisma.JobUpdateInput;
     invoiceDeltaApplied: boolean;
@@ -381,6 +405,19 @@ export async function POST(req: Request) {
     if (e.prolineStage !== undefined) {
       const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
       data.prolineStage = s === "" ? null : s;
+    }
+    {
+      let nextProlineStageForChecklist: string | null | undefined = existing.prolineStage;
+      if (e.prolineStage !== undefined) {
+        const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
+        nextProlineStageForChecklist = s === "" ? null : s;
+      }
+      const requiredAt = endOfJobFormRequiredAtIfNewlyTriggered(
+        existing,
+        nextProlineStageForChecklist,
+        endOfJobFormTrigger
+      );
+      if (requiredAt) data.endOfJobFormRequiredAt = requiredAt;
     }
     if (e.cost !== undefined) data.cost = asDecimal(e.cost);
     if (e.costingComplete !== undefined) data.costingComplete = e.costingComplete;
@@ -497,6 +534,12 @@ export async function POST(req: Request) {
             ? true
             : (e.paidInFull ?? false),
         paidDate: e.paidDate ? new Date(e.paidDate) : null,
+        endOfJobFormRequiredAt:
+          endOfJobFormRequiredAtIfNewlyTriggered(
+            { endOfJobFormRequiredAt: null, endOfJobFormSubmittedAt: null },
+            e.prolineStage ?? null,
+            endOfJobFormTrigger
+          ) ?? undefined,
       },
     });
     await prisma.jobEvent.create({
@@ -597,6 +640,12 @@ export async function POST(req: Request) {
             ? true
             : (e.paidInFull ?? false),
         paidDate: e.paidDate ? new Date(e.paidDate) : null,
+        endOfJobFormRequiredAt:
+          endOfJobFormRequiredAtIfNewlyTriggered(
+            { endOfJobFormRequiredAt: null, endOfJobFormSubmittedAt: null },
+            e.prolineStage ?? null,
+            endOfJobFormTrigger
+          ) ?? undefined,
       },
     });
     await prisma.jobEvent.create({
@@ -663,6 +712,19 @@ export async function POST(req: Request) {
     if (e.prolineStage !== undefined) {
       const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
       data.prolineStage = s === "" ? null : s;
+    }
+    {
+      let nextProlineStageForChecklist: string | null | undefined = existing.prolineStage;
+      if (e.prolineStage !== undefined) {
+        const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
+        nextProlineStageForChecklist = s === "" ? null : s;
+      }
+      const requiredAt = endOfJobFormRequiredAtIfNewlyTriggered(
+        existing,
+        nextProlineStageForChecklist,
+        endOfJobFormTrigger
+      );
+      if (requiredAt) data.endOfJobFormRequiredAt = requiredAt;
     }
     if (e.paidInFull !== undefined) data.paidInFull = e.paidInFull;
     if (isPaidAndClosedLabel(incomingLifecycleFromEvent()) || isPaidAndClosedLabel(e.prolineStage)) {

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canMarkCommissionPaid } from "@/lib/rbac";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
+import { commissionPayoutBlockedForJob } from "@/lib/end-of-job-form";
 import { formatIsoDateForPayrollTz, getCurrentPayPeriodLabel, getPayPeriodForPayday, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
 
 const bodySchema = z.object({
@@ -42,9 +43,19 @@ export async function POST(req: Request) {
     const jobId = await prisma.$transaction(async (tx) => {
       const c = await tx.commission.findUnique({
         where: { id: commissionId },
-        include: { job: true, salesperson: true },
+        include: {
+          job: {
+            select: {
+              id: true,
+              endOfJobFormRequiredAt: true,
+              endOfJobFormSubmittedAt: true,
+            },
+          },
+          salesperson: true,
+        },
       });
       if (!c) throw new Error("NOT_FOUND");
+      if (commissionPayoutBlockedForJob(c.job)) throw new Error("END_OF_JOB_FORM_PENDING");
       if (c.override) throw new Error("OVERRIDE_LOCKED");
       const payAmt = amount ?? c.owedAmount.toNumber();
       if (payAmt <= 0) throw new Error("NO_AMOUNT");
@@ -90,6 +101,12 @@ export async function POST(req: Request) {
     }
     if (msg === "NO_AMOUNT") {
       return NextResponse.json({ error: "Nothing to pay" }, { status: 400 });
+    }
+    if (msg === "END_OF_JOB_FORM_PENDING") {
+      return NextResponse.json(
+        { error: "End-of-job checklist must be submitted before paying commissions for this job." },
+        { status: 400 }
+      );
     }
     console.error(e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

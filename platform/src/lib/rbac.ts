@@ -50,3 +50,10 @@ export function canRunFullReports(user: SessionUser): boolean {
 export function canEditJobs(user: SessionUser): boolean {
   return user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN;
 }
+
+/** Submit end-of-job checklist for a job (primary rep or admins). */
+export function canSubmitEndOfJobForm(user: SessionUser, job: { salespersonId: string | null }): boolean {
+  if (canViewAllJobs(user)) return true;
+  if (job.salespersonId && user.salespersonIds.includes(job.salespersonId)) return true;
+  return false;
+}

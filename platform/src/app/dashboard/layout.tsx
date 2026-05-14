@@ -18,6 +18,7 @@ export default async function DashboardLayout({
     : [
         { href: "/dashboard", label: "Home" },
         { href: "/dashboard/jobs", label: "Jobs" },
+        { href: "/dashboard/forms", label: "Forms" },
         { href: "/dashboard/commissions", label: "Commissions" },
         { href: "/dashboard/advanced", label: "Advanced" },
       ];

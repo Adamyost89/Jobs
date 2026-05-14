@@ -25,6 +25,8 @@ const patchSchema = z
     paidDate: z.union([z.string(), z.null()]).optional(),
     contractSignedAt: z.union([z.string(), z.null()]).optional(),
     drewParticipation: z.string().optional().nullable(),
+    /** Admin / super admin (`canEditJobs`): set ISO datetime or null to clear. Manual trigger when ProLine stage did not. */
+    endOfJobFormRequiredAt: z.union([z.string(), z.null()]).optional(),
   })
   .partial();
 
@@ -83,6 +85,23 @@ export async function PATCH(
         : new Date(p.contractSignedAt as string);
   }
   if (p.drewParticipation !== undefined) data.drewParticipation = p.drewParticipation;
+
+  if (p.endOfJobFormRequiredAt !== undefined) {
+    if (p.endOfJobFormRequiredAt === null) {
+      data.endOfJobFormRequiredAt = null;
+    } else {
+      const raw = String(p.endOfJobFormRequiredAt).trim();
+      if (!raw) {
+        data.endOfJobFormRequiredAt = null;
+      } else {
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) {
+          return NextResponse.json({ error: "Invalid endOfJobFormRequiredAt date" }, { status: 400 });
+        }
+        data.endOfJobFormRequiredAt = d;
+      }
+    }
+  }
 
   const effectiveContractAmount =
     p.contractAmount !== undefined ? p.contractAmount : job.contractAmount.toNumber();

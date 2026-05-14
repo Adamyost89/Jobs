@@ -1,0 +1,175 @@
+import type { Job, Prisma } from "@prisma/client";
+
+export type EndOfJobFormTriggerMatch = "substring" | "exact";
+
+export type EndOfJobFormTriggerConfig = {
+  match: EndOfJobFormTriggerMatch;
+  value: string;
+};
+
+export type EndOfJobFormFieldType = "text" | "textarea" | "number" | "boolean" | "select";
+
+export type EndOfJobFormField = {
+  id: string;
+  label: string;
+  type: EndOfJobFormFieldType;
+  required?: boolean;
+  options?: string[];
+};
+
+export type EndOfJobFormConfig = {
+  version: number;
+  fields: EndOfJobFormField[];
+};
+
+const DEFAULT_TRIGGER: EndOfJobFormTriggerConfig = {
+  match: "substring",
+  value: "End of Job Checklist",
+};
+
+const DEFAULT_FORM: EndOfJobFormConfig = { version: 1, fields: [] };
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+export function parseEndOfJobFormTrigger(raw: unknown): EndOfJobFormTriggerConfig {
+  if (!isRecord(raw)) return DEFAULT_TRIGGER;
+  const match = raw.match === "exact" || raw.match === "substring" ? raw.match : DEFAULT_TRIGGER.match;
+  const value = typeof raw.value === "string" ? raw.value.trim() : DEFAULT_TRIGGER.value;
+  if (!value) return { ...DEFAULT_TRIGGER, match };
+  return { match, value };
+}
+
+export function parseEndOfJobFormConfig(raw: unknown): { ok: true; value: EndOfJobFormConfig } | { ok: false; error: string } {
+  if (!isRecord(raw)) return { ok: true, value: DEFAULT_FORM };
+  const version = typeof raw.version === "number" && Number.isFinite(raw.version) ? raw.version : 1;
+  const fieldsRaw = raw.fields;
+  if (!Array.isArray(fieldsRaw)) return { ok: true, value: { version, fields: [] } };
+  const fields: EndOfJobFormField[] = [];
+  for (let i = 0; i < fieldsRaw.length; i++) {
+    const fr = fieldsRaw[i];
+    if (!isRecord(fr)) continue;
+    const id = typeof fr.id === "string" ? fr.id.trim() : "";
+    const label = typeof fr.label === "string" ? fr.label.trim() : "";
+    const type = fr.type;
+    if (!id || !label) return { ok: false, error: `Field at index ${i} needs non-empty id and label` };
+    if (type !== "text" && type !== "textarea" && type !== "number" && type !== "boolean" && type !== "select") {
+      return { ok: false, error: `Field "${id}" has invalid type` };
+    }
+    const required = Boolean(fr.required);
+    let options: string[] | undefined;
+    if (type === "select") {
+      if (!Array.isArray(fr.options) || fr.options.length === 0) {
+        return { ok: false, error: `Select field "${id}" needs options[]` };
+      }
+      options = fr.options.map((o) => String(o).trim()).filter(Boolean);
+      if (options.length === 0) return { ok: false, error: `Select field "${id}" needs at least one option` };
+    }
+    fields.push({ id, label, type, required: required || undefined, options });
+  }
+  return { ok: true, value: { version, fields } };
+}
+
+export function shouldRequireEndOfJobFormFromStage(
+  stage: string | null | undefined,
+  trigger: EndOfJobFormTriggerConfig
+): boolean {
+  const needle = (trigger.value || "").trim();
+  if (!needle) return false;
+  const hay = String(stage ?? "").trim();
+  if (!hay) return false;
+  if (trigger.match === "exact") return hay.toLowerCase() === needle.toLowerCase();
+  return hay.toLowerCase().includes(needle.toLowerCase());
+}
+
+export function commissionPayoutBlockedForJob(job: {
+  endOfJobFormRequiredAt: Date | null;
+  endOfJobFormSubmittedAt: Date | null;
+}): boolean {
+  return Boolean(job.endOfJobFormRequiredAt && !job.endOfJobFormSubmittedAt);
+}
+
+/** Use in Prisma `Commission` queries so payout-oriented lists exclude jobs pending the end-of-job form. */
+export const commissionJobAllowedForPayoutSheetWhere: Prisma.CommissionWhereInput = {
+  OR: [
+    { job: { endOfJobFormRequiredAt: null } },
+    { job: { endOfJobFormSubmittedAt: { not: null } } },
+  ],
+};
+
+export type ValidatedEndOfJobResponses = Record<string, string | number | boolean | null>;
+
+export function validateEndOfJobFormSubmission(
+  config: EndOfJobFormConfig,
+  body: Record<string, unknown>
+): { ok: true; values: ValidatedEndOfJobResponses } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+  const values: ValidatedEndOfJobResponses = {};
+
+  for (const field of config.fields) {
+    const raw = body[field.id];
+    const missing = raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "");
+
+    if (field.required && missing) {
+      errors.push(`"${field.label}" is required`);
+      continue;
+    }
+    if (missing) {
+      values[field.id] = null;
+      continue;
+    }
+
+    switch (field.type) {
+      case "text":
+      case "textarea": {
+        values[field.id] = String(raw).trim();
+        break;
+      }
+      case "number": {
+        const n = typeof raw === "number" ? raw : Number(String(raw).trim());
+        if (!Number.isFinite(n)) {
+          errors.push(`"${field.label}" must be a number`);
+        } else {
+          values[field.id] = n;
+        }
+        break;
+      }
+      case "boolean": {
+        if (typeof raw === "boolean") {
+          values[field.id] = raw;
+        } else if (raw === "true" || raw === "1" || raw === 1) values[field.id] = true;
+        else if (raw === "false" || raw === "0" || raw === 0) values[field.id] = false;
+        else errors.push(`"${field.label}" must be true or false`);
+        break;
+      }
+      case "select": {
+        const s = String(raw).trim();
+        const opts = field.options ?? [];
+        if (!opts.includes(s)) {
+          errors.push(`"${field.label}" must be one of the allowed choices`);
+        } else {
+          values[field.id] = s;
+        }
+        break;
+      }
+      default:
+        errors.push(`Unknown field type for "${field.label}"`);
+    }
+  }
+
+  if (errors.length) return { ok: false, errors };
+  return { ok: true, values };
+}
+
+/** If stage matches trigger and job never had requirement set, return Date to set. */
+export function endOfJobFormRequiredAtIfNewlyTriggered(
+  existing: Pick<Job, "endOfJobFormRequiredAt" | "endOfJobFormSubmittedAt">,
+  nextStage: string | null | undefined,
+  trigger: EndOfJobFormTriggerConfig
+): Date | null {
+  if (existing.endOfJobFormSubmittedAt) return null;
+  if (existing.endOfJobFormRequiredAt) return null;
+  if (!shouldRequireEndOfJobFormFromStage(nextStage, trigger)) return null;
+  return new Date();
+}

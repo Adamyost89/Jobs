@@ -19,6 +19,9 @@ import {
   isTotalCommissionsWideSheetName,
 } from "@/lib/total-commissions-wide-import";
 import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
+import {
+  commissionPayoutBlockedForJob,
+} from "@/lib/end-of-job-form";
 
 export type { PayoutColumnMap } from "@/lib/payout-column-map";
 
@@ -204,7 +207,14 @@ export async function importPayoutSheetTab(
     if (map.jobNumber !== undefined) {
       const jn = str(getCell(row, map.jobNumber)).trim();
       if (jn) {
-        const job = await db.job.findUnique({ where: { jobNumber: jn }, select: { id: true } });
+        const job = await db.job.findUnique({
+          where: { jobNumber: jn },
+          select: { id: true, endOfJobFormRequiredAt: true, endOfJobFormSubmittedAt: true },
+        });
+        if (job && commissionPayoutBlockedForJob(job)) {
+          skipped++;
+          continue;
+        }
         jobId = job?.id ?? null;
       }
     }

@@ -14,6 +14,10 @@ import {
 } from "@/lib/proline-webhook";
 import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 import { resolveProlineDisplayName, type ProlineNameAliasMap } from "@/lib/proline-name-alias";
+import {
+  endOfJobFormRequiredAtIfNewlyTriggered,
+  parseEndOfJobFormTrigger,
+} from "@/lib/end-of-job-form";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
@@ -105,6 +109,12 @@ export async function syncProlineJobsFromApi(
     errors: [],
   };
 
+  const eojCfg = await db.systemConfig.findUnique({
+    where: { id: "singleton" },
+    select: { endOfJobFormTrigger: true },
+  });
+  const endOfJobFormTrigger = parseEndOfJobFormTrigger(eojCfg?.endOfJobFormTrigger);
+
   let query: Record<string, string> = {};
   for (let page = 0; page < opts.maxPages; page++) {
     let res: Awaited<ReturnType<typeof prolineApiGet>>;
@@ -183,6 +193,12 @@ export async function syncProlineJobsFromApi(
             status: normalizeStatus(lifecycleStr),
             prolineStage: stageStr ?? null,
             sourceSheet: "proline_api",
+            endOfJobFormRequiredAt:
+              endOfJobFormRequiredAtIfNewlyTriggered(
+                { endOfJobFormRequiredAt: null, endOfJobFormSubmittedAt: null },
+                stageStr ?? null,
+                endOfJobFormTrigger
+              ) ?? undefined,
           },
         });
         await db.jobEvent.create({
@@ -208,6 +224,9 @@ export async function syncProlineJobsFromApi(
       }
       data.status = normalizeStatus(lifecycleStr);
       if (stageStr) data.prolineStage = stageStr;
+      const nextStage = stageStr ?? existing.prolineStage;
+      const requiredAt = endOfJobFormRequiredAtIfNewlyTriggered(existing, nextStage, endOfJobFormTrigger);
+      if (requiredAt) data.endOfJobFormRequiredAt = requiredAt;
       if (salespersonId) data.salesperson = { connect: { id: salespersonId } };
 
       await db.job.update({ where: { id: existing.id }, data });

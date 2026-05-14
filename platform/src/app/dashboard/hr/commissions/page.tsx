@@ -6,6 +6,7 @@ import { getSession } from "@/lib/session";
 import { canViewHrPayroll, canViewJobContractAndPaidForCommissions } from "@/lib/rbac";
 import { formatDateTimeInEastern } from "@/lib/payout-display";
 import { commissionDisplayAmounts } from "@/lib/commission-display";
+import { commissionJobAllowedForPayoutSheetWhere } from "@/lib/end-of-job-form";
 import { CommissionSubnav } from "@/components/CommissionSubnav";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
@@ -45,7 +46,12 @@ export default async function HrCommissionsPayrollPage() {
   if (!canViewHrPayroll(user)) redirect("/dashboard");
 
   const candidates = await prisma.commission.findMany({
-    where: { override: false, owedAmount: { gt: 0 }, salesperson: { active: true } },
+    where: {
+      AND: [
+        { override: false, owedAmount: { gt: 0 }, salesperson: { active: true } },
+        commissionJobAllowedForPayoutSheetWhere,
+      ],
+    },
     include: {
       job: {
         select: {

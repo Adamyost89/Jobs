@@ -18,6 +18,7 @@ import { normalizeStatusBadgeColorMap, statusColumnLabel } from "@/lib/status-ba
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
 import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { commissionPayoutBlockedForJob } from "@/lib/end-of-job-form";
 
 /**
  * Jobs list query params (GET):
@@ -374,6 +375,8 @@ export default async function JobsPage({
       projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
       commPaid: payout ? payout.paid : cx ? cx.paid : null,
       commOwed: cx ? (j.salesperson?.active === false ? 0 : cx.owed) : null,
+      endOfJobFormRequiredAt: j.endOfJobFormRequiredAt ? j.endOfJobFormRequiredAt.toISOString() : null,
+      endOfJobFormPending: commissionPayoutBlockedForJob(j),
       quoteLinks: quoteLinksByJob.get(j.id) ?? [],
     };
   });

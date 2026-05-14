@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
@@ -56,6 +57,10 @@ export type JobsTableRowDTO = {
   /** When null, no commission rows exist for this job. */
   commPaid: number | null;
   commOwed: number | null;
+  /** ISO timestamp when checklist was required (ProLine or manual); null if never. */
+  endOfJobFormRequiredAt?: string | null;
+  /** True when end-of-job checklist is required and not yet submitted (commission payouts hidden). */
+  endOfJobFormPending?: boolean;
   quoteLinks?: JobQuoteLinkOption[];
 };
 
@@ -125,6 +130,7 @@ export function JobsTableSection({
     contractSignedAt: string;
   } | null>(null);
   const [editMsg, setEditMsg] = useState<string | null>(null);
+  const [requiringChecklistId, setRequiringChecklistId] = useState<string | null>(null);
 
   useEffect(() => {
     setPrefs(loadJobsTablePrefsFromStorage());
@@ -150,6 +156,34 @@ export function JobsTableSection({
   const money = (n: number) => formatUsd(n);
 
   const h = prefs.highlights;
+  const requireEndOfJobChecklist = useCallback(
+    async (row: JobsTableRowDTO) => {
+      if (!canEdit || requiringChecklistId) return;
+      setRequiringChecklistId(row.id);
+      setEditMsg(null);
+      setDeleteMsg(null);
+      try {
+        const res = await fetch(`/api/jobs/${row.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endOfJobFormRequiredAt: new Date().toISOString() }),
+        });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setEditMsg(typeof j.error === "string" ? j.error : "Could not require checklist.");
+          return;
+        }
+        setEditMsg(`End-of-job checklist required for job ${row.jobNumber}.`);
+        router.refresh();
+      } catch {
+        setEditMsg("Network error requiring checklist.");
+      } finally {
+        setRequiringChecklistId(null);
+      }
+    },
+    [canEdit, requiringChecklistId, router]
+  );
+
   const deleteJob = useCallback(
     async (row: JobsTableRowDTO) => {
       if (!canManageRowActions || deletingId) return;
@@ -449,6 +483,28 @@ export function JobsTableSection({
               >
                 {statusColumnLabel(row.status, row.prolineStage)}
               </span>
+              {row.endOfJobFormPending ? (
+                <>
+                  {" "}
+                  <Link href={`/dashboard/forms/${row.id}`} style={{ fontSize: "0.78rem", marginLeft: 6 }}>
+                    Checklist due
+                  </Link>
+                </>
+              ) : null}
+              {canEdit && !row.endOfJobFormRequiredAt ? (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    style={{ padding: "0.2rem 0.45rem", fontSize: "0.72rem", marginLeft: 4, verticalAlign: "middle" }}
+                    disabled={requiringChecklistId === row.id}
+                    onClick={() => void requireEndOfJobChecklist(row)}
+                  >
+                    {requiringChecklistId === row.id ? "…" : "Require checklist"}
+                  </button>
+                </>
+              ) : null}
             </td>
           );
         }
