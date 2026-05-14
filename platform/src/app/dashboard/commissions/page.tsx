@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { canViewAllJobs, canMarkCommissionPaid, canEditCommissions } from "@/lib/rbac";
+import {
+  canViewAllJobs,
+  canMarkCommissionPaid,
+  canEditCommissions,
+  canViewJobContractAndPaidForCommissions,
+} from "@/lib/rbac";
 import { PayCommissionForm } from "@/components/PayCommissionForm";
 import { CommissionLineAdminForm } from "@/components/CommissionLineAdminForm";
 import { getPayPeriodForPayday, getUpcomingFridayIsoForPayrollTz, parseIsoDateAtNoonUtc } from "@/lib/pay-period";
@@ -14,6 +19,7 @@ import { displaySalespersonName } from "@/lib/salesperson-name";
 import { CommissionExplainButton } from "@/components/CommissionExplainButton";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
+import { JobContractPaidHints } from "@/components/JobContractPaidHints";
 
 function parsePaydayParam(raw: string | string[] | undefined): string | null {
   const v = Array.isArray(raw) ? raw[0] : raw;
@@ -54,7 +60,16 @@ export default async function CommissionsPage({
     where,
     orderBy: { updatedAt: "desc" },
     include: {
-      job: { select: { jobNumber: true, name: true, year: true, leadNumber: true } },
+      job: {
+        select: {
+          jobNumber: true,
+          name: true,
+          year: true,
+          leadNumber: true,
+          contractAmount: true,
+          amountPaid: true,
+        },
+      },
       salesperson: { select: { name: true, active: true } },
     },
   });
@@ -245,6 +260,12 @@ export default async function CommissionsPage({
                         />
                       </div>
                       {sub && <div className="cell-sub">{sub}</div>}
+                      {canViewJobContractAndPaidForCommissions(user) ? (
+                        <JobContractPaidHints
+                          contractAmount={c.job.contractAmount.toNumber()}
+                          amountPaid={c.job.amountPaid?.toNumber() ?? null}
+                        />
+                      ) : null}
                     </td>
                     <td className="cell-nowrap" style={{ minWidth: "6.75rem" }}>
                       {displaySalespersonName(c.salesperson.name)}

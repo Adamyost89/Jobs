@@ -17,6 +17,11 @@ export function canViewHrPayroll(user: SessionUser): boolean {
   return user.role === Role.HR || user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN;
 }
 
+/** Job contract + amount paid under commission-line job cells (same cohort as payroll viewers). */
+export function canViewJobContractAndPaidForCommissions(user: SessionUser): boolean {
+  return canViewHrPayroll(user);
+}
+
 export function canViewExcelSnapshots(user: SessionUser): boolean {
   return user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN;
 }

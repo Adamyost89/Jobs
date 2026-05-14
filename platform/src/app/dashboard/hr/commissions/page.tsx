@@ -3,13 +3,14 @@ import Link from "next/link";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { canViewHrPayroll } from "@/lib/rbac";
+import { canViewHrPayroll, canViewJobContractAndPaidForCommissions } from "@/lib/rbac";
 import { formatDateTimeInEastern } from "@/lib/payout-display";
 import { commissionDisplayAmounts } from "@/lib/commission-display";
 import { CommissionSubnav } from "@/components/CommissionSubnav";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
+import { JobContractPaidHints } from "@/components/JobContractPaidHints";
 
 function inferPayoutYearFromRow(row: { createdAt: Date; notes?: string | null; importSourceKey?: string | null }): number {
   const blob = `${row.importSourceKey ?? ""} ${row.notes ?? ""}`;
@@ -46,7 +47,16 @@ export default async function HrCommissionsPayrollPage() {
   const candidates = await prisma.commission.findMany({
     where: { override: false, owedAmount: { gt: 0 }, salesperson: { active: true } },
     include: {
-      job: { select: { jobNumber: true, name: true, year: true, leadNumber: true } },
+      job: {
+        select: {
+          jobNumber: true,
+          name: true,
+          year: true,
+          leadNumber: true,
+          contractAmount: true,
+          amountPaid: true,
+        },
+      },
       salesperson: { select: { name: true, active: true } },
     },
   });
@@ -186,6 +196,12 @@ export default async function HrCommissionsPayrollPage() {
                         quoteLinks={quoteLinksByJob.get(c.jobId) ?? []}
                         style={{ color: "inherit", textDecoration: "none" }}
                       />
+                      {canViewJobContractAndPaidForCommissions(user) ? (
+                        <JobContractPaidHints
+                          contractAmount={c.job.contractAmount.toNumber()}
+                          amountPaid={c.job.amountPaid?.toNumber() ?? null}
+                        />
+                      ) : null}
                     </td>
                     <td>{c.job.year}</td>
                     <td>{c.job.leadNumber ?? "—"}</td>
