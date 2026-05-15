@@ -51,6 +51,11 @@ export function canEditJobs(user: SessionUser): boolean {
   return user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN;
 }
 
+/** View a job’s end-of-job form page (pending or submitted). */
+export function canViewEndOfJobForm(user: SessionUser, job: { salespersonId: string | null }): boolean {
+  return canSubmitEndOfJobForm(user, job);
+}
+
 /** Submit end-of-job checklist for a job (primary rep or admins). */
 export function canSubmitEndOfJobForm(user: SessionUser, job: { salespersonId: string | null }): boolean {
   if (canViewAllJobs(user)) return true;

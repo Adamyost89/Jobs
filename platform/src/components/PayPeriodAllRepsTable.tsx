@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { parseMoneyInputString } from "@/lib/currency";
 
 export type PayPeriodAllRepsLine = {
   id: string;
@@ -127,8 +128,8 @@ export function PayPeriodAllRepsTable({
   const saveLine = useCallback(
     async (line: PayPeriodAllRepsLine) => {
       if (!editForm || !canManagePayoutLines || busyLineId) return;
-      const amount = Number(editForm.amount.trim());
-      if (!Number.isFinite(amount) || amount <= 0) {
+      const amount = parseMoneyInputString(editForm.amount);
+      if (amount === null || amount <= 0) {
         setMsg("Amount must be a positive number.");
         return;
       }
@@ -335,7 +336,8 @@ export function PayPeriodAllRepsTable({
                                         {isEditing ? (
                                           <input
                                             className="input"
-                                            inputMode="decimal"
+                                            type="text"
+                                            inputMode="text"
                                             value={editForm.amount}
                                             onChange={(e) =>
                                               setEditForm((prev) => (prev ? { ...prev, amount: e.target.value } : prev))

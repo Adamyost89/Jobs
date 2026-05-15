@@ -2,57 +2,245 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { Role } from "@prisma/client";
+import { Role, type Prisma } from "@prisma/client";
 import { canViewAllJobs } from "@/lib/rbac";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
-export default async function FormsQueuePage() {
+type Search = {
+  view?: string;
+  sp?: string;
+  sort?: string;
+};
+
+function pickString(v: string | string[] | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  return Array.isArray(v) ? v[0] : v;
+}
+
+type FormsView = "pending" | "submitted";
+
+function normalizeView(raw: string | undefined): FormsView {
+  return raw === "submitted" ? "submitted" : "pending";
+}
+
+type FormsSort = "rep" | "rep_desc" | "job" | "required" | "submitted";
+
+function normalizeSort(raw: string | undefined, view: FormsView): FormsSort {
+  const s = String(raw || "").trim().toLowerCase();
+  if (s === "rep_desc") return "rep_desc";
+  if (view === "submitted") {
+    if (s === "rep" || s === "rep_asc") return "rep";
+    if (s === "job" || s === "job_desc") return "job";
+    if (s === "required") return "required";
+    return "submitted";
+  }
+  if (s === "rep" || s === "rep_asc") return "rep";
+  if (s === "job" || s === "job_asc") return "job";
+  if (s === "required" || s === "required_asc") return "required";
+  return "rep";
+}
+
+function formsListUrl(opts: { view?: FormsView; sp?: string; sort?: FormsSort }): string {
+  const p = new URLSearchParams();
+  if (opts.view && opts.view !== "pending") p.set("view", opts.view);
+  if (opts.sp) p.set("sp", opts.sp);
+  if (opts.sort) p.set("sort", opts.sort);
+  const q = p.toString();
+  return q ? `/dashboard/forms?${q}` : "/dashboard/forms";
+}
+
+export default async function FormsQueuePage({
+  searchParams,
+}: {
+  searchParams: Promise<Search>;
+}) {
   const user = await getSession();
   if (!user) redirect("/login");
   if (user.role === Role.HR) redirect("/dashboard/hr/commissions");
 
-  const spFilter =
-    !canViewAllJobs(user) && user.salespersonIds.length > 0
-      ? { salespersonId: { in: user.salespersonIds } }
-      : !canViewAllJobs(user)
-        ? { id: "__none__" as const }
-        : {};
+  const sp = await searchParams;
+  const view = normalizeView(pickString(sp.view));
+  const spId = pickString(sp.sp)?.trim() || "";
+  const sort = normalizeSort(pickString(sp.sort), view);
 
-  const jobs = await prisma.job.findMany({
-    where: {
-      AND: [
-        { endOfJobFormRequiredAt: { not: null } },
-        { endOfJobFormSubmittedAt: null },
-        spFilter,
-      ],
-    },
-    orderBy: [{ year: "desc" }, { jobNumber: "desc" }],
-    take: 200,
-    select: {
-      id: true,
-      jobNumber: true,
-      year: true,
-      name: true,
-      leadNumber: true,
-      prolineStage: true,
-      endOfJobFormRequiredAt: true,
-      salesperson: { select: { name: true } },
-    },
-  });
+  const roleParts: Prisma.JobWhereInput[] = [];
+  if (!canViewAllJobs(user)) {
+    roleParts.push(
+      user.salespersonIds.length > 0
+        ? { salespersonId: { in: user.salespersonIds } }
+        : { id: "__none__" }
+    );
+  }
+  if (spId && canViewAllJobs(user)) {
+    roleParts.push({ salespersonId: spId });
+  }
+
+  const viewPart: Prisma.JobWhereInput =
+    view === "submitted"
+      ? { endOfJobFormSubmittedAt: { not: null } }
+      : {
+          endOfJobFormRequiredAt: { not: null },
+          endOfJobFormSubmittedAt: null,
+        };
+
+  const where: Prisma.JobWhereInput =
+    roleParts.length === 0 ? viewPart : { AND: [viewPart, ...roleParts] };
+
+  const orderBy: Prisma.JobOrderByWithRelationInput[] = (() => {
+    switch (sort) {
+      case "rep":
+        return [{ salesperson: { name: "asc" } }, { jobNumber: "desc" }];
+      case "rep_desc":
+        return [{ salesperson: { name: "desc" } }, { jobNumber: "desc" }];
+      case "job":
+        return [{ jobNumber: "desc" }];
+      case "required":
+        return [{ endOfJobFormRequiredAt: "asc" }, { jobNumber: "desc" }];
+      case "submitted":
+        return [{ endOfJobFormSubmittedAt: "desc" }, { jobNumber: "desc" }];
+      default:
+        return [{ salesperson: { name: "asc" } }, { jobNumber: "desc" }];
+    }
+  })();
+
+  const [jobs, salespersonRows] = await Promise.all([
+    prisma.job.findMany({
+      where,
+      orderBy,
+      take: 300,
+      select: {
+        id: true,
+        jobNumber: true,
+        year: true,
+        name: true,
+        leadNumber: true,
+        prolineStage: true,
+        endOfJobFormRequiredAt: true,
+        endOfJobFormSubmittedAt: true,
+        salesperson: { select: { id: true, name: true } },
+      },
+    }),
+    canViewAllJobs(user)
+      ? prisma.job.findMany({
+          where: {
+            OR: [
+              { endOfJobFormRequiredAt: { not: null } },
+              { endOfJobFormSubmittedAt: { not: null } },
+            ],
+          },
+          select: { salesperson: { select: { id: true, name: true } } },
+          take: 5000,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const salespersonOptions = (() => {
+    const byName = new Map<string, { id: string; name: string }>();
+    for (const row of salespersonRows) {
+      if (!row.salesperson) continue;
+      const name = displaySalespersonName(row.salesperson.name);
+      const key = name.toLowerCase();
+      if (!byName.has(key)) byName.set(key, { id: row.salesperson.id, name });
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  const currentSortValue =
+    sort === "rep" && view === "pending"
+      ? "rep"
+      : sort === "rep" || sort === "rep_desc"
+        ? sort === "rep_desc"
+          ? "rep_desc"
+          : "rep"
+        : sort;
 
   return (
     <div className="page-stack">
       <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750 }}>Forms</h1>
-      <p style={{ margin: "0.35rem 0 0", fontSize: "0.9rem", color: "var(--muted)", maxWidth: 640, lineHeight: 1.5 }}>
-        Jobs that require the end-of-job checklist before commission payouts show here. Open a job to fill out and
-        submit the form.
+      <p style={{ margin: "0.35rem 0 0", fontSize: "0.9rem", color: "var(--muted)", maxWidth: 720, lineHeight: 1.5 }}>
+        End-of-job checklists. Pending jobs block commission payouts until the form is submitted. Completed forms are
+        listed under <strong>Submitted</strong>.
       </p>
+
+      <div className="card" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", padding: "0.75rem 1rem" }}>
+        <Link
+          href={formsListUrl({ view: "pending", sp: spId || undefined, sort: view === "pending" ? sort : "rep" })}
+          className={`btn${view === "pending" ? "" : " secondary"}`}
+          style={{ textDecoration: "none" }}
+          aria-current={view === "pending" ? "page" : undefined}
+        >
+          Pending
+        </Link>
+        <Link
+          href={formsListUrl({ view: "submitted", sp: spId || undefined, sort: view === "submitted" ? sort : "submitted" })}
+          className={`btn${view === "submitted" ? "" : " secondary"}`}
+          style={{ textDecoration: "none" }}
+          aria-current={view === "submitted" ? "page" : undefined}
+        >
+          Submitted
+        </Link>
+      </div>
+
+      <form method="get" className="card" style={{ padding: "1rem 1.15rem" }}>
+        <input type="hidden" name="view" value={view} />
+        <div className="filter-bar">
+          {canViewAllJobs(user) ? (
+            <label>
+              Rep
+              <select name="sp" defaultValue={spId}>
+                <option value="">All reps</option>
+                {salespersonOptions.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label>
+            Sort
+            <select name="sort" defaultValue={currentSortValue}>
+              {view === "pending" ? (
+                <>
+                  <option value="rep">Rep A → Z</option>
+                  <option value="rep_desc">Rep Z → A</option>
+                  <option value="job">Job # newest first</option>
+                  <option value="required">Required since (oldest first)</option>
+                </>
+              ) : (
+                <>
+                  <option value="submitted">Submitted (newest first)</option>
+                  <option value="rep">Rep A → Z</option>
+                  <option value="rep_desc">Rep Z → A</option>
+                  <option value="job">Job # newest first</option>
+                  <option value="required">Originally required (oldest first)</option>
+                </>
+              )}
+            </select>
+          </label>
+          <div className="filter-bar__actions">
+            <button className="btn" type="submit">
+              Apply
+            </button>
+            <Link href={formsListUrl({ view })} className="btn secondary" style={{ textDecoration: "none" }}>
+              Reset filters
+            </Link>
+          </div>
+        </div>
+      </form>
 
       {jobs.length === 0 ? (
         <p className="card" style={{ margin: 0, color: "var(--muted)" }}>
-          No pending checklists.
+          {view === "pending"
+            ? "No pending checklists for this filter."
+            : "No submitted checklists for this filter."}
         </p>
       ) : (
         <div className="table-responsive card" style={{ padding: 0 }}>
+          <p style={{ margin: "0.65rem 1rem 0", fontSize: "0.85rem", color: "var(--muted)" }}>
+            Showing {jobs.length} job{jobs.length === 1 ? "" : "s"}
+            {spId ? ` · filtered by rep` : ""}
+          </p>
           <table className="table table-data">
             <thead>
               <tr>
@@ -61,7 +249,7 @@ export default async function FormsQueuePage() {
                 <th>Rep</th>
                 <th>Customer</th>
                 <th>Stage</th>
-                <th>Required since</th>
+                <th>{view === "pending" ? "Required since" : "Submitted"}</th>
                 <th></th>
               </tr>
             </thead>
@@ -70,17 +258,33 @@ export default async function FormsQueuePage() {
                 <tr key={j.id}>
                   <td className="cell-nowrap cell-strong">{j.jobNumber}</td>
                   <td>{j.year}</td>
-                  <td>{j.salesperson?.name ?? "—"}</td>
+                  <td className="cell-nowrap">
+                    {j.salesperson ? displaySalespersonName(j.salesperson.name) : "—"}
+                  </td>
                   <td style={{ maxWidth: 220 }}>{j.name?.trim() || "—"}</td>
                   <td style={{ maxWidth: 200 }}>{j.prolineStage?.trim() || "—"}</td>
                   <td className="cell-nowrap">
-                    {j.endOfJobFormRequiredAt
-                      ? j.endOfJobFormRequiredAt.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
-                      : "—"}
+                    {view === "pending"
+                      ? j.endOfJobFormRequiredAt
+                        ? j.endOfJobFormRequiredAt.toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })
+                        : "—"
+                      : j.endOfJobFormSubmittedAt
+                        ? j.endOfJobFormSubmittedAt.toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })
+                        : "—"}
                   </td>
                   <td>
-                    <Link href={`/dashboard/forms/${j.id}`} className="btn secondary" style={{ textDecoration: "none" }}>
-                      Open
+                    <Link
+                      href={`/dashboard/forms/${j.id}`}
+                      className="btn secondary"
+                      style={{ textDecoration: "none" }}
+                    >
+                      {view === "pending" ? "Open" : "View"}
                     </Link>
                   </td>
                 </tr>

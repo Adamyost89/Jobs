@@ -3,10 +3,16 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { Role } from "@prisma/client";
-import { canEditJobs, canSubmitEndOfJobForm } from "@/lib/rbac";
-import { parseEndOfJobFormConfig, commissionPayoutBlockedForJob, type EndOfJobFormConfig } from "@/lib/end-of-job-form";
+import { canEditJobs, canSubmitEndOfJobForm, canViewEndOfJobForm } from "@/lib/rbac";
+import {
+  parseEndOfJobFormConfig,
+  commissionPayoutBlockedForJob,
+  type EndOfJobFormConfig,
+} from "@/lib/end-of-job-form";
 import { EndOfJobFormFill } from "@/components/EndOfJobFormFill";
 import { EndOfJobFormRequireButton } from "@/components/EndOfJobFormRequireButton";
+import { EndOfJobFormResponsesView } from "@/components/EndOfJobFormResponsesView";
+import { displaySalespersonName } from "@/lib/salesperson-name";
 
 export default async function FormForJobPage({ params }: { params: Promise<{ jobId: string }> }) {
   const user = await getSession();
@@ -24,10 +30,13 @@ export default async function FormForJobPage({ params }: { params: Promise<{ job
         year: true,
         name: true,
         leadNumber: true,
+        prolineJobId: true,
         prolineStage: true,
         salespersonId: true,
         endOfJobFormRequiredAt: true,
         endOfJobFormSubmittedAt: true,
+        endOfJobFormResponses: true,
+        salesperson: { select: { name: true } },
       },
     }),
     prisma.systemConfig.findUnique({
@@ -38,7 +47,7 @@ export default async function FormForJobPage({ params }: { params: Promise<{ job
 
   if (!job) redirect("/dashboard/forms");
 
-  if (!canSubmitEndOfJobForm(user, job)) {
+  if (!canViewEndOfJobForm(user, job)) {
     redirect("/dashboard/forms");
   }
 
@@ -48,25 +57,46 @@ export default async function FormForJobPage({ params }: { params: Promise<{ job
 
   const pending = commissionPayoutBlockedForJob(job);
   const alreadyDone = Boolean(job.endOfJobFormSubmittedAt);
+  const backHref = alreadyDone ? "/dashboard/forms?view=submitted" : "/dashboard/forms";
 
   return (
     <div className="page-stack">
       <p style={{ margin: 0, fontSize: "0.88rem" }}>
-        <Link href="/dashboard/forms">← Forms queue</Link>
+        <Link href={backHref}>← Forms</Link>
         {" · "}
         <Link href="/dashboard/jobs">Jobs</Link>
       </p>
 
+      <div className="card" style={{ fontSize: "0.9rem", color: "var(--muted)" }}>
+        <strong style={{ color: "var(--text)" }}>{job.jobNumber}</strong>
+        {job.name ? ` · ${job.name}` : ""}
+        {job.salesperson ? ` · ${displaySalespersonName(job.salesperson.name)}` : ""}
+        {job.leadNumber ? ` · Lead ${job.leadNumber}` : ""}
+      </div>
+
       {alreadyDone ? (
-        <div className="card">
-          <h1 style={{ margin: 0, fontSize: "1.35rem" }}>Checklist complete</h1>
-          <p style={{ margin: "0.5rem 0 0", color: "var(--muted)" }}>
-            Job <strong>{job.jobNumber}</strong> already has a submitted end-of-job checklist
+        <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
+          <h1 style={{ margin: 0, fontSize: "1.35rem" }}>Submitted checklist</h1>
+          <p style={{ margin: 0, color: "var(--muted)" }}>
+            Submitted{" "}
             {job.endOfJobFormSubmittedAt
-              ? ` (${job.endOfJobFormSubmittedAt.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })})`
+              ? job.endOfJobFormSubmittedAt.toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })
               : ""}
-            .
+            {job.endOfJobFormRequiredAt ? (
+              <>
+                {" "}
+                · Required since{" "}
+                {job.endOfJobFormRequiredAt.toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </>
+            ) : null}
           </p>
+          <EndOfJobFormResponsesView config={formConfig} responses={job.endOfJobFormResponses} />
         </div>
       ) : !job.endOfJobFormRequiredAt ? (
         <div className="card">

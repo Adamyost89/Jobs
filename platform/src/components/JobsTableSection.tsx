@@ -26,7 +26,7 @@ import {
   visibleColumnOrder,
 } from "@/lib/jobs-table-preferences";
 import { canEditJobs, canViewAllJobs, type SessionUser } from "@/lib/rbac";
-import { formatUsd } from "@/lib/currency";
+import { formatUsd, parseMoneyInputString } from "@/lib/currency";
 import type { JobQuoteLinkOption } from "@/lib/job-quote-links";
 import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
 
@@ -284,8 +284,8 @@ export function JobsTableSection({
   }
 
   function parseMoneyInput(label: string, raw: string): { ok: true; value: number } | { ok: false; error: string } {
-    const value = Number(raw.trim());
-    if (!Number.isFinite(value)) return { ok: false, error: `${label} must be a valid number.` };
+    const value = parseMoneyInputString(raw);
+    if (value === null) return { ok: false, error: `${label} must be a valid number.` };
     return { ok: true, value };
   }
 
@@ -730,7 +730,8 @@ export function JobsTableSection({
                                 Contract amount
                                 <input
                                   className="input"
-                                  inputMode="decimal"
+                                  type="text"
+                                  inputMode="text"
                                   value={editForm.contractAmount}
                                   onChange={(e) =>
                                     setEditForm((prev) => (prev ? { ...prev, contractAmount: e.target.value } : prev))
@@ -742,7 +743,8 @@ export function JobsTableSection({
                                 Change orders
                                 <input
                                   className="input"
-                                  inputMode="decimal"
+                                  type="text"
+                                  inputMode="text"
                                   value={editForm.changeOrders}
                                   onChange={(e) =>
                                     setEditForm((prev) => (prev ? { ...prev, changeOrders: e.target.value } : prev))
@@ -754,7 +756,8 @@ export function JobsTableSection({
                                 Invoiced total
                                 <input
                                   className="input"
-                                  inputMode="decimal"
+                                  type="text"
+                                  inputMode="text"
                                   value={editForm.invoicedTotal}
                                   onChange={(e) =>
                                     setEditForm((prev) => (prev ? { ...prev, invoicedTotal: e.target.value } : prev))
@@ -767,7 +770,8 @@ export function JobsTableSection({
                                   Amount paid
                                   <input
                                     className="input"
-                                    inputMode="decimal"
+                                    type="text"
+                                    inputMode="text"
                                     value={editForm.amountPaid}
                                     onChange={(e) =>
                                       setEditForm((prev) => (prev ? { ...prev, amountPaid: e.target.value } : prev))
@@ -780,7 +784,8 @@ export function JobsTableSection({
                                 Project revenue
                                 <input
                                   className="input"
-                                  inputMode="decimal"
+                                  type="text"
+                                  inputMode="text"
                                   value={editForm.projectRevenue}
                                   onChange={(e) =>
                                     setEditForm((prev) => (prev ? { ...prev, projectRevenue: e.target.value } : prev))

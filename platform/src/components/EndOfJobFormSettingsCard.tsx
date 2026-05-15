@@ -5,6 +5,10 @@ import type { EndOfJobFormConfig, EndOfJobFormField, EndOfJobFormFieldType, EndO
 
 const FIELD_TYPES: EndOfJobFormFieldType[] = ["text", "textarea", "number", "boolean", "select"];
 
+function parseSelectOptionsText(text: string): string[] {
+  return text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+}
+
 export function EndOfJobFormSettingsCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -15,6 +19,8 @@ export function EndOfJobFormSettingsCard() {
   });
   const [version, setVersion] = useState(1);
   const [fields, setFields] = useState<EndOfJobFormField[]>([]);
+  /** Raw textarea text per select field id (avoids eating commas/newlines while typing). */
+  const [optionsDraft, setOptionsDraft] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,6 +36,7 @@ export function EndOfJobFormSettingsCard() {
       const f = j.endOfJobForm as EndOfJobFormConfig | undefined;
       setVersion(typeof f?.version === "number" ? f.version : 1);
       setFields(Array.isArray(f?.fields) ? f.fields : []);
+      setOptionsDraft({});
     } finally {
       setLoading(false);
     }
@@ -39,13 +46,22 @@ export function EndOfJobFormSettingsCard() {
     void load();
   }, [load]);
 
+  function fieldsForSave(): EndOfJobFormField[] {
+    return fields.map((f) => {
+      if (f.type !== "select") return f;
+      const draft = optionsDraft[f.id];
+      if (draft === undefined) return f;
+      return { ...f, options: parseSelectOptionsText(draft) };
+    });
+  }
+
   async function save() {
     setSaving(true);
     setMsg(null);
     try {
       const body = {
         endOfJobFormTrigger: trigger,
-        endOfJobForm: { version, fields },
+        endOfJobForm: { version, fields: fieldsForSave() },
       };
       const res = await fetch("/api/admin/end-of-job-form-settings", {
         method: "PATCH",
@@ -198,18 +214,24 @@ export function EndOfJobFormSettingsCard() {
               </div>
               {f.type === "select" ? (
                 <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>Options (comma-separated)</span>
-                  <input
+                  <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
+                    Options (one per line; commas allowed in each option)
+                  </span>
+                  <textarea
                     className="input"
-                    value={(f.options ?? []).join(", ")}
+                    rows={Math.min(8, Math.max(3, (f.options ?? []).length))}
+                    value={optionsDraft[f.id] ?? (f.options ?? []).join("\n")}
                     onChange={(e) =>
-                      updateField(i, {
-                        options: e.target.value
-                          .split(",")
-                          .map((s) => s.trim())
-                          .filter(Boolean),
-                      })
+                      setOptionsDraft((prev) => ({ ...prev, [f.id]: e.target.value }))
                     }
+                    onBlur={(e) => {
+                      updateField(i, { options: parseSelectOptionsText(e.target.value) });
+                      setOptionsDraft((prev) => {
+                        const next = { ...prev };
+                        delete next[f.id];
+                        return next;
+                      });
+                    }}
                   />
                 </label>
               ) : null}

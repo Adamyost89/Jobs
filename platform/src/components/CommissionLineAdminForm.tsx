@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 
+import { parseMoneyInputString } from "@/lib/currency";
+
 function parseNonNegativeMoney(raw: string): { ok: true; value: number } | { ok: false; error: string } {
-  const trimmed = raw.trim().replace(/[$,]/g, "");
-  if (trimmed === "") return { ok: false, error: "Enter a remaining owed amount." };
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return { ok: false, error: "Enter a valid number." };
+  if (raw.trim() === "") return { ok: false, error: "Enter a remaining owed amount." };
+  const n = parseMoneyInputString(raw);
+  if (n === null) return { ok: false, error: "Enter a valid number." };
   if (n < 0) return { ok: false, error: "Amount cannot be negative." };
   return { ok: true, value: Math.round(n * 100) / 100 };
 }
@@ -73,7 +74,7 @@ export function CommissionLineAdminForm({
           <span>Remaining owed ($)</span>
           <input
             type="text"
-            inputMode="decimal"
+            inputMode="text"
             value={amountStr}
             onChange={(e) => setAmountStr(e.target.value)}
             disabled={busy}
