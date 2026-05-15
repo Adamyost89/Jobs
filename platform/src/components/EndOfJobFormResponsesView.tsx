@@ -1,4 +1,5 @@
 import type { EndOfJobFormConfig } from "@/lib/end-of-job-form";
+import { formatDateTimeInEastern } from "@/lib/payout-display";
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -41,7 +42,12 @@ export function EndOfJobFormResponsesView({
       {meta && typeof meta.submittedByEmail === "string" ? (
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)" }}>
           Submitted by {meta.submittedByEmail}
-          {typeof meta.submittedAt === "string" ? ` · ${meta.submittedAt}` : ""}
+          {typeof meta.submittedAt === "string"
+            ? (() => {
+                const d = new Date(meta.submittedAt);
+                return Number.isNaN(d.getTime()) ? ` · ${meta.submittedAt}` : ` · ${formatDateTimeInEastern(d)}`;
+              })()
+            : ""}
         </p>
       ) : null}
       {rows.length === 0 ? (

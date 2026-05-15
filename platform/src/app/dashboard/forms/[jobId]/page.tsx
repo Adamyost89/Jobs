@@ -13,6 +13,7 @@ import { EndOfJobFormFill } from "@/components/EndOfJobFormFill";
 import { EndOfJobFormRequireButton } from "@/components/EndOfJobFormRequireButton";
 import { EndOfJobFormResponsesView } from "@/components/EndOfJobFormResponsesView";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { formatDateTimeInEastern } from "@/lib/payout-display";
 
 export default async function FormForJobPage({ params }: { params: Promise<{ jobId: string }> }) {
   const user = await getSession();
@@ -79,20 +80,11 @@ export default async function FormForJobPage({ params }: { params: Promise<{ job
           <h1 style={{ margin: 0, fontSize: "1.35rem" }}>Submitted checklist</h1>
           <p style={{ margin: 0, color: "var(--muted)" }}>
             Submitted{" "}
-            {job.endOfJobFormSubmittedAt
-              ? job.endOfJobFormSubmittedAt.toLocaleString(undefined, {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })
-              : ""}
+            {job.endOfJobFormSubmittedAt ? formatDateTimeInEastern(job.endOfJobFormSubmittedAt) : ""}
             {job.endOfJobFormRequiredAt ? (
               <>
                 {" "}
-                · Required since{" "}
-                {job.endOfJobFormRequiredAt.toLocaleString(undefined, {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                · Required since {formatDateTimeInEastern(job.endOfJobFormRequiredAt)}
               </>
             ) : null}
           </p>

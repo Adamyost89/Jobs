@@ -5,6 +5,7 @@ import { getSession } from "@/lib/session";
 import { Role, type Prisma } from "@prisma/client";
 import { canViewAllJobs } from "@/lib/rbac";
 import { displaySalespersonName } from "@/lib/salesperson-name";
+import { formatDateTimeInEastern } from "@/lib/payout-display";
 
 type Search = {
   view?: string;
@@ -249,7 +250,7 @@ export default async function FormsQueuePage({
                 <th>Rep</th>
                 <th>Customer</th>
                 <th>Stage</th>
-                <th>{view === "pending" ? "Required since" : "Submitted"}</th>
+                <th>{view === "pending" ? "Required since (ET)" : "Submitted (ET)"}</th>
                 <th></th>
               </tr>
             </thead>
@@ -266,16 +267,10 @@ export default async function FormsQueuePage({
                   <td className="cell-nowrap">
                     {view === "pending"
                       ? j.endOfJobFormRequiredAt
-                        ? j.endOfJobFormRequiredAt.toLocaleString(undefined, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })
+                        ? formatDateTimeInEastern(j.endOfJobFormRequiredAt)
                         : "—"
                       : j.endOfJobFormSubmittedAt
-                        ? j.endOfJobFormSubmittedAt.toLocaleString(undefined, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })
+                        ? formatDateTimeInEastern(j.endOfJobFormSubmittedAt)
                         : "—"}
                   </td>
                   <td>
