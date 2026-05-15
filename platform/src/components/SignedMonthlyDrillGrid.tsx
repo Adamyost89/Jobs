@@ -12,13 +12,11 @@ export function SignedMonthlyDrillGrid({
   monthlyTopRepNames,
   monthlyStacked,
   monthlySignedCounts,
-  salespersonIdByRepName,
 }: {
   monthlyYear: number;
   monthlyTopRepNames: string[];
   monthlyStacked: StackedRow[];
   monthlySignedCounts: { monthLabel: string; count: number }[];
-  salespersonIdByRepName: Record<string, string>;
 }) {
   const money = (n: number) => formatUsd(n);
   const countByMonthLabel = new Map(monthlySignedCounts.map((row) => [row.monthLabel, row.count]));
@@ -37,10 +35,9 @@ export function SignedMonthlyDrillGrid({
 
   function cellHref(repKey: string, row: StackedRow): string {
     const slice = chartMonthLabelToDrill(row.monthLabel);
-    const spId = repKey === "Other" ? undefined : salespersonIdByRepName[repKey];
     return jobsDrilldownUrl({
       year: monthlyYear,
-      salespersonId: spId,
+      salespersonName: repKey === "Other" ? undefined : repKey,
       signedMonth: slice.signedMonth,
       signedUndated: slice.signedUndated,
     });

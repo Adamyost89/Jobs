@@ -13,7 +13,10 @@ import {
 import Link from "next/link";
 import { signedCalendarMonthForChart } from "@/lib/contract-signed-month";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
-import { displaySalespersonName } from "@/lib/salesperson-name";
+import {
+  displaySalespersonName,
+  salespersonJobFilterByDisplayToken,
+} from "@/lib/salesperson-name";
 import { normalizeStatusBadgeColorMap, statusColumnLabel } from "@/lib/status-badge-colors";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
@@ -23,8 +26,8 @@ import { commissionPayoutBlockedForJob } from "@/lib/end-of-job-form";
 /**
  * Jobs list query params (GET):
  * - `year` — job work year or `all`
- * - `sp` — salesperson id
- * - `spn` — salesperson display-name token (matches full-name rows that start with that token)
+ * - `sp` — legacy salesperson id (resolved to display-name match)
+ * - `spn` — salesperson display name (matches "James" and "James …" rows; same as AM/reports rollups)
  * - `q`, `status`, `sort` — search / status / sort direction
  * - `signedMonth` — 1–12: filter to jobs whose contract signed calendar month in America/Chicago matches
  *   (same rule as signed-contracts reports; see contract-signed-month.ts)
@@ -111,6 +114,15 @@ export default async function JobsPage({
   }
   const yearOpts = [...yearOptsSet].sort((a, b) => b - a);
 
+  let salespersonDisplayToken = spNameToken;
+  if (!salespersonDisplayToken && spId) {
+    const spRow = await prisma.salesperson.findUnique({
+      where: { id: spId },
+      select: { name: true },
+    });
+    if (spRow?.name) salespersonDisplayToken = displaySalespersonName(spRow.name);
+  }
+
   const parts: Prisma.JobWhereInput[] = [];
   if (!canViewAllJobs(user)) {
     parts.push(
@@ -120,23 +132,7 @@ export default async function JobsPage({
     );
   }
   if (yearInt !== undefined) parts.push({ year: yearInt });
-  if (spId) parts.push({ salespersonId: spId });
-  if (spNameToken) {
-    parts.push({
-      OR: [
-        {
-          salesperson: {
-            is: { name: { equals: spNameToken, mode: Prisma.QueryMode.insensitive } },
-          },
-        },
-        {
-          salesperson: {
-            is: { name: { startsWith: `${spNameToken} `, mode: Prisma.QueryMode.insensitive } },
-          },
-        },
-      ],
-    });
-  }
+  if (salespersonDisplayToken) parts.push(salespersonJobFilterByDisplayToken(salespersonDisplayToken));
   if (q) {
     parts.push({
       OR: [
@@ -246,14 +242,13 @@ export default async function JobsPage({
     take: 5000,
   });
   const salespersonOptions = (() => {
-    const byName = new Map<string, { id: string; name: string }>();
+    const names = new Set<string>();
     for (const row of salespersonOptionRows) {
       if (!row.salesperson) continue;
       const display = displaySalespersonName(row.salesperson.name);
-      const key = display.toLowerCase();
-      if (!byName.has(key)) byName.set(key, { id: row.salesperson.id, name: display });
+      if (display) names.add(display);
     }
-    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...names].sort((a, b) => a.localeCompare(b));
   })();
 
   // Build status options from the current base slice (before status filtering),
@@ -323,8 +318,7 @@ export default async function JobsPage({
 
   const hasFilters = Boolean(
     q ||
-      spId ||
-      spNameToken ||
+      salespersonDisplayToken ||
       status ||
       effectiveSortKey !== "job_desc" ||
       yearParam === "all" ||
@@ -405,7 +399,6 @@ export default async function JobsPage({
       </div>
 
       <form method="get" className="card" style={{ padding: "1rem 1.15rem" }}>
-        {spNameToken ? <input type="hidden" name="spn" value={spNameToken} /> : null}
         <div className="filter-bar">
           {signedMonthFilter !== undefined ? (
             <input type="hidden" name="signedMonth" value={String(signedMonthFilter)} />
@@ -429,11 +422,11 @@ export default async function JobsPage({
           {canViewAllJobs(user) && (
             <label>
               Salesperson
-              <select name="sp" defaultValue={spId || ""}>
+              <select name="spn" defaultValue={salespersonDisplayToken || ""}>
                 <option value="">All</option>
-                {salespersonOptions.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
+                {salespersonOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
                   </option>
                 ))}
               </select>

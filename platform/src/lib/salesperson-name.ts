@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 function normalizeWhitespace(raw: string): string {
   return raw
@@ -25,6 +25,18 @@ export function displaySalespersonName(raw: unknown): string {
   const normalized = normalizeSalespersonName(raw);
   if (!normalized) return "";
   return firstTokenName(normalized) || normalized;
+}
+
+/** Jobs/reports filter: one display token (e.g. James) matches "James" and "James Smith" rows. */
+export function salespersonJobFilterByDisplayToken(token: string): Prisma.JobWhereInput {
+  const t = normalizeSalespersonName(token);
+  if (!t) return { id: "__none__" };
+  return {
+    OR: [
+      { salesperson: { is: { name: { equals: t, mode: Prisma.QueryMode.insensitive } } } },
+      { salesperson: { is: { name: { startsWith: `${t} `, mode: Prisma.QueryMode.insensitive } } } },
+    ],
+  };
 }
 
 /**

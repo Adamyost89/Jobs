@@ -151,8 +151,7 @@ export function ReportsAnalyticsDashboard({ defaultYear }: { defaultYear: number
   const lineData = data?.yearlyTrend ?? [];
 
   const drillRepRowHref = useCallback(
-    (salespersonId: string | null) =>
-      jobsDrilldownUrl({ year: summaryYear, salespersonId: salespersonId ?? undefined }),
+    (repName: string) => jobsDrilldownUrl({ year: summaryYear, salespersonName: repName }),
     [summaryYear]
   );
 
@@ -168,11 +167,10 @@ export function ReportsAnalyticsDashboard({ defaultYear }: { defaultYear: number
     (repKey: string, row: { monthLabel: string; [key: string]: string | number }) => {
       if (!data) return;
       const slice = chartMonthLabelToDrill(String(row.monthLabel));
-      const spId = repKey === "Other" ? undefined : data.salespersonIdByRepName[repKey];
       void router.push(
         jobsDrilldownUrl({
           year: monthlyYear,
-          salespersonId: spId,
+          salespersonName: repKey === "Other" ? undefined : repKey,
           signedMonth: slice.signedMonth,
           signedUndated: slice.signedUndated,
         })
@@ -348,7 +346,7 @@ export function ReportsAnalyticsDashboard({ defaultYear }: { defaultYear: number
                 </thead>
                 <tbody>
                   {data.repSummaries.map((r) => (
-                    <DrilldownTableRow key={r.salespersonId ?? r.name} href={drillRepRowHref(r.salespersonId)}>
+                    <DrilldownTableRow key={r.salespersonId ?? r.name} href={drillRepRowHref(r.name)}>
                       <td className="cell-strong">{r.name}</td>
                       <td className="cell-num">{r.jobCount}</td>
                       <td className="cell-num">{fmtUsdFull(r.contractAmt)}</td>

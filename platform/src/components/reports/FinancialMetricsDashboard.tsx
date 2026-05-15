@@ -133,8 +133,7 @@ export function FinancialMetricsDashboard({ defaultYear }: { defaultYear: number
   const history = data?.jobCostHistory;
 
   const drillRepRowHref = useCallback(
-    (salespersonId: string | null) =>
-      jobsDrilldownUrl({ year: summaryYear, salespersonId: salespersonId ?? undefined }),
+    (repName: string) => jobsDrilldownUrl({ year: summaryYear, salespersonName: repName }),
     [summaryYear]
   );
 
@@ -311,7 +310,7 @@ export function FinancialMetricsDashboard({ defaultYear }: { defaultYear: number
                 </thead>
                 <tbody>
                   {data.repSummaries.map((r) => (
-                    <DrilldownTableRow key={r.salespersonId ?? r.name} href={drillRepRowHref(r.salespersonId)}>
+                    <DrilldownTableRow key={r.salespersonId ?? r.name} href={drillRepRowHref(r.name)}>
                       <td className="cell-strong">{r.name}</td>
                       <td className="cell-num">{r.jobCount}</td>
                       <td className="cell-num">{fmtUsdFull(r.totalRevenue)}</td>

@@ -133,8 +133,7 @@ export default async function DashboardHome({
                   key={r.salespersonId ?? r.name}
                   href={jobsDrilldownUrl({
                     year: workYear,
-                    salespersonId: r.salespersonId ?? undefined,
-                    salespersonName: r.salespersonId ? undefined : r.name,
+                    salespersonName: r.name,
                   })}
                 >
                   <td className="cell-strong">{r.name}</td>
@@ -190,7 +189,6 @@ export default async function DashboardHome({
               monthlyTopRepNames={monthly.monthlyTopRepNames}
               monthlyStacked={monthly.monthlyStacked}
               monthlySignedCounts={monthly.monthlySignedCounts}
-              salespersonIdByRepName={monthly.salespersonIdByRepName}
             />
           </div>
         </div>
