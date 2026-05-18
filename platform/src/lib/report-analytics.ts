@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/rbac";
 import { canRunFullReports } from "@/lib/rbac";
 import { displaySalespersonName } from "@/lib/salesperson-name";
-import { isInsuranceCustomerName } from "@/lib/insurance-job";
+import { countsTowardSignedTotals, isInsuranceCustomerName } from "@/lib/insurance-job";
 import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
 import { statusColumnLabel } from "@/lib/status-badge-colors";
 import {
@@ -127,6 +127,7 @@ export async function getSignedContractsAnalytics(
   const jobsTrend = await prisma.job.findMany({
     where: signedBaseWhere,
     select: {
+      name: true,
       year: true,
       status: true,
       prolineStage: true,
@@ -144,6 +145,7 @@ export async function getSignedContractsAnalytics(
     { contracts: number; changeOrders: number; total: number; gp: number; jobCount: number }
   >();
   for (const j of jobsTrend) {
+    if (!countsTowardSignedTotals(j.name)) continue;
     const c = num(j.contractAmount);
     const rawCo = num(j.changeOrders);
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
@@ -201,6 +203,7 @@ export async function getSignedContractsAnalytics(
   >();
 
   for (const j of jobsSummary) {
+    if (!countsTowardSignedTotals(j.name)) continue;
     const sid = j.salespersonId;
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const c = num(j.contractAmount);
@@ -278,6 +281,7 @@ export async function getSignedContractsAnalytics(
     gpPctOfTotal: null as number | null,
   };
   for (const j of jobsSummary) {
+    if (!countsTowardSignedTotals(j.name)) continue;
     const c = num(j.contractAmount);
     const rawCo = num(j.changeOrders);
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
@@ -309,6 +313,7 @@ export async function getSignedContractsAnalytics(
   const jobsMonthly = await prisma.job.findMany({
     where: { ...signedBaseWhere, year: opts.monthlyYear },
     select: {
+      name: true,
       contractSignedAt: true,
       createdAt: true,
       status: true,
@@ -332,6 +337,7 @@ export async function getSignedContractsAnalytics(
   let undatedSignedRevenue = 0;
 
   for (const j of jobsMonthly) {
+    if (!countsTowardSignedTotals(j.name)) continue;
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const sid = j.salesperson?.id;
     if (sid && !salespersonIdByRepName[name]) salespersonIdByRepName[name] = sid;

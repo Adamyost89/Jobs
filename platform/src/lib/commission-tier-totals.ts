@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import type { CommissionTierTotals } from "./commission-plan-types";
+import { countsTowardSignedTotals } from "./insurance-job";
 
 function dec(n: Prisma.Decimal | number | string | null | undefined): number {
   if (n === null || n === undefined) return 0;
@@ -35,6 +36,7 @@ export async function loadCommissionTierTotalsForYear(year: number): Promise<Com
   const jobs = await prisma.job.findMany({
     where: { year, salespersonId: { not: null } },
     select: {
+      name: true,
       salespersonId: true,
       projectRevenue: true,
       contractAmount: true,
@@ -45,7 +47,7 @@ export async function loadCommissionTierTotalsForYear(year: number): Promise<Com
   const basisBySp = new Map<string, number>();
   const paidAmountBySp = new Map<string, number>();
   for (const j of jobs) {
-    if (!j.salespersonId) continue;
+    if (!j.salespersonId || !countsTowardSignedTotals(j.name)) continue;
     const b = jobBasis(j.projectRevenue, j.contractAmount, j.changeOrders);
     basisBySp.set(j.salespersonId, (basisBySp.get(j.salespersonId) ?? 0) + b);
     paidAmountBySp.set(j.salespersonId, (paidAmountBySp.get(j.salespersonId) ?? 0) + dec(j.amountPaid));

@@ -3,6 +3,7 @@ import type { SessionUser } from "@/lib/rbac";
 import { canRunFullReports } from "@/lib/rbac";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { countsTowardSignedTotals } from "@/lib/insurance-job";
 
 export type FinancialYearlyPoint = {
   year: number;
@@ -159,6 +160,7 @@ export async function getFinancialMetricsAnalytics(
   const jobsTrend = await prisma.job.findMany({
     where: baseWhere,
     select: {
+      name: true,
       year: true,
       status: true,
       prolineStage: true,
@@ -186,6 +188,7 @@ export async function getFinancialMetricsAnalytics(
   >();
 
   for (const j of jobsTrend) {
+    if (!countsTowardSignedTotals(j.name)) continue;
     const c = num(j.contractAmount);
     const rawCo = num(j.changeOrders);
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
@@ -255,6 +258,7 @@ export async function getFinancialMetricsAnalytics(
   >();
 
   for (const j of jobsSummary) {
+    if (!countsTowardSignedTotals(j.name)) continue;
     const sid = j.salespersonId;
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const c = num(j.contractAmount);

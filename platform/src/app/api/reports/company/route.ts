@@ -4,6 +4,7 @@ import { canRunFullReports, canViewCompanyRevenue } from "@/lib/rbac";
 import { defaultDashboardYear } from "@/lib/work-year";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { countsTowardSignedTotals } from "@/lib/insurance-job";
 
 function jobYearFilterFromQuery(
   yearParam: string | undefined,
@@ -34,13 +35,16 @@ export async function GET(request: Request) {
 
   const allJobs = await prisma.job.findMany({
     where: jobYearWhere,
-    select: { contractAmount: true, invoicedTotal: true, gp: true },
+    select: { name: true, contractAmount: true, invoicedTotal: true, gp: true },
   });
 
   let contract = 0;
   let invoiced = 0;
   let gp = 0;
+  let jobCount = 0;
   for (const j of allJobs) {
+    if (!countsTowardSignedTotals(j.name)) continue;
+    jobCount += 1;
     contract += j.contractAmount.toNumber();
     invoiced += j.invoicedTotal.toNumber();
     gp += j.gp.toNumber();
@@ -48,7 +52,7 @@ export async function GET(request: Request) {
 
   const companyPublic = {
     year: yearLabel,
-    jobCount: allJobs.length,
+    jobCount,
     totalContract: contract,
     totalInvoiced: invoiced,
   };

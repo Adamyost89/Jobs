@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { displaySalespersonName } from "@/lib/salesperson-name";
-import { isInsuranceCustomerName } from "@/lib/insurance-job";
+import { countsTowardSignedTotals, isInsuranceCustomerName } from "@/lib/insurance-job";
 import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
 import { statusColumnLabel } from "@/lib/status-badge-colors";
 
@@ -106,6 +106,7 @@ export async function loadAmSummaryForYear(
   const map = new Map<string, Agg>();
 
   for (const j of jobs) {
+    if (!countsTowardSignedTotals(j.name)) continue;
     const sid = j.salespersonId;
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const key = name ? `name:${name.toLowerCase()}` : "__unassigned__";
@@ -212,6 +213,7 @@ export async function loadAmSummaryForYear(
   let grandInsRevenue = 0;
   let grandInsGp = 0;
   for (const j of jobs) {
+    if (!countsTowardSignedTotals(j.name)) continue;
     const rawCo = num(j.changeOrders);
     const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
     const revenue = num(j.contractAmount) + co;
