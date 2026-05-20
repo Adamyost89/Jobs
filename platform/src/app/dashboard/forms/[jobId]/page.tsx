@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { Role } from "@prisma/client";
-import { canEditJobs, canSubmitEndOfJobForm, canViewEndOfJobForm } from "@/lib/rbac";
+import { canClearEndOfJobForm, canEditJobs, canSubmitEndOfJobForm, canViewEndOfJobForm } from "@/lib/rbac";
+import { RemoveEndOfJobFormButton } from "@/components/RemoveEndOfJobFormButton";
 import {
   parseEndOfJobFormConfig,
   commissionPayoutBlockedForJob,
@@ -59,6 +60,8 @@ export default async function FormForJobPage({ params }: { params: Promise<{ job
   const pending = commissionPayoutBlockedForJob(job);
   const alreadyDone = Boolean(job.endOfJobFormSubmittedAt);
   const backHref = alreadyDone ? "/dashboard/forms?view=submitted" : "/dashboard/forms";
+  const canRemove = canClearEndOfJobForm(user);
+  const hasFormOnFile = Boolean(job.endOfJobFormRequiredAt || job.endOfJobFormSubmittedAt);
 
   return (
     <div className="page-stack">
@@ -68,11 +71,31 @@ export default async function FormForJobPage({ params }: { params: Promise<{ job
         <Link href="/dashboard/jobs">Jobs</Link>
       </p>
 
-      <div className="card" style={{ fontSize: "0.9rem", color: "var(--muted)" }}>
-        <strong style={{ color: "var(--text)" }}>{job.jobNumber}</strong>
-        {job.name ? ` · ${job.name}` : ""}
-        {job.salesperson ? ` · ${displaySalespersonName(job.salesperson.name)}` : ""}
-        {job.leadNumber ? ` · Lead ${job.leadNumber}` : ""}
+      <div
+        className="card"
+        style={{
+          fontSize: "0.9rem",
+          color: "var(--muted)",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.5rem 1rem",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <span>
+          <strong style={{ color: "var(--text)" }}>{job.jobNumber}</strong>
+          {job.name ? ` · ${job.name}` : ""}
+          {job.salesperson ? ` · ${displaySalespersonName(job.salesperson.name)}` : ""}
+          {job.leadNumber ? ` · Lead ${job.leadNumber}` : ""}
+        </span>
+        {canRemove && hasFormOnFile ? (
+          <RemoveEndOfJobFormButton
+            jobId={job.id}
+            jobNumber={job.jobNumber}
+            view={alreadyDone ? "submitted" : "pending"}
+          />
+        ) : null}
       </div>
 
       {alreadyDone ? (

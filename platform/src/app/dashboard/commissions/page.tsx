@@ -5,6 +5,7 @@ import {
   canMarkCommissionPaid,
   canEditCommissions,
   canViewJobContractAndPaidForCommissions,
+  canViewHrPayroll,
 } from "@/lib/rbac";
 import { PayCommissionForm } from "@/components/PayCommissionForm";
 import { CommissionLineAdminForm } from "@/components/CommissionLineAdminForm";
@@ -15,7 +16,10 @@ import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import type { Prisma } from "@prisma/client";
 import { commissionDisplayAmounts, roundMoney } from "@/lib/commission-display";
 import { jobNumberSortKey } from "@/lib/job-sort";
-import { displaySalespersonName } from "@/lib/salesperson-name";
+import {
+  displaySalespersonName,
+  salespersonCommissionFilterByDisplayToken,
+} from "@/lib/salesperson-name";
 import { CommissionExplainButton } from "@/components/CommissionExplainButton";
 import { commissionJobAllowedForPayoutSheetWhere } from "@/lib/end-of-job-form";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
@@ -30,6 +34,19 @@ function parsePaydayParam(raw: string | string[] | undefined): string | null {
   return t;
 }
 
+function pickString(v: string | string[] | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  return Array.isArray(v) ? v[0] : v;
+}
+
+function commissionsListUrl(params: { payday?: string; spn?: string }): string {
+  const q = new URLSearchParams();
+  if (params.payday?.trim()) q.set("payday", params.payday.trim());
+  if (params.spn?.trim()) q.set("spn", params.spn.trim());
+  const s = q.toString();
+  return s ? `/dashboard/commissions?${s}` : "/dashboard/commissions";
+}
+
 export default async function CommissionsPage({
   searchParams,
 }: {
@@ -39,6 +56,8 @@ export default async function CommissionsPage({
   const user = await getSession();
   if (!user) return null;
   const showCalcTrace = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
+  const canFilterBySalesperson = canViewHrPayroll(user);
+  const salespersonDisplayToken = canFilterBySalesperson ? pickString(sp.spn)?.trim() : undefined;
 
   const defaultPaydayIso = getUpcomingFridayIsoForPayrollTz(new Date());
   const selectedPaydayIso = parsePaydayParam(sp.payday) ?? defaultPaydayIso;
@@ -54,6 +73,28 @@ export default async function CommissionsPage({
         ? { salespersonId: { in: user.salespersonIds } }
         : { id: "__none__" }
     );
+  }
+  const baseWhere: Prisma.CommissionWhereInput =
+    parts.length === 0 ? {} : parts.length === 1 ? parts[0]! : { AND: parts };
+
+  const salespersonOptionRows = canFilterBySalesperson
+    ? await prisma.commission.findMany({
+        where: baseWhere,
+        select: { salesperson: { select: { name: true } } },
+        take: 5000,
+      })
+    : [];
+  const salespersonOptions = (() => {
+    const names = new Set<string>();
+    for (const row of salespersonOptionRows) {
+      const display = displaySalespersonName(row.salesperson.name);
+      if (display) names.add(display);
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  })();
+
+  if (salespersonDisplayToken) {
+    parts.push(salespersonCommissionFilterByDisplayToken(salespersonDisplayToken));
   }
   const where: Prisma.CommissionWhereInput =
     parts.length === 0 ? {} : parts.length === 1 ? parts[0]! : { AND: parts };
@@ -178,8 +219,45 @@ export default async function CommissionsPage({
           Payday default when posting: <code>{selectedPaydayIso}</code> (pay period: <code>{suggestedPayPeriod}</code>)
         </p>
       ) : null}
+      {canFilterBySalesperson ? (
+        <form method="get" className="card" style={{ padding: "0.85rem 1.15rem" }}>
+          <div className="filter-bar">
+            {canMarkCommissionPaid(user) ? (
+              <input type="hidden" name="payday" value={selectedPaydayIso} />
+            ) : null}
+            <label>
+              Salesperson
+              <select name="spn" defaultValue={salespersonDisplayToken || ""}>
+                <option value="">All reps</option>
+                {salespersonOptions.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="filter-bar__actions">
+              <button className="btn" type="submit">
+                Apply
+              </button>
+              <Link
+                href={commissionsListUrl({
+                  payday: canMarkCommissionPaid(user) ? selectedPaydayIso : undefined,
+                })}
+                className="btn secondary"
+                style={{ textDecoration: "none" }}
+              >
+                All reps
+              </Link>
+            </div>
+          </div>
+        </form>
+      ) : null}
       {canMarkCommissionPaid(user) ? (
         <form method="GET" className="page-actions-inline">
+          {salespersonDisplayToken ? (
+            <input type="hidden" name="spn" value={salespersonDisplayToken} />
+          ) : null}
           <label htmlFor="payday" style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
             Payday for all lines:
           </label>
@@ -193,7 +271,11 @@ export default async function CommissionsPage({
           <button className="btn" type="submit" style={{ fontSize: "0.82rem" }}>
             Set payday
           </button>
-          <Link className="btn btn-ghost" href="/dashboard/commissions" style={{ fontSize: "0.82rem" }}>
+          <Link
+            className="btn btn-ghost"
+            href={commissionsListUrl({ spn: salespersonDisplayToken })}
+            style={{ fontSize: "0.82rem" }}
+          >
             Reset to today
           </Link>
         </form>
@@ -203,6 +285,13 @@ export default async function CommissionsPage({
           <strong>Admins:</strong> If someone should not earn on a job, set <strong>Admin correction</strong> to{" "}
           <code>$0</code> and click <strong>Adjust &amp; lock</strong>. Use this for one-off corrections without changing the
           underlying job row.
+        </p>
+      ) : null}
+
+      {canFilterBySalesperson && salespersonDisplayToken ? (
+        <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)" }}>
+          Showing <strong style={{ color: "var(--text)" }}>{rowModels.length}</strong> line
+          {rowModels.length === 1 ? "" : "s"} for <strong style={{ color: "var(--text)" }}>{salespersonDisplayToken}</strong>
         </p>
       ) : null}
 

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { canSubmitEndOfJobForm } from "@/lib/rbac";
+import { canClearEndOfJobForm, canSubmitEndOfJobForm } from "@/lib/rbac";
 import {
   parseEndOfJobFormConfig,
   validateEndOfJobFormSubmission,
@@ -140,4 +140,56 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
 
   return NextResponse.json({ ok: true, submittedAt: submittedAt.toISOString(), zap: zap.skipped ? "skipped" : zap.ok ? "sent" : "failed" });
+}
+
+/** Admin / super admin: remove job from Forms queue (clears requirement, submission, and saved responses). */
+export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const user = await getSession();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canClearEndOfJobForm(user)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id: jobId } = await ctx.params;
+  const job = await prisma.job.findUnique({
+    where: { id: jobId },
+    select: {
+      id: true,
+      jobNumber: true,
+      endOfJobFormRequiredAt: true,
+      endOfJobFormSubmittedAt: true,
+    },
+  });
+  if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  if (!job.endOfJobFormRequiredAt && !job.endOfJobFormSubmittedAt) {
+    return NextResponse.json({ error: "This job has no end-of-job checklist on file." }, { status: 400 });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.job.update({
+      where: { id: jobId },
+      data: {
+        endOfJobFormRequiredAt: null,
+        endOfJobFormSubmittedAt: null,
+        endOfJobFormResponses: Prisma.JsonNull,
+      },
+    });
+    await tx.jobEvent.create({
+      data: {
+        jobId,
+        type: "END_OF_JOB_FORM_CLEARED",
+        source: "api",
+        payload: {
+          by: user.id,
+          hadRequiredAt: job.endOfJobFormRequiredAt?.toISOString() ?? null,
+          hadSubmittedAt: job.endOfJobFormSubmittedAt?.toISOString() ?? null,
+        },
+      },
+    });
+  });
+
+  await recalculateJobAndCommissions(jobId);
+
+  return NextResponse.json({ ok: true, jobNumber: job.jobNumber });
 }

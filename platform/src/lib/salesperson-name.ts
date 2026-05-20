@@ -39,6 +39,18 @@ export function salespersonJobFilterByDisplayToken(token: string): Prisma.JobWhe
   };
 }
 
+/** Commission lines filter: same display-token rules as jobs (James → James + James Smith). */
+export function salespersonCommissionFilterByDisplayToken(token: string): Prisma.CommissionWhereInput {
+  const t = normalizeSalespersonName(token);
+  if (!t) return { id: "__none__" };
+  return {
+    OR: [
+      { salesperson: { name: { equals: t, mode: Prisma.QueryMode.insensitive } } },
+      { salesperson: { name: { startsWith: `${t} `, mode: Prisma.QueryMode.insensitive } } },
+    ],
+  };
+}
+
 /**
  * Prefer the existing first-name salesperson row when external systems send full names.
  * This keeps internal commission mappings stable even if ProLine/Excel sends "First Last".

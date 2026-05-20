@@ -62,3 +62,8 @@ export function canSubmitEndOfJobForm(user: SessionUser, job: { salespersonId: s
   if (job.salespersonId && user.salespersonIds.includes(job.salespersonId)) return true;
   return false;
 }
+
+/** Clear accidental end-of-job checklist entries from the Forms queue (admin + super admin). */
+export function canClearEndOfJobForm(user: SessionUser): boolean {
+  return canEditJobs(user);
+}

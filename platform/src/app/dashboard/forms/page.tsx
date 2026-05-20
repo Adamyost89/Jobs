@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { Role, type Prisma } from "@prisma/client";
-import { canViewAllJobs } from "@/lib/rbac";
+import { canClearEndOfJobForm, canViewAllJobs } from "@/lib/rbac";
+import { RemoveEndOfJobFormButton } from "@/components/RemoveEndOfJobFormButton";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { formatDateTimeInEastern } from "@/lib/payout-display";
 
@@ -63,6 +64,7 @@ export default async function FormsQueuePage({
   const view = normalizeView(pickString(sp.view));
   const spId = pickString(sp.sp)?.trim() || "";
   const sort = normalizeSort(pickString(sp.sort), view);
+  const canRemove = canClearEndOfJobForm(user);
 
   const roleParts: Prisma.JobWhereInput[] = [];
   if (!canViewAllJobs(user)) {
@@ -274,13 +276,18 @@ export default async function FormsQueuePage({
                         : "—"}
                   </td>
                   <td>
-                    <Link
-                      href={`/dashboard/forms/${j.id}`}
-                      className="btn secondary"
-                      style={{ textDecoration: "none" }}
-                    >
-                      {view === "pending" ? "Open" : "View"}
-                    </Link>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", alignItems: "flex-start" }}>
+                      <Link
+                        href={`/dashboard/forms/${j.id}`}
+                        className="btn secondary"
+                        style={{ textDecoration: "none" }}
+                      >
+                        {view === "pending" ? "Open" : "View"}
+                      </Link>
+                      {canRemove ? (
+                        <RemoveEndOfJobFormButton jobId={j.id} jobNumber={j.jobNumber} view={view} />
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}
