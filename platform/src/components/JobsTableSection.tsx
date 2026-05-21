@@ -105,6 +105,7 @@ export function JobsTableSection({
   const router = useRouter();
   const canEdit = canEditJobs(user);
   const canManageRowActions = user.role === "SUPER_ADMIN";
+  const showRowEditColumn = canManageRowActions || canEdit;
   const canEditPayments = user.role === "SUPER_ADMIN";
   const canSeeGp = canViewAllJobs(user);
   const canEditTablePrefs = user.role === "SUPER_ADMIN";
@@ -270,11 +271,11 @@ export function JobsTableSection({
   }
 
   function beginEdit(row: JobsTableRowDTO) {
-    if (!canManageRowActions || deletingId || savingEditId) return;
+    if (!showRowEditColumn || deletingId || savingEditId) return;
     setDeleteMsg(null);
     setEditMsg(null);
     setEditingId(row.id);
-    setEditForm(toEditForm(row));
+    setEditForm(canManageRowActions ? toEditForm(row) : null);
   }
 
   function cancelEdit() {
@@ -491,20 +492,6 @@ export function JobsTableSection({
                   </Link>
                 </>
               ) : null}
-              {canEdit && !row.endOfJobFormRequiredAt ? (
-                <>
-                  {" "}
-                  <button
-                    type="button"
-                    className="btn secondary"
-                    style={{ padding: "0.2rem 0.45rem", fontSize: "0.72rem", marginLeft: 4, verticalAlign: "middle" }}
-                    disabled={requiringChecklistId === row.id}
-                    onClick={() => void requireEndOfJobChecklist(row)}
-                  >
-                    {requiringChecklistId === row.id ? "…" : "Require checklist"}
-                  </button>
-                </>
-              ) : null}
             </td>
           );
         }
@@ -652,8 +639,10 @@ export function JobsTableSection({
             <table className="table table-data">
               <thead>
                 <tr>
+                  {showRowEditColumn ? (
+                    <th style={{ width: "4.5rem", paddingLeft: "0.75rem" }} aria-label="Edit" />
+                  ) : null}
                   {cols.map((id) => renderTh(id))}
-                  {canManageRowActions ? <th style={{ minWidth: "10rem" }}>Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -662,27 +651,26 @@ export function JobsTableSection({
                   return (
                     <Fragment key={row.id}>
                       <tr style={rowStyle}>
-                        {cols.map((id) => renderTd(row, id))}
-                        {canManageRowActions ? (
-                          <td style={{ whiteSpace: "normal" }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
-                              <button
-                                type="button"
-                                className="btn secondary"
-                                onClick={() => beginEdit(row)}
-                                disabled={deletingId != null || savingEditId != null || recheckingId != null}
-                                style={{ padding: "0.4rem 0.75rem" }}
-                              >
-                                {editingId === row.id ? "Editing" : "Edit"}
-                              </button>
-                            </div>
+                        {showRowEditColumn ? (
+                          <td style={{ whiteSpace: "nowrap", paddingLeft: "0.75rem", verticalAlign: "middle" }}>
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              onClick={() => beginEdit(row)}
+                              disabled={deletingId != null || savingEditId != null || recheckingId != null}
+                              style={{ padding: "0.4rem 0.75rem" }}
+                            >
+                              {editingId === row.id ? "Editing" : "Edit"}
+                            </button>
                           </td>
                         ) : null}
+                        {cols.map((id) => renderTd(row, id))}
                       </tr>
-                      {canManageRowActions && editingId === row.id && editForm ? (
+                      {showRowEditColumn && editingId === row.id ? (
                         <tr>
-                          <td colSpan={cols.length + 1} style={{ paddingTop: 0 }}>
+                          <td colSpan={cols.length + (showRowEditColumn ? 1 : 0)} style={{ paddingTop: 0 }}>
                             <div className="card" style={{ margin: "0.35rem 0.7rem 0.8rem", padding: "0.9rem 1rem" }}>
+                              {editForm ? (
                               <div
                                 style={{
                                   display: "grid",
@@ -820,7 +808,16 @@ export function JobsTableSection({
                                 />
                               </label>
                               </div>
-                              <div style={{ display: "flex", gap: "0.55rem", marginTop: "0.9rem", flexWrap: "wrap" }}>
+                              ) : null}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "0.55rem",
+                                  marginTop: editForm ? "0.9rem" : 0,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                {editForm ? (
                                 <button
                                   type="button"
                                   className="btn"
@@ -829,6 +826,7 @@ export function JobsTableSection({
                                 >
                                   {savingEditId === row.id ? "Saving…" : "Save changes"}
                                 </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   className="btn secondary"
@@ -837,7 +835,17 @@ export function JobsTableSection({
                                 >
                                   Cancel
                                 </button>
-                                {canEditPayments ? (
+                                {canEdit && !row.endOfJobFormRequiredAt ? (
+                                  <button
+                                    type="button"
+                                    className="btn secondary"
+                                    onClick={() => void requireEndOfJobChecklist(row)}
+                                    disabled={requiringChecklistId === row.id || savingEditId === row.id}
+                                  >
+                                    {requiringChecklistId === row.id ? "Requiring…" : "Require checklist"}
+                                  </button>
+                                ) : null}
+                                {canManageRowActions && canEditPayments ? (
                                   <button
                                     type="button"
                                     className="btn secondary"
@@ -847,6 +855,7 @@ export function JobsTableSection({
                                     {recheckingId === row.id ? "Rechecking…" : "Recheck commission"}
                                   </button>
                                 ) : null}
+                                {canManageRowActions ? (
                                 <button
                                   type="button"
                                   className="btn secondary"
@@ -856,6 +865,7 @@ export function JobsTableSection({
                                 >
                                   {deletingId === row.id ? "Deleting…" : "Delete"}
                                 </button>
+                                ) : null}
                               </div>
                             </div>
                           </td>
