@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
-import { Role } from "@prisma/client";
+import { Role, SalespersonKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import {
@@ -54,12 +53,9 @@ export async function POST(req: Request) {
   }
   const id = randomUUID();
   try {
-    await prisma.$executeRaw(
-      Prisma.sql`
-        INSERT INTO "Salesperson" ("id", "name", "active", "kind", "createdAt", "updatedAt")
-        VALUES (${id}, ${name}, true, 'REP'::"SalespersonKind", NOW(), NOW())
-      `
-    );
+    await prisma.salesperson.create({
+      data: { id, name, active: true, kind: SalespersonKind.REP },
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Create failed";
     return NextResponse.json({ error: msg }, { status: 400 });
