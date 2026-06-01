@@ -18,6 +18,8 @@ import {
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { DrilldownTableRow } from "@/components/DrilldownTableRow";
 import { SignedMonthlyDrillGrid } from "@/components/SignedMonthlyDrillGrid";
+import { ContractCountWagerCard } from "@/components/ContractCountWagerCard";
+import { WAGER_WORK_YEAR } from "@/lib/contract-count-wager";
 
 function pickYear(sp: { year?: string | string[] } | undefined): string | undefined {
   const y = sp?.year;
@@ -101,6 +103,10 @@ export default async function DashboardHome({
         <Link href={`/dashboard/jobs?year=${workYear}`}>Open job list</Link> ·{" "}
         <Link href="/dashboard/advanced">Advanced</Link>
       </p>
+
+      {canSeeGp && workYear === WAGER_WORK_YEAR ? (
+        <ContractCountWagerCard currentCount={companyGrand.jobCount} />
+      ) : null}
 
       <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
         <h2 style={{ margin: "0.65rem 1rem 0.5rem", fontSize: "1.05rem" }}>By account manager</h2>
