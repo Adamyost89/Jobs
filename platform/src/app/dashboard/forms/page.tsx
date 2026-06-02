@@ -5,13 +5,19 @@ import { getSession } from "@/lib/session";
 import { Role, type Prisma } from "@prisma/client";
 import { canClearEndOfJobForm, canViewAllJobs } from "@/lib/rbac";
 import { RemoveEndOfJobFormButton } from "@/components/RemoveEndOfJobFormButton";
+import { FormsNavTabs } from "@/components/FormsNavTabs";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { formatDateTimeInEastern } from "@/lib/payout-display";
+import { formsListUrl, type FormsSort, type FormsView } from "@/lib/forms-list-url";
+import { parseEndOfJobFormConfig } from "@/lib/end-of-job-form";
+import { endOfJobResponseMatchesFilter } from "@/lib/end-of-job-form-analytics";
 
 type Search = {
   view?: string;
   sp?: string;
   sort?: string;
+  eojField?: string;
+  eojValue?: string;
 };
 
 function pickString(v: string | string[] | undefined): string | undefined {
@@ -19,13 +25,9 @@ function pickString(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
-type FormsView = "pending" | "submitted";
-
 function normalizeView(raw: string | undefined): FormsView {
   return raw === "submitted" ? "submitted" : "pending";
 }
-
-type FormsSort = "rep" | "rep_desc" | "job" | "required" | "submitted";
 
 function normalizeSort(raw: string | undefined, view: FormsView): FormsSort {
   const s = String(raw || "").trim().toLowerCase();
@@ -42,15 +44,6 @@ function normalizeSort(raw: string | undefined, view: FormsView): FormsSort {
   return "rep";
 }
 
-function formsListUrl(opts: { view?: FormsView; sp?: string; sort?: FormsSort }): string {
-  const p = new URLSearchParams();
-  if (opts.view && opts.view !== "pending") p.set("view", opts.view);
-  if (opts.sp) p.set("sp", opts.sp);
-  if (opts.sort) p.set("sort", opts.sort);
-  const q = p.toString();
-  return q ? `/dashboard/forms?${q}` : "/dashboard/forms";
-}
-
 export default async function FormsQueuePage({
   searchParams,
 }: {
@@ -64,6 +57,8 @@ export default async function FormsQueuePage({
   const view = normalizeView(pickString(sp.view));
   const spId = pickString(sp.sp)?.trim() || "";
   const sort = normalizeSort(pickString(sp.sort), view);
+  const eojField = pickString(sp.eojField)?.trim() || "";
+  const eojValue = pickString(sp.eojValue)?.trim() || "";
   const canRemove = canClearEndOfJobForm(user);
 
   const roleParts: Prisma.JobWhereInput[] = [];
@@ -106,11 +101,24 @@ export default async function FormsQueuePage({
     }
   })();
 
-  const [jobs, salespersonRows] = await Promise.all([
+  let eojFieldOptions: string[] | undefined;
+  if (view === "submitted" && eojField && eojValue) {
+    const cfgRow = await prisma.systemConfig.findUnique({
+      where: { id: "singleton" },
+      select: { endOfJobForm: true },
+    });
+    const parsed = parseEndOfJobFormConfig(cfgRow?.endOfJobForm);
+    if (parsed.ok) {
+      const field = parsed.value.fields.find((f) => f.id === eojField && f.type === "select");
+      eojFieldOptions = field?.options;
+    }
+  }
+
+  const [jobsRaw, salespersonRows] = await Promise.all([
     prisma.job.findMany({
       where,
       orderBy,
-      take: 300,
+      take: eojField && eojValue ? 500 : 300,
       select: {
         id: true,
         jobNumber: true,
@@ -120,6 +128,7 @@ export default async function FormsQueuePage({
         prolineStage: true,
         endOfJobFormRequiredAt: true,
         endOfJobFormSubmittedAt: true,
+        endOfJobFormResponses: true,
         salesperson: { select: { id: true, name: true } },
       },
     }),
@@ -136,6 +145,13 @@ export default async function FormsQueuePage({
         })
       : Promise.resolve([]),
   ]);
+
+  const jobs =
+    view === "submitted" && eojField && eojValue
+      ? jobsRaw.filter((j) =>
+          endOfJobResponseMatchesFilter(j.endOfJobFormResponses, eojField, eojValue, eojFieldOptions)
+        )
+      : jobsRaw;
 
   const salespersonOptions = (() => {
     const byName = new Map<string, { id: string; name: string }>();
@@ -162,30 +178,15 @@ export default async function FormsQueuePage({
       <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750 }}>Forms</h1>
       <p style={{ margin: "0.35rem 0 0", fontSize: "0.9rem", color: "var(--muted)", maxWidth: 720, lineHeight: 1.5 }}>
         End-of-job checklists. Pending jobs block commission payouts until the form is submitted. Completed forms are
-        listed under <strong>Submitted</strong>.
+        listed under <strong>Submitted</strong>. Use <strong>Analytics</strong> for category counts and rep breakdowns.
       </p>
 
-      <div className="card" style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", padding: "0.75rem 1rem" }}>
-        <Link
-          href={formsListUrl({ view: "pending", sp: spId || undefined, sort: view === "pending" ? sort : "rep" })}
-          className={`btn${view === "pending" ? "" : " secondary"}`}
-          style={{ textDecoration: "none" }}
-          aria-current={view === "pending" ? "page" : undefined}
-        >
-          Pending
-        </Link>
-        <Link
-          href={formsListUrl({ view: "submitted", sp: spId || undefined, sort: view === "submitted" ? sort : "submitted" })}
-          className={`btn${view === "submitted" ? "" : " secondary"}`}
-          style={{ textDecoration: "none" }}
-          aria-current={view === "submitted" ? "page" : undefined}
-        >
-          Submitted
-        </Link>
-      </div>
+      <FormsNavTabs active={view === "submitted" ? "submitted" : "pending"} />
 
       <form method="get" className="card" style={{ padding: "1rem 1.15rem" }}>
         <input type="hidden" name="view" value={view} />
+        {eojField ? <input type="hidden" name="eojField" value={eojField} /> : null}
+        {eojValue ? <input type="hidden" name="eojValue" value={eojValue} /> : null}
         <div className="filter-bar">
           {canViewAllJobs(user) ? (
             <label>
@@ -225,24 +226,41 @@ export default async function FormsQueuePage({
             <button className="btn" type="submit">
               Apply
             </button>
-            <Link href={formsListUrl({ view })} className="btn secondary" style={{ textDecoration: "none" }}>
+            <Link
+              href={formsListUrl({ view })}
+              className="btn secondary"
+              style={{ textDecoration: "none" }}
+            >
               Reset filters
             </Link>
           </div>
         </div>
       </form>
 
+      {eojField && eojValue ? (
+        <p className="card" style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)" }}>
+          Filtered by answer: <strong style={{ color: "var(--text)" }}>{eojValue}</strong> ({eojField})
+          {" · "}
+          <Link href={formsListUrl({ view: "submitted", sp: spId || undefined })}>Clear answer filter</Link>
+          {" · "}
+          <Link href="/dashboard/forms/analytics">Back to analytics</Link>
+        </p>
+      ) : null}
+
       {jobs.length === 0 ? (
         <p className="card" style={{ margin: 0, color: "var(--muted)" }}>
           {view === "pending"
             ? "No pending checklists for this filter."
-            : "No submitted checklists for this filter."}
+            : eojField && eojValue
+              ? "No submitted checklists match this answer filter."
+              : "No submitted checklists for this filter."}
         </p>
       ) : (
         <div className="table-responsive card" style={{ padding: 0 }}>
           <p style={{ margin: "0.65rem 1rem 0", fontSize: "0.85rem", color: "var(--muted)" }}>
             Showing {jobs.length} job{jobs.length === 1 ? "" : "s"}
             {spId ? ` · filtered by rep` : ""}
+            {eojField && eojValue ? ` · answer filter` : ""}
           </p>
           <table className="table table-data">
             <thead>

@@ -67,3 +67,10 @@ export function canSubmitEndOfJobForm(user: SessionUser, job: { salespersonId: s
 export function canClearEndOfJobForm(user: SessionUser): boolean {
   return canEditJobs(user);
 }
+
+/** View end-of-job checklist analytics (admins: company-wide; reps: own jobs only). */
+export function canViewEndOfJobFormAnalytics(user: SessionUser): boolean {
+  if (user.role === Role.HR) return false;
+  if (canRunFullReports(user)) return true;
+  return user.salespersonIds.length > 0;
+}
