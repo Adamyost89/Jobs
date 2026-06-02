@@ -1,10 +1,14 @@
 import {
+  WAGER_PRIZE_COPY,
   WAGER_TARGET,
   WAGER_TIMELINE_END,
   WAGER_TIMELINE_START,
   formatWagerDate,
   timelinePosition,
+  wagerBanterLine,
+  wagerPersonQuip,
   wagerSnapshot,
+  wagerVictoryMessage,
   type WagerPersonStatus,
 } from "@/lib/contract-count-wager";
 
@@ -23,6 +27,8 @@ type Props = {
 
 export function ContractCountWagerCard({ currentCount, today }: Props) {
   const snap = wagerSnapshot(currentCount, today);
+  const banter = wagerBanterLine(snap);
+  const victory = wagerVictoryMessage(snap);
   const pct = Math.min(100, Math.round((snap.current / snap.target) * 1000) / 10);
   const remaining = Math.max(0, snap.target - snap.current);
   const todayPos = timelinePosition(snap.todayKey);
@@ -39,6 +45,14 @@ export function ContractCountWagerCard({ currentCount, today }: Props) {
         <h2 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 750 }}>Race to 232</h2>
         <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Admin office pool — 2026 work year</span>
       </div>
+      <p style={{ margin: "0.5rem 0 0", fontSize: "0.82rem", color: "var(--muted)", fontStyle: "italic", lineHeight: 1.45 }}>
+        {WAGER_PRIZE_COPY}
+      </p>
+      {banter ? (
+        <p style={{ margin: "0.35rem 0 0", fontSize: "0.82rem", color: "var(--text)", lineHeight: 1.45, opacity: 0.92 }}>
+          {banter}
+        </p>
+      ) : null}
 
       <div style={{ marginTop: "0.85rem", display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "0.35rem 0.75rem" }}>
         <span style={{ fontSize: "2rem", fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1 }}>
@@ -183,34 +197,41 @@ export function ContractCountWagerCard({ currentCount, today }: Props) {
         </p>
       </div>
 
-      <ul style={{ margin: "0.85rem 0 0", padding: 0, listStyle: "none", display: "grid", gap: "0.45rem" }}>
+      <ul style={{ margin: "0.85rem 0 0", padding: 0, listStyle: "none", display: "grid", gap: "0.55rem" }}>
         {snap.rows.map((row) => {
           const chip = CHIP_STYLE[row.status];
+          const quip = wagerPersonQuip(row, snap.todayKey);
           return (
-            <li
-              key={row.name}
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                gap: "0.5rem 0.75rem",
-                fontSize: "0.88rem",
-              }}
-            >
-              <span style={{ fontWeight: 650, minWidth: "3.5rem" }}>{row.name}</span>
-              <span style={{ color: "var(--muted)", minWidth: "6.5rem" }}>{formatWagerDate(row.dateKey)}</span>
-              <span
+            <li key={row.name} style={{ display: "grid", gap: "0.15rem" }}>
+              <div
                 style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 650,
-                  padding: "0.15rem 0.5rem",
-                  borderRadius: 999,
-                  background: chip.background,
-                  color: chip.color,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: "0.5rem 0.75rem",
+                  fontSize: "0.88rem",
                 }}
               >
-                {row.statusLabel}
-              </span>
+                <span style={{ fontWeight: 650, minWidth: "3.5rem" }}>{row.name}</span>
+                <span style={{ color: "var(--muted)", minWidth: "6.5rem" }}>{formatWagerDate(row.dateKey)}</span>
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 650,
+                    padding: "0.15rem 0.5rem",
+                    borderRadius: 999,
+                    background: chip.background,
+                    color: chip.color,
+                  }}
+                >
+                  {row.statusLabel}
+                </span>
+              </div>
+              {quip ? (
+                <span style={{ fontSize: "0.75rem", color: "var(--muted)", fontStyle: "italic", paddingLeft: "0.1rem" }}>
+                  {quip}
+                </span>
+              ) : null}
             </li>
           );
         })}
@@ -223,7 +244,7 @@ export function ContractCountWagerCard({ currentCount, today }: Props) {
         </p>
       ) : null}
 
-      {snap.reachedTarget && snap.winner ? (
+      {victory ? (
         <p
           style={{
             margin: "0.85rem 0 0",
@@ -233,8 +254,7 @@ export function ContractCountWagerCard({ currentCount, today }: Props) {
             lineHeight: 1.45,
           }}
         >
-          {snap.winner.name} takes it — closest call to hitting {snap.target} on{" "}
-          {formatWagerDate(snap.todayKey)}. Nice work, admin team.
+          {victory}
         </p>
       ) : null}
     </div>

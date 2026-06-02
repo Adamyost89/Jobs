@@ -22,6 +22,9 @@ export const WAGER_TIMELINE_END = "2026-08-06";
 
 export const WAGER_YTD_START = "2026-01-01";
 
+export const WAGER_PRIZE_COPY =
+  "Winner gets: one (1) gas station hot dog, billed to the company card.";
+
 export type WagerPersonStatus =
   | "in_running"
   | "needs_miracle"
@@ -171,4 +174,207 @@ export function wagerSnapshot(
     winner,
     projectedHitDateKey,
   };
+}
+
+function pickStable(pool: string[], seed: string): string {
+  if (pool.length === 0) return "";
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return pool[Math.abs(h) % pool.length]!;
+}
+
+/** Soonest upcoming pick among people still in the running. */
+export function calendarLeader(rows: WagerPersonRow[]): WagerPersonRow | null {
+  const running = rows.filter((r) => r.status === "in_running");
+  if (running.length === 0) return null;
+  return running.reduce((a, b) => (a.dateKey <= b.dateKey ? a : b));
+}
+
+/** Who missed first — earliest pick date among needs_miracle. */
+export function firstNeedsMiracle(rows: WagerPersonRow[]): WagerPersonRow | null {
+  const miracles = rows.filter((r) => r.status === "needs_miracle");
+  if (miracles.length === 0) return null;
+  return miracles.reduce((a, b) => (a.dateKey <= b.dateKey ? a : b));
+}
+
+const MIRACLE_ROW_QUIPS = [
+  "The roller weeps.",
+  "Asked for a sign. Got a calendar.",
+  "Hot dog status: still theoretical.",
+  "Bold strategy. Let's see if it pays off.",
+  "Miracle pending. Hot dog on hold.",
+];
+
+const LATE_ROW_QUIPS = [
+  "So close you can smell the roller.",
+  "The hot dog remembers.",
+  "Calendar said no. Condiments cried.",
+];
+
+/** Small quip under a row when they're in trouble or just missed. */
+export function wagerPersonQuip(row: WagerPersonRow, todayKey: string): string | null {
+  if (row.status === "needs_miracle") {
+    return pickStable(MIRACLE_ROW_QUIPS, `${todayKey}|miracle|${row.name}`);
+  }
+  if (row.status === "close_but_late") {
+    return pickStable(LATE_ROW_QUIPS, `${todayKey}|late|${row.name}`);
+  }
+  return null;
+}
+
+/** One rotating banter line for the card header area. */
+export function wagerBanterLine(snap: WagerSnapshot): string {
+  const { rows, todayKey, projectedHitDateKey: pace, reachedTarget, winner } = snap;
+
+  if (reachedTarget && winner) {
+    return pickStable(
+      [
+        `The hot dog has left the roller. ${winner.name}, please collect.`,
+        `${winner.name} wins the hot dog. Receipt required. Condiments negotiable.`,
+        `232 achieved. ${winner.name} owns the roller now. Everyone else: nod respectfully.`,
+      ],
+      `${todayKey}|won|${winner.name}`
+    );
+  }
+
+  const running = rows.filter((r) => r.status === "in_running");
+  const miracles = rows.filter((r) => r.status === "needs_miracle");
+  const leader = calendarLeader(rows);
+  const firstMiss = firstNeedsMiracle(rows);
+  const earliestPick = WAGER_PREDICTIONS[0]!.dateKey;
+
+  if (running.length === rows.length && leader) {
+    return pickStable(
+      [
+        `${leader.name}'s on the clock first. No pressure — the hot dog's already sweating in the roller.`,
+        `Everyone's still in it. ${leader.name} goes first. The roller is watching.`,
+        `${leader.name} picked the soonest date. Courageous. The hot dog believes in you.`,
+      ],
+      `${todayKey}|all-running|${leader.name}`
+    );
+  }
+
+  if (running.length === 1 && running[0]!.name === "Drew") {
+    return pickStable(
+      [
+        "Drew picked August 6. Bold. The roller has seen things.",
+        "Only Drew's date is still standing. The hot dog is patient. Drew is not.",
+        "Three admins missed. Drew's still in. This is a movie.",
+      ],
+      `${todayKey}|drew-alone`
+    );
+  }
+
+  if (miracles.length >= 2 && firstMiss && leader) {
+    return pickStable(
+      [
+        `${firstMiss.name} needs a miracle. ${leader.name} still thinks this is fine.`,
+        `${miracles.length} admins need divine intervention. ${leader.name} is up next. Pray for sales.`,
+        `The hot dog remains unclaimed. ${firstMiss.name} was wrong first. ${leader.name}, you're on deck.`,
+      ],
+      `${todayKey}|multi|${firstMiss.name}|${leader.name}`
+    );
+  }
+
+  if (pace && firstMiss) {
+    return pickStable(
+      [
+        `YTD says we're late. ${firstMiss.name} would like a word with the sales team.`,
+        `Pace says ${formatWagerDate(pace)}. ${firstMiss.name} already knows they were early. Wrong early.`,
+        `The forecast is grim. ${firstMiss.name} felt it first.`,
+      ],
+      `${todayKey}|pace-late|${firstMiss.name}`
+    );
+  }
+
+  if (firstMiss && leader) {
+    return pickStable(
+      [
+        `${firstMiss.name}'s date came and went. The hot dog remains unclaimed.`,
+        `${firstMiss.name} needs a miracle. ${leader.name} is up next — don't choke.`,
+        `${firstMiss.name} whiffed. ${leader.name} has the next swing. Roller's watching.`,
+      ],
+      `${todayKey}|miss+lead|${firstMiss.name}`
+    );
+  }
+
+  if (firstMiss) {
+    return pickStable(
+      [
+        `${firstMiss.name}'s pick aged like gas-station coffee. Science is disappointed.`,
+        `${firstMiss.name}'s date passed. The hot dog sends its regards.`,
+        `${firstMiss.name} asked for a miracle. HR said check the sales pipeline.`,
+      ],
+      `${todayKey}|miss|${firstMiss.name}`
+    );
+  }
+
+  if (pace && pace < earliestPick) {
+    return pickStable(
+      [
+        "At this pace we'll hit 232 before anyone's guess. The hot dog may expire from relevance.",
+        "YTD is cooking. Every pick date might be too late. Chaos wins.",
+        "The numbers don't care about your calendar. The roller is nervous.",
+      ],
+      `${todayKey}|pace-early`
+    );
+  }
+
+  if (pace && leader && pace > leader.dateKey) {
+    return pickStable(
+      [
+        `YTD says ${formatWagerDate(pace)}. ${leader.name} picked ${formatWagerDate(leader.dateKey)}. Someone's buying two hot dogs.`,
+        `Pace points past ${leader.name}'s date. Awkward for everyone with a sooner pick.`,
+        `We're trending late. ${leader.name} might need that miracle sooner than planned.`,
+      ],
+      `${todayKey}|pace-slow|${leader.name}`
+    );
+  }
+
+  if (leader) {
+    return pickStable(
+      [
+        `${leader.name} is up next. Everyone else is pretending they're fine.`,
+        `${leader.name}'s date is the next boss fight. Hot dog on the line.`,
+        `All eyes on ${leader.name}. The roller never blinks.`,
+      ],
+      `${todayKey}|lead|${leader.name}`
+    );
+  }
+
+  const remaining = Math.max(0, snap.target - snap.current);
+  return pickStable(
+    [
+      `${remaining} contracts stand between us and glory. And one hot dog.`,
+      "The admin pool is heating up. The hot dog is room temperature. Perfect.",
+      "232 or bust. Losers still show up to Monday meeting.",
+    ],
+    `${todayKey}|fallback`
+  );
+}
+
+/** Green victory line when target is hit. */
+export function wagerVictoryMessage(snap: WagerSnapshot): string | null {
+  if (!snap.reachedTarget || !snap.winner) return null;
+  const late = snap.rows.filter((r) => r.status === "close_but_late");
+  const lateNames = late.map((r) => r.name).join(", ");
+  const hit = formatWagerDate(snap.todayKey);
+
+  if (late.length > 0) {
+    return pickStable(
+      [
+        `${snap.winner.name} called it on ${hit} — closest to the hot dog. ${lateNames} were close but late. Redeem at any participating roller.`,
+        `${snap.winner.name} takes the gas-station hot dog. ${lateNames}: honorable mentions, no buns.`,
+      ],
+      `${snap.todayKey}|victory-late|${snap.winner.name}`
+    );
+  }
+
+  return pickStable(
+    [
+      `${snap.winner.name} wins on ${hit}. One (1) hot dog, company card, no questions asked.`,
+      `${snap.winner.name} takes it — closest call to ${snap.target}. The roller salutes you.`,
+    ],
+    `${snap.todayKey}|victory|${snap.winner.name}`
+  );
 }
