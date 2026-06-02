@@ -1,6 +1,8 @@
+import { formatSeasonalYearsList } from "@/lib/contract-count-seasonal";
 import {
   WAGER_PRIZE_COPY,
   WAGER_TARGET,
+  WAGER_WORK_YEAR,
   WAGER_TIMELINE_END,
   WAGER_TIMELINE_START,
   formatWagerDate,
@@ -10,6 +12,7 @@ import {
   wagerSnapshot,
   wagerVictoryMessage,
   type WagerPersonStatus,
+  type WagerSeasonalInput,
 } from "@/lib/contract-count-wager";
 
 const CHIP_STYLE: Record<WagerPersonStatus, { background: string; color: string }> = {
@@ -21,12 +24,15 @@ const CHIP_STYLE: Record<WagerPersonStatus, { background: string; color: string 
 
 type Props = {
   currentCount: number;
+  seasonal?: WagerSeasonalInput | null;
   /** Optional override for tests */
   today?: Date;
 };
 
-export function ContractCountWagerCard({ currentCount, today }: Props) {
-  const snap = wagerSnapshot(currentCount, today);
+export function ContractCountWagerCard({ currentCount, seasonal, today }: Props) {
+  const snap = wagerSnapshot(currentCount, today, WAGER_TARGET, seasonal);
+  const seasonalYearsLabel =
+    snap.seasonalBasisYears.length > 0 ? formatSeasonalYearsList(snap.seasonalBasisYears) : null;
   const banter = wagerBanterLine(snap);
   const victory = wagerVictoryMessage(snap);
   const oddsByName = new Map(snap.odds.map((o) => [o.name, o]));
@@ -244,10 +250,37 @@ export function ContractCountWagerCard({ currentCount, today }: Props) {
         })}
       </ul>
 
-      {snap.projectedHitDateKey && !snap.reachedTarget ? (
+      {snap.estimatedYearTotal != null && !snap.reachedTarget && seasonalYearsLabel ? (
         <p style={{ margin: "0.75rem 0 0", fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.45 }}>
-          At YTD pace (since Jan 1), we&apos;d hit <strong>{snap.target}</strong> around{" "}
-          <strong>{formatWagerDate(snap.projectedHitDateKey)}</strong>.
+          Based on signed-contract seasonality from prior years ({seasonalYearsLabel}) — including slower{" "}
+          <strong>Jan</strong> and <strong>Feb</strong> — we estimate about{" "}
+          <strong>{snap.estimatedYearTotal.toLocaleString()}</strong> contracts signed in {WAGER_WORK_YEAR}.
+        </p>
+      ) : null}
+
+      {snap.projectedHitDateKey && !snap.reachedTarget ? (
+        <p style={{ margin: seasonalYearsLabel ? "0.45rem 0 0" : "0.75rem 0 0", fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.45 }}>
+          {seasonalYearsLabel ? (
+            <>
+              At that seasonal pace, we&apos;d hit <strong>{snap.target}</strong> around{" "}
+              <strong>{formatWagerDate(snap.projectedHitDateKey)}</strong>.
+            </>
+          ) : (
+            <>
+              At YTD pace (since Jan 1), we&apos;d hit <strong>{snap.target}</strong> around{" "}
+              <strong>{formatWagerDate(snap.projectedHitDateKey)}</strong>.
+            </>
+          )}
+        </p>
+      ) : null}
+
+      {snap.projectedHitDatePaceKey &&
+      snap.projectedHitDateKey &&
+      !snap.reachedTarget &&
+      seasonalYearsLabel &&
+      snap.projectedHitDatePaceKey !== snap.projectedHitDateKey ? (
+        <p style={{ margin: "0.35rem 0 0", fontSize: "0.78rem", color: "var(--muted)", lineHeight: 1.45, opacity: 0.85 }}>
+          (Flat Jan 1 pace, ignoring seasonality, would land around {formatWagerDate(snap.projectedHitDatePaceKey)}.)
         </p>
       ) : null}
 

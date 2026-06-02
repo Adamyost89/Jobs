@@ -1,4 +1,8 @@
 import { CONTRACT_SIGN_CHART_TIMEZONE } from "@/lib/contract-signed-month";
+import {
+  estimatedYearTotalFromSeasonal,
+  projectedHitDateSeasonal,
+} from "@/lib/contract-count-seasonal";
 
 export const WAGER_TARGET = 232;
 export const WAGER_WORK_YEAR = 2026;
@@ -42,6 +46,11 @@ export type WagerOddsRow = {
   quip: string;
 };
 
+export type WagerSeasonalInput = {
+  weights: number[];
+  historicalYears: number[];
+};
+
 export type WagerSnapshot = {
   current: number;
   target: number;
@@ -49,7 +58,13 @@ export type WagerSnapshot = {
   todayKey: string;
   rows: WagerPersonRow[];
   winner: WagerPrediction | null;
+  /** Seasonal forecast when historical data is available; otherwise linear YTD pace. */
   projectedHitDateKey: string | null;
+  /** Linear Jan 1 – today pace (shown for comparison when seasonal is used). */
+  projectedHitDatePaceKey: string | null;
+  /** Estimated signed contracts for the full work year from prior-year seasonality. */
+  estimatedYearTotal: number | null;
+  seasonalBasisYears: number[];
   odds: WagerOddsRow[];
 };
 
@@ -158,7 +173,8 @@ export function projectedHitDate(
 export function wagerSnapshot(
   current: number,
   today: Date = new Date(),
-  target: number = WAGER_TARGET
+  target: number = WAGER_TARGET,
+  seasonal?: WagerSeasonalInput | null
 ): WagerSnapshot {
   const todayKey = chicagoDateKey(today);
   const reachedTarget = current >= target;
@@ -170,8 +186,23 @@ export function wagerSnapshot(
   });
 
   const winner = hitDateKey ? wagerWinner(WAGER_PREDICTIONS, hitDateKey) : null;
-  const projectedHitDateKey = projectedHitDate(current, todayKey, target);
-  const odds = wagerOdds(rows, reachedTarget ? todayKey : projectedHitDateKey ?? todayKey);
+  const projectedHitDatePaceKey = projectedHitDate(current, todayKey, target);
+
+  const seasonalBasisYears = seasonal?.historicalYears ?? [];
+  const estimatedYearTotal =
+    seasonal && !reachedTarget
+      ? estimatedYearTotalFromSeasonal(current, todayKey, seasonal.weights)
+      : reachedTarget
+        ? current
+        : null;
+
+  const projectedHitDateKey =
+    seasonal && !reachedTarget
+      ? projectedHitDateSeasonal(current, todayKey, target, seasonal.weights)
+      : projectedHitDatePaceKey;
+
+  const oddsExpectedDate = reachedTarget ? todayKey : projectedHitDateKey ?? todayKey;
+  const odds = wagerOdds(rows, oddsExpectedDate);
 
   return {
     current,
@@ -181,6 +212,9 @@ export function wagerSnapshot(
     rows,
     winner,
     projectedHitDateKey,
+    projectedHitDatePaceKey,
+    estimatedYearTotal,
+    seasonalBasisYears,
     odds,
   };
 }
@@ -283,7 +317,7 @@ export function wagerPersonQuip(row: WagerPersonRow, todayKey: string): string |
 
 /** One rotating banter line for the card header area. */
 export function wagerBanterLine(snap: WagerSnapshot): string {
-  const { rows, todayKey, projectedHitDateKey: pace, reachedTarget, winner } = snap;
+  const { rows, todayKey, projectedHitDateKey: forecast, reachedTarget, winner } = snap;
 
   if (reachedTarget && winner) {
     return pickStable(
@@ -335,12 +369,12 @@ export function wagerBanterLine(snap: WagerSnapshot): string {
     );
   }
 
-  if (pace && firstMiss) {
+  if (forecast && firstMiss) {
     return pickStable(
       [
-        `YTD says we're late. ${firstMiss.name} would like a word with the sales team.`,
-        `Pace says ${formatWagerDate(pace)}. ${firstMiss.name} already knows they were early. Wrong early.`,
-        `The forecast is grim. ${firstMiss.name} felt it first.`,
+        `Seasonal forecast says we're late. ${firstMiss.name} would like a word with the sales team.`,
+        `Forecast says ${formatWagerDate(forecast)}. ${firstMiss.name} already knows they were early. Wrong early.`,
+        `The numbers are grim. ${firstMiss.name} felt it first.`,
       ],
       `${todayKey}|pace-late|${firstMiss.name}`
     );
@@ -368,22 +402,22 @@ export function wagerBanterLine(snap: WagerSnapshot): string {
     );
   }
 
-  if (pace && pace < earliestPick) {
+  if (forecast && forecast < earliestPick) {
     return pickStable(
       [
         "At this pace we'll hit 232 before anyone's guess. The hot dog may expire from relevance.",
-        "YTD is cooking. Every pick date might be too late. Chaos wins.",
+        "Seasonal forecast is cooking. Every pick date might be too late. Chaos wins.",
         "The numbers don't care about your calendar. The roller is nervous.",
       ],
       `${todayKey}|pace-early`
     );
   }
 
-  if (pace && leader && pace > leader.dateKey) {
+  if (forecast && leader && forecast > leader.dateKey) {
     return pickStable(
       [
-        `YTD says ${formatWagerDate(pace)}. ${leader.name} picked ${formatWagerDate(leader.dateKey)}. Someone's buying two hot dogs.`,
-        `Pace points past ${leader.name}'s date. Awkward for everyone with a sooner pick.`,
+        `Forecast says ${formatWagerDate(forecast)}. ${leader.name} picked ${formatWagerDate(leader.dateKey)}. Someone's buying two hot dogs.`,
+        `Seasonal pace points past ${leader.name}'s date. Awkward for everyone with a sooner pick.`,
         `We're trending late. ${leader.name} might need that miracle sooner than planned.`,
       ],
       `${todayKey}|pace-slow|${leader.name}`

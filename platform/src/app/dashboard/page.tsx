@@ -20,6 +20,7 @@ import { DrilldownTableRow } from "@/components/DrilldownTableRow";
 import { SignedMonthlyDrillGrid } from "@/components/SignedMonthlyDrillGrid";
 import { ContractCountWagerCard } from "@/components/ContractCountWagerCard";
 import { WAGER_WORK_YEAR } from "@/lib/contract-count-wager";
+import { loadWagerSeasonalBasis } from "@/lib/contract-count-seasonal-data";
 
 function pickYear(sp: { year?: string | string[] } | undefined): string | undefined {
   const y = sp?.year;
@@ -69,6 +70,9 @@ export default async function DashboardHome({
     if (!("error" in m)) monthly = m;
   }
 
+  const wagerSeasonal =
+    canSeeGp && workYear === WAGER_WORK_YEAR ? await loadWagerSeasonalBasis(prisma) : null;
+
   return (
     <div className="page-stack">
       <div className="page-title-row">
@@ -105,7 +109,7 @@ export default async function DashboardHome({
       </p>
 
       {canSeeGp && workYear === WAGER_WORK_YEAR ? (
-        <ContractCountWagerCard currentCount={companyGrand.jobCount} />
+        <ContractCountWagerCard currentCount={companyGrand.jobCount} seasonal={wagerSeasonal} />
       ) : null}
 
       <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
