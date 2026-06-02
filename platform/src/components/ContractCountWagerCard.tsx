@@ -29,6 +29,7 @@ export function ContractCountWagerCard({ currentCount, today }: Props) {
   const snap = wagerSnapshot(currentCount, today);
   const banter = wagerBanterLine(snap);
   const victory = wagerVictoryMessage(snap);
+  const oddsByName = new Map(snap.odds.map((o) => [o.name, o]));
   const pct = Math.min(100, Math.round((snap.current / snap.target) * 1000) / 10);
   const remaining = Math.max(0, snap.target - snap.current);
   const todayPos = timelinePosition(snap.todayKey);
@@ -201,6 +202,7 @@ export function ContractCountWagerCard({ currentCount, today }: Props) {
         {snap.rows.map((row) => {
           const chip = CHIP_STYLE[row.status];
           const quip = wagerPersonQuip(row, snap.todayKey);
+          const odds = oddsByName.get(row.name);
           return (
             <li key={row.name} style={{ display: "grid", gap: "0.15rem" }}>
               <div
@@ -214,6 +216,11 @@ export function ContractCountWagerCard({ currentCount, today }: Props) {
               >
                 <span style={{ fontWeight: 650, minWidth: "3.5rem" }}>{row.name}</span>
                 <span style={{ color: "var(--muted)", minWidth: "6.5rem" }}>{formatWagerDate(row.dateKey)}</span>
+                {odds ? (
+                  <span style={{ fontSize: "0.75rem", color: "var(--muted)" }}>
+                    {odds.probability.toFixed(1)}% win chance - {odds.quip}
+                  </span>
+                ) : null}
                 <span
                   style={{
                     fontSize: "0.75rem",

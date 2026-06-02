@@ -36,6 +36,12 @@ export type WagerPersonRow = WagerPrediction & {
   statusLabel: string;
 };
 
+export type WagerOddsRow = {
+  name: string;
+  probability: number;
+  quip: string;
+};
+
 export type WagerSnapshot = {
   current: number;
   target: number;
@@ -44,6 +50,7 @@ export type WagerSnapshot = {
   rows: WagerPersonRow[];
   winner: WagerPrediction | null;
   projectedHitDateKey: string | null;
+  odds: WagerOddsRow[];
 };
 
 const STATUS_LABELS: Record<WagerPersonStatus, string> = {
@@ -164,6 +171,7 @@ export function wagerSnapshot(
 
   const winner = hitDateKey ? wagerWinner(WAGER_PREDICTIONS, hitDateKey) : null;
   const projectedHitDateKey = projectedHitDate(current, todayKey, target);
+  const odds = wagerOdds(rows, reachedTarget ? todayKey : projectedHitDateKey ?? todayKey);
 
   return {
     current,
@@ -173,7 +181,58 @@ export function wagerSnapshot(
     rows,
     winner,
     projectedHitDateKey,
+    odds,
   };
+}
+
+function probabilityQuip(probability: number): string {
+  if (probability >= 65) return "Sure, go ahead and pre-order the victory selfie.";
+  if (probability >= 40) return "Looking decent, which is suspicious.";
+  if (probability >= 20) return "Math says maybe. The hot dog says lol.";
+  if (probability >= 10) return "Not impossible, just deeply inconvenient.";
+  return "Technically alive, spiritually eliminated.";
+}
+
+/**
+ * Probability model based on how close each pick is to the estimated hit date.
+ * Uses an exponential decay so nearby picks get most of the odds.
+ */
+export function wagerOdds(rows: WagerPersonRow[], expectedHitDateKey: string): WagerOddsRow[] {
+  if (rows.length === 0) return [];
+  const SCALE_DAYS = 7;
+  const weights = rows.map((row) => {
+    const diff = calendarDaysApart(row.dateKey, expectedHitDateKey);
+    return Math.exp(-diff / SCALE_DAYS);
+  });
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  if (totalWeight <= 0) {
+    const equal = 100 / rows.length;
+    return rows.map((row) => ({
+      name: row.name,
+      probability: equal,
+      quip: probabilityQuip(equal),
+    }));
+  }
+
+  const raw = rows.map((row, idx) => ({
+    name: row.name,
+    probability: (weights[idx]! / totalWeight) * 100,
+  }));
+  const rounded = raw.map((r) => ({ ...r, probability: Math.round(r.probability * 10) / 10 }));
+  const roundedTotal = rounded.reduce((sum, r) => sum + r.probability, 0);
+  const drift = Math.round((100 - roundedTotal) * 10) / 10;
+  if (Math.abs(drift) > 0 && rounded.length > 0) {
+    let maxIdx = 0;
+    for (let i = 1; i < rounded.length; i++) {
+      if (rounded[i]!.probability > rounded[maxIdx]!.probability) maxIdx = i;
+    }
+    rounded[maxIdx]!.probability = Math.max(0, Math.round((rounded[maxIdx]!.probability + drift) * 10) / 10);
+  }
+
+  return rounded.map((r) => ({
+    ...r,
+    quip: probabilityQuip(r.probability),
+  }));
 }
 
 function pickStable(pool: string[], seed: string): string {
