@@ -20,7 +20,9 @@ import { DrilldownTableRow } from "@/components/DrilldownTableRow";
 import { SignedMonthlyDrillGrid } from "@/components/SignedMonthlyDrillGrid";
 import { ContractCountWagerCard } from "@/components/ContractCountWagerCard";
 import { WAGER_WORK_YEAR } from "@/lib/contract-count-wager";
-import { loadWagerSeasonalBasis } from "@/lib/contract-count-seasonal-data";
+import { loadWagerCardPayload } from "@/lib/wager-card-data";
+
+export const dynamic = "force-dynamic";
 
 function pickYear(sp: { year?: string | string[] } | undefined): string | undefined {
   const y = sp?.year;
@@ -70,8 +72,8 @@ export default async function DashboardHome({
     if (!("error" in m)) monthly = m;
   }
 
-  const wagerSeasonal =
-    canSeeGp && workYear === WAGER_WORK_YEAR ? await loadWagerSeasonalBasis(prisma) : null;
+  const wagerPayload =
+    canSeeGp && workYear === WAGER_WORK_YEAR ? await loadWagerCardPayload(prisma) : null;
 
   return (
     <div className="page-stack">
@@ -108,9 +110,7 @@ export default async function DashboardHome({
         <Link href="/dashboard/advanced">Advanced</Link>
       </p>
 
-      {canSeeGp && workYear === WAGER_WORK_YEAR ? (
-        <ContractCountWagerCard currentCount={companyGrand.jobCount} seasonal={wagerSeasonal} />
-      ) : null}
+      {wagerPayload ? <ContractCountWagerCard initial={wagerPayload} /> : null}
 
       <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
         <h2 style={{ margin: "0.65rem 1rem 0.5rem", fontSize: "1.05rem" }}>By account manager</h2>

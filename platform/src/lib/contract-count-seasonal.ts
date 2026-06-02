@@ -62,16 +62,19 @@ export function seasonalShareThroughDate(dateKey: string, weights: number[]): nu
   return Math.min(1, Math.max(0, share));
 }
 
-/** Full-year estimate from YTD count and historical monthly seasonality. */
+/** Full-year estimate from a YTD value and historical monthly seasonality. */
 export function estimatedYearTotalFromSeasonal(
-  currentCount: number,
+  ytdValue: number,
   todayKey: string,
-  weights: number[]
+  weights: number[],
+  round: "count" | "money" = "count"
 ): number | null {
-  if (currentCount <= 0) return null;
+  if (ytdValue <= 0) return null;
   const share = seasonalShareThroughDate(todayKey, weights);
   if (share <= 0.001) return null;
-  return Math.round(currentCount / share);
+  const raw = ytdValue / share;
+  if (round === "money") return Math.round(raw * 100) / 100;
+  return Math.round(raw);
 }
 
 /** Expected cumulative contracts on `dateKey` given current pace vs seasonal curve. */

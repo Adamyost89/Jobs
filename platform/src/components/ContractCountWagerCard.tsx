@@ -1,7 +1,9 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
 import { formatSeasonalYearsList } from "@/lib/contract-count-seasonal";
 import {
   WAGER_PRIZE_COPY,
-  WAGER_TARGET,
   WAGER_WORK_YEAR,
   WAGER_TIMELINE_END,
   WAGER_TIMELINE_START,
@@ -9,11 +11,10 @@ import {
   timelinePosition,
   wagerBanterLine,
   wagerPersonQuip,
-  wagerSnapshot,
   wagerVictoryMessage,
   type WagerPersonStatus,
-  type WagerSeasonalInput,
 } from "@/lib/contract-count-wager";
+import type { WagerCardPayload } from "@/lib/wager-card-data";
 
 const CHIP_STYLE: Record<WagerPersonStatus, { background: string; color: string }> = {
   in_running: { background: "rgba(59, 130, 246, 0.2)", color: "#93c5fd" },
@@ -22,23 +23,60 @@ const CHIP_STYLE: Record<WagerPersonStatus, { background: string; color: string 
   close_but_late: { background: "rgba(139, 156, 179, 0.2)", color: "var(--muted)" },
 };
 
+const REFRESH_MS = 60_000;
+
+function money(n: number): string {
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  });
+}
+
+function pct(n: number | null): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return `${n.toFixed(1)}%`;
+}
+
 type Props = {
-  currentCount: number;
-  seasonal?: WagerSeasonalInput | null;
-  /** Optional override for tests */
-  today?: Date;
+  initial: WagerCardPayload;
 };
 
-export function ContractCountWagerCard({ currentCount, seasonal, today }: Props) {
-  const snap = wagerSnapshot(currentCount, today, WAGER_TARGET, seasonal);
+export function ContractCountWagerCard({ initial }: Props) {
+  const [payload, setPayload] = useState(initial);
+  const snap = payload.snapshot;
   const seasonalYearsLabel =
     snap.seasonalBasisYears.length > 0 ? formatSeasonalYearsList(snap.seasonalBasisYears) : null;
   const banter = wagerBanterLine(snap);
   const victory = wagerVictoryMessage(snap);
   const oddsByName = new Map(snap.odds.map((o) => [o.name, o]));
-  const pct = Math.min(100, Math.round((snap.current / snap.target) * 1000) / 10);
+  const pctProgress = Math.min(100, Math.round((snap.current / snap.target) * 1000) / 10);
   const remaining = Math.max(0, snap.target - snap.current);
   const todayPos = timelinePosition(snap.todayKey);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/dashboard/wager", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as WagerCardPayload;
+      setPayload(data);
+    } catch {
+      /* keep last good snapshot */
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(refresh, REFRESH_MS);
+    const onFocus = () => {
+      void refresh();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [refresh]);
 
   return (
     <div
@@ -50,7 +88,10 @@ export function ContractCountWagerCard({ currentCount, seasonal, today }: Props)
     >
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem 1rem", alignItems: "baseline" }}>
         <h2 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 750 }}>Race to 232</h2>
-        <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Admin office pool — 2026 work year</span>
+        <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Admin office pool — {WAGER_WORK_YEAR} work year</span>
+        <span style={{ fontSize: "0.75rem", color: "var(--muted)", marginLeft: "auto" }}>
+          Through {formatWagerDate(snap.todayKey)} · refreshes live
+        </span>
       </div>
       <p style={{ margin: "0.5rem 0 0", fontSize: "0.82rem", color: "var(--muted)", fontStyle: "italic", lineHeight: 1.45 }}>
         {WAGER_PRIZE_COPY}
@@ -67,9 +108,7 @@ export function ContractCountWagerCard({ currentCount, seasonal, today }: Props)
           <span style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--muted)" }}> / {snap.target}</span>
         </span>
         {!snap.reachedTarget ? (
-          <span style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-            {remaining} to go
-          </span>
+          <span style={{ fontSize: "0.88rem", color: "var(--muted)" }}>{remaining} to go</span>
         ) : (
           <span style={{ fontSize: "0.88rem", color: "var(--good)", fontWeight: 650 }}>Target reached!</span>
         )}
@@ -92,7 +131,7 @@ export function ContractCountWagerCard({ currentCount, seasonal, today }: Props)
         <div
           style={{
             height: "100%",
-            width: `${pct}%`,
+            width: `${pctProgress}%`,
             borderRadius: 999,
             background: snap.reachedTarget
               ? "linear-gradient(90deg, var(--good), #4ade80)"
@@ -100,6 +139,33 @@ export function ContractCountWagerCard({ currentCount, seasonal, today }: Props)
             transition: "width 0.35s ease",
           }}
         />
+      </div>
+
+      <div
+        style={{
+          marginTop: "0.85rem",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+          gap: "0.65rem 1rem",
+          fontSize: "0.82rem",
+        }}
+      >
+        <div>
+          <div style={{ color: "var(--muted)", fontSize: "0.72rem", marginBottom: "0.15rem" }}>YTD signed revenue</div>
+          <div style={{ fontWeight: 650 }}>{money(snap.ytd.revenue)}</div>
+        </div>
+        <div>
+          <div style={{ color: "var(--muted)", fontSize: "0.72rem", marginBottom: "0.15rem" }}>YTD gross profit</div>
+          <div style={{ fontWeight: 650 }}>
+            {money(snap.ytd.gp)}
+            {snap.ytd.gpRevenue > 0 ? (
+              <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: "0.75rem" }}>
+                {" "}
+                ({pct((snap.ytd.gp / snap.ytd.gpRevenue) * 100)} margin)
+              </span>
+            ) : null}
+          </div>
+        </div>
       </div>
 
       <div style={{ marginTop: "1.1rem" }}>
@@ -195,9 +261,7 @@ export function ContractCountWagerCard({ currentCount, seasonal, today }: Props)
         </div>
         <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)" }}>
           {!snap.reachedTarget ? (
-            <>
-              White tick = today. Pins = each admin&apos;s pick date.
-            </>
+            <>White tick = today. Pins = each admin&apos;s pick date.</>
           ) : (
             <>Pins show where everyone guessed we&apos;d cross {snap.target}.</>
           )}
@@ -250,16 +314,47 @@ export function ContractCountWagerCard({ currentCount, seasonal, today }: Props)
         })}
       </ul>
 
-      {snap.estimatedYearTotal != null && !snap.reachedTarget && seasonalYearsLabel ? (
-        <p style={{ margin: "0.75rem 0 0", fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.45 }}>
-          Based on signed-contract seasonality from prior years ({seasonalYearsLabel}) — including slower{" "}
-          <strong>Jan</strong> and <strong>Feb</strong> — we estimate about{" "}
-          <strong>{snap.estimatedYearTotal.toLocaleString()}</strong> contracts signed in {WAGER_WORK_YEAR}.
-        </p>
+      {seasonalYearsLabel && !snap.reachedTarget ? (
+        <div
+          style={{
+            marginTop: "0.85rem",
+            padding: "0.65rem 0.75rem",
+            borderRadius: 8,
+            background: "rgba(42, 53, 69, 0.55)",
+            fontSize: "0.82rem",
+            color: "var(--muted)",
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ fontWeight: 650, color: "var(--text)", marginBottom: "0.35rem" }}>
+            {WAGER_WORK_YEAR} forecast (seasonality from {seasonalYearsLabel})
+          </div>
+          {snap.estimatedYearTotal != null ? (
+            <div>
+              <strong>{snap.estimatedYearTotal.toLocaleString()}</strong> signed contracts
+            </div>
+          ) : null}
+          {snap.estimatedYearRevenue != null ? (
+            <div>
+              <strong>{money(snap.estimatedYearRevenue)}</strong> signed revenue
+            </div>
+          ) : null}
+          {snap.estimatedYearGp != null ? (
+            <div>
+              <strong>{money(snap.estimatedYearGp)}</strong> gross profit
+              {snap.estimatedGpMarginPct != null ? (
+                <span> ({pct(snap.estimatedGpMarginPct)} margin)</span>
+              ) : null}
+            </div>
+          ) : null}
+          <div style={{ marginTop: "0.35rem", fontSize: "0.78rem", opacity: 0.9 }}>
+            Adjusts daily as contracts sign and as Jan/Feb slow months roll off the YTD curve.
+          </div>
+        </div>
       ) : null}
 
       {snap.projectedHitDateKey && !snap.reachedTarget ? (
-        <p style={{ margin: seasonalYearsLabel ? "0.45rem 0 0" : "0.75rem 0 0", fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.45 }}>
+        <p style={{ margin: seasonalYearsLabel ? "0.55rem 0 0" : "0.75rem 0 0", fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.45 }}>
           {seasonalYearsLabel ? (
             <>
               At that seasonal pace, we&apos;d hit <strong>{snap.target}</strong> around{" "}

@@ -49,6 +49,14 @@ export type WagerOddsRow = {
 export type WagerSeasonalInput = {
   weights: number[];
   historicalYears: number[];
+  historicalGpMarginPct: number | null;
+};
+
+export type WagerYtdInput = {
+  count: number;
+  revenue: number;
+  gp: number;
+  gpRevenue: number;
 };
 
 export type WagerSnapshot = {
@@ -64,6 +72,11 @@ export type WagerSnapshot = {
   projectedHitDatePaceKey: string | null;
   /** Estimated signed contracts for the full work year from prior-year seasonality. */
   estimatedYearTotal: number | null;
+  estimatedYearRevenue: number | null;
+  estimatedYearGp: number | null;
+  /** GP margin implied by the revenue/GP forecast. */
+  estimatedGpMarginPct: number | null;
+  ytd: WagerYtdInput;
   seasonalBasisYears: number[];
   odds: WagerOddsRow[];
 };
@@ -174,11 +187,19 @@ export function wagerSnapshot(
   current: number,
   today: Date = new Date(),
   target: number = WAGER_TARGET,
-  seasonal?: WagerSeasonalInput | null
+  seasonal?: WagerSeasonalInput | null,
+  ytd?: WagerYtdInput | null
 ): WagerSnapshot {
   const todayKey = chicagoDateKey(today);
   const reachedTarget = current >= target;
   const hitDateKey = reachedTarget ? todayKey : null;
+
+  const ytdMetrics: WagerYtdInput = ytd ?? {
+    count: current,
+    revenue: 0,
+    gp: 0,
+    gpRevenue: 0,
+  };
 
   const rows: WagerPersonRow[] = WAGER_PREDICTIONS.map((p) => {
     const status = personStatus(p.dateKey, todayKey, hitDateKey);
@@ -191,10 +212,36 @@ export function wagerSnapshot(
   const seasonalBasisYears = seasonal?.historicalYears ?? [];
   const estimatedYearTotal =
     seasonal && !reachedTarget
-      ? estimatedYearTotalFromSeasonal(current, todayKey, seasonal.weights)
+      ? estimatedYearTotalFromSeasonal(current, todayKey, seasonal.weights, "count")
       : reachedTarget
         ? current
         : null;
+
+  const estimatedYearRevenue =
+    seasonal && !reachedTarget && ytdMetrics.revenue > 0
+      ? estimatedYearTotalFromSeasonal(ytdMetrics.revenue, todayKey, seasonal.weights, "money")
+      : reachedTarget
+        ? ytdMetrics.revenue
+        : null;
+
+  let estimatedYearGp: number | null = null;
+  if (reachedTarget) {
+    estimatedYearGp = ytdMetrics.gp;
+  } else if (seasonal) {
+    if (ytdMetrics.gp > 0) {
+      estimatedYearGp = estimatedYearTotalFromSeasonal(ytdMetrics.gp, todayKey, seasonal.weights, "money");
+    } else if (estimatedYearRevenue != null && seasonal.historicalGpMarginPct != null) {
+      estimatedYearGp =
+        Math.round(estimatedYearRevenue * (seasonal.historicalGpMarginPct / 100) * 100) / 100;
+    }
+  }
+
+  const estimatedGpMarginPct =
+    estimatedYearRevenue != null && estimatedYearRevenue > 0.005 && estimatedYearGp != null
+      ? (estimatedYearGp / estimatedYearRevenue) * 100
+      : ytdMetrics.gpRevenue > 0.005
+        ? (ytdMetrics.gp / ytdMetrics.gpRevenue) * 100
+        : seasonal?.historicalGpMarginPct ?? null;
 
   const projectedHitDateKey =
     seasonal && !reachedTarget
@@ -214,6 +261,10 @@ export function wagerSnapshot(
     projectedHitDateKey,
     projectedHitDatePaceKey,
     estimatedYearTotal,
+    estimatedYearRevenue,
+    estimatedYearGp,
+    estimatedGpMarginPct,
+    ytd: ytdMetrics,
     seasonalBasisYears,
     odds,
   };
