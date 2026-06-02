@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { Role } from "@prisma/client";
 import { prisma } from "./db";
 import { cookieName, verifyToken, type TokenPayload } from "./auth";
+import { shouldTouchLastLogin, touchLastLogin } from "./last-login";
 import type { SessionUser } from "./rbac";
 import { displaySalespersonName } from "./salesperson-name";
 
@@ -12,9 +14,12 @@ export async function getSession(): Promise<SessionUser | null> {
   if (!payload) return null;
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    select: { id: true, email: true, role: true, salespersonId: true },
+    select: { id: true, email: true, role: true, salespersonId: true, lastLoginAt: true },
   });
   if (!user) return null;
+  if (shouldTouchLastLogin(user.lastLoginAt)) {
+    after(() => touchLastLogin(user.id).catch(() => undefined));
+  }
   let salespersonIds: string[] = [];
   if (user.salespersonId) {
     const self = await prisma.salesperson.findUnique({

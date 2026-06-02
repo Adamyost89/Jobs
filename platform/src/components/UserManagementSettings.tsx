@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Role } from "@prisma/client";
+import { formatDateTimeInEastern } from "@/lib/payout-display";
 
 type Row = {
   id: string;
@@ -217,7 +218,7 @@ function UserRow({
       </td>
       <td>{u.salespersonName ?? "—"}</td>
       <td style={{ whiteSpace: "nowrap" }}>
-        {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : "Never"}
+        {u.lastLoginAt ? formatDateTimeInEastern(new Date(u.lastLoginAt)) : "Never"}
       </td>
       <td>
         <div style={{ display: "grid", gap: 6 }}>
