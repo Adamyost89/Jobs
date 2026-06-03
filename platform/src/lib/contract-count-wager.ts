@@ -3,6 +3,7 @@ import {
   estimatedYearTotalFromSeasonal,
   projectedHitDateSeasonal,
 } from "@/lib/contract-count-seasonal";
+import type { WagerYtdMetrics } from "@/lib/contract-count-seasonal-data";
 
 export const WAGER_TARGET = 232;
 export const WAGER_WORK_YEAR = 2026;
@@ -50,14 +51,11 @@ export type WagerSeasonalInput = {
   weights: number[];
   historicalYears: number[];
   historicalGpMarginPct: number | null;
+  historicalAvgRevenuePerContract: number | null;
+  historicalAvgGpPerContract: number | null;
 };
 
-export type WagerYtdInput = {
-  count: number;
-  revenue: number;
-  gp: number;
-  gpRevenue: number;
-};
+export type WagerYtdInput = WagerYtdMetrics;
 
 export type WagerSnapshot = {
   current: number;
@@ -76,6 +74,9 @@ export type WagerSnapshot = {
   estimatedYearGp: number | null;
   /** GP margin implied by the revenue/GP forecast. */
   estimatedGpMarginPct: number | null;
+  /** Per-contract averages used for revenue/GP forecast. */
+  forecastAvgRevenuePerContract: number | null;
+  forecastAvgGpPerContract: number | null;
   ytd: WagerYtdInput;
   seasonalBasisYears: number[];
   odds: WagerOddsRow[];
@@ -183,6 +184,27 @@ export function projectedHitDate(
   return addCalendarDays(todayKey, daysToGo);
 }
 
+const PRICED_BLEND_MIN = 5;
+const PRICED_BLEND_FULL = 30;
+
+/** Blend YTD priced-contract average with historical full-year average. */
+export function effectivePerContractAverage(
+  ytdPricedAvg: number | null,
+  ytdPricedCount: number,
+  historicalAvg: number | null
+): number | null {
+  if (historicalAvg == null && ytdPricedAvg == null) return null;
+  if (historicalAvg == null) return ytdPricedAvg;
+  if (ytdPricedAvg == null || ytdPricedCount < PRICED_BLEND_MIN) return historicalAvg;
+
+  const w = Math.min(1, (ytdPricedCount - PRICED_BLEND_MIN) / (PRICED_BLEND_FULL - PRICED_BLEND_MIN));
+  return (1 - w) * historicalAvg + w * ytdPricedAvg;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export function wagerSnapshot(
   current: number,
   today: Date = new Date(),
@@ -199,6 +221,14 @@ export function wagerSnapshot(
     revenue: 0,
     gp: 0,
     gpRevenue: 0,
+    pricedCount: 0,
+    pricedRevenue: 0,
+    pricedGp: 0,
+    pricedGpRevenue: 0,
+    pendingRevenueCount: 0,
+    avgRevenuePerPricedContract: null,
+    avgGpPerPricedContract: null,
+    asOfKey: todayKey,
   };
 
   const rows: WagerPersonRow[] = WAGER_PREDICTIONS.map((p) => {
@@ -217,9 +247,25 @@ export function wagerSnapshot(
         ? current
         : null;
 
+  const forecastAvgRevenuePerContract = seasonal
+    ? effectivePerContractAverage(
+        ytdMetrics.avgRevenuePerPricedContract,
+        ytdMetrics.pricedCount,
+        seasonal.historicalAvgRevenuePerContract
+      )
+    : null;
+
+  const forecastAvgGpPerContract = seasonal
+    ? effectivePerContractAverage(
+        ytdMetrics.avgGpPerPricedContract,
+        ytdMetrics.pricedCount,
+        seasonal.historicalAvgGpPerContract
+      )
+    : null;
+
   const estimatedYearRevenue =
-    seasonal && !reachedTarget && ytdMetrics.revenue > 0
-      ? estimatedYearTotalFromSeasonal(ytdMetrics.revenue, todayKey, seasonal.weights, "money")
+    estimatedYearTotal != null && forecastAvgRevenuePerContract != null
+      ? roundMoney(estimatedYearTotal * forecastAvgRevenuePerContract)
       : reachedTarget
         ? ytdMetrics.revenue
         : null;
@@ -227,13 +273,10 @@ export function wagerSnapshot(
   let estimatedYearGp: number | null = null;
   if (reachedTarget) {
     estimatedYearGp = ytdMetrics.gp;
-  } else if (seasonal) {
-    if (ytdMetrics.gp > 0) {
-      estimatedYearGp = estimatedYearTotalFromSeasonal(ytdMetrics.gp, todayKey, seasonal.weights, "money");
-    } else if (estimatedYearRevenue != null && seasonal.historicalGpMarginPct != null) {
-      estimatedYearGp =
-        Math.round(estimatedYearRevenue * (seasonal.historicalGpMarginPct / 100) * 100) / 100;
-    }
+  } else if (estimatedYearTotal != null && forecastAvgGpPerContract != null) {
+    estimatedYearGp = roundMoney(estimatedYearTotal * forecastAvgGpPerContract);
+  } else if (estimatedYearRevenue != null && seasonal?.historicalGpMarginPct != null) {
+    estimatedYearGp = roundMoney(estimatedYearRevenue * (seasonal.historicalGpMarginPct / 100));
   }
 
   const estimatedGpMarginPct =
@@ -264,6 +307,8 @@ export function wagerSnapshot(
     estimatedYearRevenue,
     estimatedYearGp,
     estimatedGpMarginPct,
+    forecastAvgRevenuePerContract,
+    forecastAvgGpPerContract,
     ytd: ytdMetrics,
     seasonalBasisYears,
     odds,

@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { signedCalendarMonthForChart } from "@/lib/contract-signed-month";
-import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { MONEY_EPSILON, shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
 import { countsTowardSignedTotals } from "@/lib/insurance-job";
 import { WAGER_WORK_YEAR, chicagoDateKey } from "@/lib/contract-count-wager";
 import {
@@ -13,6 +13,10 @@ export type WagerSeasonalBasis = {
   weights: number[];
   /** GP ÷ revenue on costing-complete jobs across historical years. */
   historicalGpMarginPct: number | null;
+  /** Mean annual revenue ÷ contract count across historical years. */
+  historicalAvgRevenuePerContract: number | null;
+  /** Mean annual GP ÷ contract count across historical years. */
+  historicalAvgGpPerContract: number | null;
 };
 
 export type WagerYtdMetrics = {
@@ -21,6 +25,15 @@ export type WagerYtdMetrics = {
   gp: number;
   /** Revenue on jobs with costing complete (denominator for YTD GP%). */
   gpRevenue: number;
+  /** Jobs with signed revenue above placeholder threshold (excludes $0 insurance at sign). */
+  pricedCount: number;
+  pricedRevenue: number;
+  pricedGp: number;
+  pricedGpRevenue: number;
+  /** Signed jobs still at $0 revenue — typically insurance awaiting update. */
+  pendingRevenueCount: number;
+  avgRevenuePerPricedContract: number | null;
+  avgGpPerPricedContract: number | null;
   asOfKey: string;
 };
 
@@ -52,6 +65,10 @@ function signDateKey(contractSignedAt: Date | null, createdAt: Date): string {
   return chicagoDateKey(d);
 }
 
+function isPricedRevenue(revenue: number): boolean {
+  return revenue > MONEY_EPSILON;
+}
+
 function revenueForJob(j: {
   contractAmount: { toNumber: () => number };
   changeOrders: { toNumber: () => number };
@@ -62,6 +79,11 @@ function revenueForJob(j: {
   const rawCo = num(j.changeOrders);
   const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
   return c + co;
+}
+
+function avgPerContract(total: number, count: number): number | null {
+  if (count <= 0 || total <= MONEY_EPSILON) return null;
+  return total / count;
 }
 
 type JobRow = {
@@ -179,6 +201,10 @@ export async function loadYtdCompanyMetrics(
   let revenue = 0;
   let gp = 0;
   let gpRevenue = 0;
+  let pricedCount = 0;
+  let pricedRevenue = 0;
+  let pricedGp = 0;
+  let pricedGpRevenue = 0;
 
   for (const j of jobs) {
     if (!countsTowardSignedTotals(j.name)) continue;
@@ -190,13 +216,35 @@ export async function loadYtdCompanyMetrics(
 
     count += 1;
     revenue += rev;
-    if (costingComplete && rev > 0.005) {
+    if (costingComplete && rev > MONEY_EPSILON) {
       gp += g;
       gpRevenue += rev;
     }
+
+    if (isPricedRevenue(rev)) {
+      pricedCount += 1;
+      pricedRevenue += rev;
+      if (costingComplete) {
+        pricedGp += g;
+        pricedGpRevenue += rev;
+      }
+    }
   }
 
-  return { count, revenue, gp, gpRevenue, asOfKey };
+  return {
+    count,
+    revenue,
+    gp,
+    gpRevenue,
+    pricedCount,
+    pricedRevenue,
+    pricedGp,
+    pricedGpRevenue,
+    pendingRevenueCount: Math.max(0, count - pricedCount),
+    avgRevenuePerPricedContract: avgPerContract(pricedRevenue, pricedCount),
+    avgGpPerPricedContract: avgPerContract(pricedGp, pricedCount),
+    asOfKey,
+  };
 }
 
 function historicalGpMarginPct(metrics: WorkYearMonthlyMetrics[]): number | null {
@@ -206,8 +254,28 @@ function historicalGpMarginPct(metrics: WorkYearMonthlyMetrics[]): number | null
     revenue += y.revenueTotal;
     gp += y.gpTotal;
   }
-  if (revenue <= 0.005) return null;
+  if (revenue <= MONEY_EPSILON) return null;
   return (gp / revenue) * 100;
+}
+
+/** Mean of each year's revenue ÷ contracts and GP ÷ contracts (mature full-year data). */
+function historicalPerContractAverages(metrics: WorkYearMonthlyMetrics[]): {
+  revenue: number | null;
+  gp: number | null;
+} {
+  const usable = metrics.filter((y) => y.total > 0);
+  if (usable.length === 0) return { revenue: null, gp: null };
+
+  let revenueSum = 0;
+  let gpSum = 0;
+  for (const y of usable) {
+    revenueSum += y.revenueTotal / y.total;
+    gpSum += y.gpTotal / y.total;
+  }
+  return {
+    revenue: revenueSum / usable.length,
+    gp: gpSum / usable.length,
+  };
 }
 
 /** Prior complete work years used to model Jan/Feb slowdown and summer peaks. */
@@ -231,10 +299,13 @@ export async function loadWagerSeasonalBasis(db: PrismaClient): Promise<WagerSea
   const metrics = await loadWorkYearMonthlyMetrics(db, historicalYears);
   const counts = metrics.map(({ year, months, total }) => ({ year, months, total }));
   const weights = buildSeasonalWeights(counts);
+  const perContract = historicalPerContractAverages(metrics);
 
   return {
     historicalYears,
     weights,
     historicalGpMarginPct: historicalGpMarginPct(metrics),
+    historicalAvgRevenuePerContract: perContract.revenue,
+    historicalAvgGpPerContract: perContract.gp,
   };
 }

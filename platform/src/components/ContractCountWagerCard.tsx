@@ -153,6 +153,11 @@ export function ContractCountWagerCard({ initial }: Props) {
         <div>
           <div style={{ color: "var(--muted)", fontSize: "0.72rem", marginBottom: "0.15rem" }}>YTD signed revenue</div>
           <div style={{ fontWeight: 650 }}>{money(snap.ytd.revenue)}</div>
+          {snap.ytd.avgRevenuePerPricedContract != null ? (
+            <div style={{ color: "var(--muted)", fontSize: "0.72rem", marginTop: "0.1rem" }}>
+              {money(snap.ytd.avgRevenuePerPricedContract)} avg / priced contract
+            </div>
+          ) : null}
         </div>
         <div>
           <div style={{ color: "var(--muted)", fontSize: "0.72rem", marginBottom: "0.15rem" }}>YTD gross profit</div>
@@ -165,8 +170,19 @@ export function ContractCountWagerCard({ initial }: Props) {
               </span>
             ) : null}
           </div>
+          {snap.ytd.avgGpPerPricedContract != null ? (
+            <div style={{ color: "var(--muted)", fontSize: "0.72rem", marginTop: "0.1rem" }}>
+              {money(snap.ytd.avgGpPerPricedContract)} avg GP / priced contract
+            </div>
+          ) : null}
         </div>
       </div>
+      {snap.ytd.pendingRevenueCount > 0 ? (
+        <p style={{ margin: "0.45rem 0 0", fontSize: "0.75rem", color: "var(--muted)", lineHeight: 1.45 }}>
+          {snap.ytd.pendingRevenueCount} signed contract{snap.ytd.pendingRevenueCount === 1 ? "" : "s"} still at $0
+          (usually insurance awaiting amount) — excluded from per-contract averages until priced.
+        </p>
+      ) : null}
 
       <div style={{ marginTop: "1.1rem" }}>
         <div
@@ -337,18 +353,31 @@ export function ContractCountWagerCard({ initial }: Props) {
           {snap.estimatedYearRevenue != null ? (
             <div>
               <strong>{money(snap.estimatedYearRevenue)}</strong> signed revenue
+              {snap.forecastAvgRevenuePerContract != null ? (
+                <span style={{ opacity: 0.9 }}>
+                  {" "}
+                  ({money(snap.forecastAvgRevenuePerContract)} × {snap.estimatedYearTotal?.toLocaleString()} contracts)
+                </span>
+              ) : null}
             </div>
           ) : null}
           {snap.estimatedYearGp != null ? (
             <div>
               <strong>{money(snap.estimatedYearGp)}</strong> gross profit
+              {snap.forecastAvgGpPerContract != null ? (
+                <span style={{ opacity: 0.9 }}>
+                  {" "}
+                  ({money(snap.forecastAvgGpPerContract)} × {snap.estimatedYearTotal?.toLocaleString()} contracts)
+                </span>
+              ) : null}
               {snap.estimatedGpMarginPct != null ? (
                 <span> ({pct(snap.estimatedGpMarginPct)} margin)</span>
               ) : null}
             </div>
           ) : null}
           <div style={{ marginTop: "0.35rem", fontSize: "0.78rem", opacity: 0.9 }}>
-            Adjusts daily as contracts sign and as Jan/Feb slow months roll off the YTD curve.
+            Contract count uses seasonal pacing; revenue &amp; GP use per-contract averages from prior years,
+            blended with priced jobs signed YTD (skips $0 insurance placeholders).
           </div>
         </div>
       ) : null}
