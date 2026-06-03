@@ -50,9 +50,9 @@ export type WagerOddsRow = {
 export type WagerSeasonalInput = {
   weights: number[];
   historicalYears: number[];
+  avgRevenueYears: number[];
   historicalGpMarginPct: number | null;
   historicalAvgRevenuePerContract: number | null;
-  historicalAvgGpPerContract: number | null;
 };
 
 export type WagerYtdInput = WagerYtdMetrics;
@@ -74,9 +74,10 @@ export type WagerSnapshot = {
   estimatedYearGp: number | null;
   /** GP margin implied by the revenue/GP forecast. */
   estimatedGpMarginPct: number | null;
-  /** Per-contract averages used for revenue/GP forecast. */
+  /** Per-contract revenue and GP margin used for forecast. */
   forecastAvgRevenuePerContract: number | null;
-  forecastAvgGpPerContract: number | null;
+  forecastGpMarginPct: number | null;
+  avgRevenueYears: number[];
   ytd: WagerYtdInput;
   seasonalBasisYears: number[];
   odds: WagerOddsRow[];
@@ -186,6 +187,8 @@ export function projectedHitDate(
 
 const PRICED_BLEND_MIN = 5;
 const PRICED_BLEND_FULL = 30;
+/** Cap how much immature YTD data can move the forecast off historical baselines. */
+const PRICED_BLEND_MAX = 0.35;
 
 /** Blend YTD priced-contract average with historical full-year average. */
 export function effectivePerContractAverage(
@@ -197,8 +200,24 @@ export function effectivePerContractAverage(
   if (historicalAvg == null) return ytdPricedAvg;
   if (ytdPricedAvg == null || ytdPricedCount < PRICED_BLEND_MIN) return historicalAvg;
 
-  const w = Math.min(1, (ytdPricedCount - PRICED_BLEND_MIN) / (PRICED_BLEND_FULL - PRICED_BLEND_MIN));
+  const raw = Math.min(1, (ytdPricedCount - PRICED_BLEND_MIN) / (PRICED_BLEND_FULL - PRICED_BLEND_MIN));
+  const w = Math.min(PRICED_BLEND_MAX, raw);
   return (1 - w) * historicalAvg + w * ytdPricedAvg;
+}
+
+/** Blend YTD GP margin with historical margin on costing-complete jobs. */
+export function effectiveGpMarginPct(
+  ytdMarginPct: number | null,
+  ytdCostedCount: number,
+  historicalMarginPct: number | null
+): number | null {
+  if (historicalMarginPct == null && ytdMarginPct == null) return null;
+  if (historicalMarginPct == null) return ytdMarginPct;
+  if (ytdMarginPct == null || ytdCostedCount < PRICED_BLEND_MIN) return historicalMarginPct;
+
+  const raw = Math.min(1, (ytdCostedCount - PRICED_BLEND_MIN) / (PRICED_BLEND_FULL - PRICED_BLEND_MIN));
+  const w = Math.min(PRICED_BLEND_MAX, raw);
+  return (1 - w) * historicalMarginPct + w * ytdMarginPct;
 }
 
 function roundMoney(n: number): number {
@@ -227,7 +246,8 @@ export function wagerSnapshot(
     pricedGpRevenue: 0,
     pendingRevenueCount: 0,
     avgRevenuePerPricedContract: null,
-    avgGpPerPricedContract: null,
+    gpMarginPct: null,
+    pricedCostedCount: 0,
     asOfKey: todayKey,
   };
 
@@ -240,6 +260,7 @@ export function wagerSnapshot(
   const projectedHitDatePaceKey = projectedHitDate(current, todayKey, target);
 
   const seasonalBasisYears = seasonal?.historicalYears ?? [];
+  const avgRevenueYears = seasonal?.avgRevenueYears ?? [];
   const estimatedYearTotal =
     seasonal && !reachedTarget
       ? estimatedYearTotalFromSeasonal(current, todayKey, seasonal.weights, "count")
@@ -255,11 +276,11 @@ export function wagerSnapshot(
       )
     : null;
 
-  const forecastAvgGpPerContract = seasonal
-    ? effectivePerContractAverage(
-        ytdMetrics.avgGpPerPricedContract,
-        ytdMetrics.pricedCount,
-        seasonal.historicalAvgGpPerContract
+  const forecastGpMarginPct = seasonal
+    ? effectiveGpMarginPct(
+        ytdMetrics.gpMarginPct,
+        ytdMetrics.pricedCostedCount,
+        seasonal.historicalGpMarginPct
       )
     : null;
 
@@ -273,18 +294,14 @@ export function wagerSnapshot(
   let estimatedYearGp: number | null = null;
   if (reachedTarget) {
     estimatedYearGp = ytdMetrics.gp;
-  } else if (estimatedYearTotal != null && forecastAvgGpPerContract != null) {
-    estimatedYearGp = roundMoney(estimatedYearTotal * forecastAvgGpPerContract);
-  } else if (estimatedYearRevenue != null && seasonal?.historicalGpMarginPct != null) {
-    estimatedYearGp = roundMoney(estimatedYearRevenue * (seasonal.historicalGpMarginPct / 100));
+  } else if (estimatedYearRevenue != null && forecastGpMarginPct != null) {
+    estimatedYearGp = roundMoney(estimatedYearRevenue * (forecastGpMarginPct / 100));
   }
 
   const estimatedGpMarginPct =
     estimatedYearRevenue != null && estimatedYearRevenue > 0.005 && estimatedYearGp != null
       ? (estimatedYearGp / estimatedYearRevenue) * 100
-      : ytdMetrics.gpRevenue > 0.005
-        ? (ytdMetrics.gp / ytdMetrics.gpRevenue) * 100
-        : seasonal?.historicalGpMarginPct ?? null;
+      : forecastGpMarginPct ?? ytdMetrics.gpMarginPct ?? seasonal?.historicalGpMarginPct ?? null;
 
   const projectedHitDateKey =
     seasonal && !reachedTarget
@@ -308,7 +325,8 @@ export function wagerSnapshot(
     estimatedYearGp,
     estimatedGpMarginPct,
     forecastAvgRevenuePerContract,
-    forecastAvgGpPerContract,
+    forecastGpMarginPct,
+    avgRevenueYears,
     ytd: ytdMetrics,
     seasonalBasisYears,
     odds,

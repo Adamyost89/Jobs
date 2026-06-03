@@ -48,6 +48,8 @@ export function ContractCountWagerCard({ initial }: Props) {
   const snap = payload.snapshot;
   const seasonalYearsLabel =
     snap.seasonalBasisYears.length > 0 ? formatSeasonalYearsList(snap.seasonalBasisYears) : null;
+  const avgRevenueYearsLabel =
+    snap.avgRevenueYears.length > 0 ? formatSeasonalYearsList(snap.avgRevenueYears) : null;
   const banter = wagerBanterLine(snap);
   const victory = wagerVictoryMessage(snap);
   const oddsByName = new Map(snap.odds.map((o) => [o.name, o]));
@@ -166,13 +168,19 @@ export function ContractCountWagerCard({ initial }: Props) {
             {snap.ytd.gpRevenue > 0 ? (
               <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: "0.75rem" }}>
                 {" "}
-                ({pct((snap.ytd.gp / snap.ytd.gpRevenue) * 100)} margin)
+                ({pct((snap.ytd.gp / snap.ytd.gpRevenue) * 100)} margin on costed jobs)
+              </span>
+            ) : snap.ytd.gpMarginPct != null ? (
+              <span style={{ color: "var(--muted)", fontWeight: 500, fontSize: "0.75rem" }}>
+                {" "}
+                ({pct(snap.ytd.gpMarginPct)} margin on costed jobs)
               </span>
             ) : null}
           </div>
-          {snap.ytd.avgGpPerPricedContract != null ? (
+          {snap.ytd.avgRevenuePerPricedContract != null && snap.ytd.gpMarginPct != null ? (
             <div style={{ color: "var(--muted)", fontSize: "0.72rem", marginTop: "0.1rem" }}>
-              {money(snap.ytd.avgGpPerPricedContract)} avg GP / priced contract
+              ~{money((snap.ytd.avgRevenuePerPricedContract * snap.ytd.gpMarginPct) / 100)} implied GP / priced
+              contract at maturity
             </div>
           ) : null}
         </div>
@@ -343,8 +351,15 @@ export function ContractCountWagerCard({ initial }: Props) {
           }}
         >
           <div style={{ fontWeight: 650, color: "var(--text)", marginBottom: "0.35rem" }}>
-            {WAGER_WORK_YEAR} forecast (seasonality from {seasonalYearsLabel})
+            {WAGER_WORK_YEAR} forecast
+            {seasonalYearsLabel ? <> (seasonality from {seasonalYearsLabel})</> : null}
           </div>
+          {avgRevenueYearsLabel ? (
+            <div style={{ fontSize: "0.78rem", marginBottom: "0.35rem", opacity: 0.92 }}>
+              Per-contract revenue &amp; GP margin from {avgRevenueYearsLabel} (priced jobs only; GP on costed
+              jobs).
+            </div>
+          ) : null}
           {snap.estimatedYearTotal != null ? (
             <div>
               <strong>{snap.estimatedYearTotal.toLocaleString()}</strong> signed contracts
@@ -364,20 +379,19 @@ export function ContractCountWagerCard({ initial }: Props) {
           {snap.estimatedYearGp != null ? (
             <div>
               <strong>{money(snap.estimatedYearGp)}</strong> gross profit
-              {snap.forecastAvgGpPerContract != null ? (
+              {snap.estimatedYearRevenue != null && snap.forecastGpMarginPct != null ? (
                 <span style={{ opacity: 0.9 }}>
                   {" "}
-                  ({money(snap.forecastAvgGpPerContract)} × {snap.estimatedYearTotal?.toLocaleString()} contracts)
+                  ({pct(snap.forecastGpMarginPct)} of {money(snap.estimatedYearRevenue)} revenue)
                 </span>
-              ) : null}
-              {snap.estimatedGpMarginPct != null ? (
+              ) : snap.estimatedGpMarginPct != null ? (
                 <span> ({pct(snap.estimatedGpMarginPct)} margin)</span>
               ) : null}
             </div>
           ) : null}
           <div style={{ marginTop: "0.35rem", fontSize: "0.78rem", opacity: 0.9 }}>
-            Contract count uses seasonal pacing; revenue &amp; GP use per-contract averages from prior years,
-            blended with priced jobs signed YTD (skips $0 insurance placeholders).
+            Contract count uses seasonal pacing. Revenue = estimated contracts × avg per priced contract.
+            GP = forecast revenue × GP margin on costed jobs (not diluted by open/$0 contracts).
           </div>
         </div>
       ) : null}
