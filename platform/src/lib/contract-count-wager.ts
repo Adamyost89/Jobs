@@ -87,7 +87,7 @@ const STATUS_LABELS: Record<WagerPersonStatus, string> = {
   in_running: "In the running",
   needs_miracle: "Needs a miracle",
   called_it: "Called it",
-  close_but_late: "Close but late",
+  close_but_late: "Runner-up",
 };
 
 /** Chicago calendar date as YYYY-MM-DD (en-CA locale). */
@@ -134,14 +134,15 @@ export function formatWagerDate(dateKey: string): string {
 }
 
 function personStatus(
-  predictionKey: string,
+  row: WagerPrediction,
   todayKey: string,
-  hitDateKey: string | null
+  hitDateKey: string | null,
+  winner: WagerPrediction | null
 ): WagerPersonStatus {
-  if (hitDateKey) {
-    return predictionKey >= hitDateKey ? "called_it" : "close_but_late";
+  if (hitDateKey && winner) {
+    return row.name === winner.name ? "called_it" : "close_but_late";
   }
-  return todayKey <= predictionKey ? "in_running" : "needs_miracle";
+  return todayKey <= row.dateKey ? "in_running" : "needs_miracle";
 }
 
 function calendarDaysApart(a: string, b: string): number {
@@ -156,14 +157,17 @@ export function wagerWinner(
   hitDateKey: string
 ): WagerPrediction | null {
   if (predictions.length === 0) return null;
-  let best = predictions[0];
-  let bestDiff = calendarDaysApart(predictions[0].dateKey, hitDateKey);
+  let best = predictions[0]!;
+  let bestDiff = calendarDaysApart(predictions[0]!.dateKey, hitDateKey);
   for (let i = 1; i < predictions.length; i++) {
-    const p = predictions[i];
+    const p = predictions[i]!;
     const diff = calendarDaysApart(p.dateKey, hitDateKey);
     if (diff < bestDiff) {
       best = p;
       bestDiff = diff;
+    } else if (diff === bestDiff && p.dateKey >= hitDateKey && best.dateKey < hitDateKey) {
+      // Same distance: a pick on/after the hit beats an equally early miss.
+      best = p;
     }
   }
   return best;
@@ -234,6 +238,7 @@ export function wagerSnapshot(
   const todayKey = chicagoDateKey(today);
   const reachedTarget = current >= target;
   const hitDateKey = reachedTarget ? todayKey : null;
+  const winner = hitDateKey ? wagerWinner(WAGER_PREDICTIONS, hitDateKey) : null;
 
   const ytdMetrics: WagerYtdInput = ytd ?? {
     count: current,
@@ -252,11 +257,10 @@ export function wagerSnapshot(
   };
 
   const rows: WagerPersonRow[] = WAGER_PREDICTIONS.map((p) => {
-    const status = personStatus(p.dateKey, todayKey, hitDateKey);
+    const status = personStatus(p, todayKey, hitDateKey, winner);
     return { ...p, status, statusLabel: STATUS_LABELS[status] };
   });
 
-  const winner = hitDateKey ? wagerWinner(WAGER_PREDICTIONS, hitDateKey) : null;
   const projectedHitDatePaceKey = projectedHitDate(current, todayKey, target);
 
   const seasonalBasisYears = seasonal?.historicalYears ?? [];
@@ -344,27 +348,39 @@ function probabilityQuip(probability: number): string {
 /**
  * Probability model based on how close each pick is to the estimated hit date.
  * Uses an exponential decay so nearby picks get most of the odds.
+ * Picks whose date has already passed (`needs_miracle`) get 0% — they cannot win
+ * once the hit date is today or later.
  */
 export function wagerOdds(rows: WagerPersonRow[], expectedHitDateKey: string): WagerOddsRow[] {
   if (rows.length === 0) return [];
   const SCALE_DAYS = 7;
   const weights = rows.map((row) => {
+    if (row.status === "needs_miracle") return 0;
     const diff = calendarDaysApart(row.dateKey, expectedHitDateKey);
     return Math.exp(-diff / SCALE_DAYS);
   });
   const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  const eligibleCount = rows.filter((r) => r.status !== "needs_miracle").length;
   if (totalWeight <= 0) {
-    const equal = 100 / rows.length;
+    if (eligibleCount === 0) {
+      return rows.map((row) => ({
+        name: row.name,
+        probability: 0,
+        quip: probabilityQuip(0),
+      }));
+    }
+    const equal = 100 / eligibleCount;
     return rows.map((row) => ({
       name: row.name,
-      probability: equal,
-      quip: probabilityQuip(equal),
+      probability: row.status === "needs_miracle" ? 0 : equal,
+      quip: probabilityQuip(row.status === "needs_miracle" ? 0 : equal),
     }));
   }
 
   const raw = rows.map((row, idx) => ({
     name: row.name,
-    probability: (weights[idx]! / totalWeight) * 100,
+    probability:
+      row.status === "needs_miracle" ? 0 : (weights[idx]! / totalWeight) * 100,
   }));
   const rounded = raw.map((r) => ({ ...r, probability: Math.round(r.probability * 10) / 10 }));
   const roundedTotal = rounded.reduce((sum, r) => sum + r.probability, 0);
@@ -414,8 +430,8 @@ const MIRACLE_ROW_QUIPS = [
 
 const LATE_ROW_QUIPS = [
   "So close you can smell the roller.",
-  "The hot dog remembers.",
-  "Calendar said no. Condiments cried.",
+  "Not the closest. The hot dog remembers.",
+  "Calendar said almost. Condiments cried.",
 ];
 
 /** Small quip under a row when they're in trouble or just missed. */
@@ -563,17 +579,19 @@ export function wagerBanterLine(snap: WagerSnapshot): string {
 /** Green victory line when target is hit. */
 export function wagerVictoryMessage(snap: WagerSnapshot): string | null {
   if (!snap.reachedTarget || !snap.winner) return null;
-  const late = snap.rows.filter((r) => r.status === "close_but_late");
-  const lateNames = late.map((r) => r.name).join(", ");
   const hit = formatWagerDate(snap.todayKey);
+  const others = snap.rows
+    .filter((r) => r.name !== snap.winner!.name)
+    .map((r) => r.name)
+    .join(", ");
 
-  if (late.length > 0) {
+  if (others.length > 0) {
     return pickStable(
       [
-        `${snap.winner.name} called it on ${hit} — closest to the hot dog. ${lateNames} were close but late. Redeem at any participating roller.`,
-        `${snap.winner.name} takes the gas-station hot dog. ${lateNames}: honorable mentions, no buns.`,
+        `${snap.winner.name} wins on ${hit} — closest pick to when we crossed ${snap.target}. ${others} weren't as close. Hot dog's yours.`,
+        `${snap.winner.name} takes the gas-station hot dog. Closest call wins, early or late. ${others}: better luck next roller.`,
       ],
-      `${snap.todayKey}|victory-late|${snap.winner.name}`
+      `${snap.todayKey}|victory-others|${snap.winner.name}`
     );
   }
 
