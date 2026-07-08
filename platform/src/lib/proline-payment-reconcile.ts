@@ -51,17 +51,29 @@ function approxEqual(a: number | null | undefined, b: number | null | undefined,
 }
 
 function remotePaidInFull(flat: Record<string, unknown>): boolean | undefined {
+  const explicit = pickStr(flat, ["paid_in_full", "is_paid", "payment_complete", "paidInFull"]);
+  if (explicit) {
+    const v = explicit.toLowerCase();
+    if (["true", "1", "yes", "y"].includes(v)) return true;
+    if (["false", "0", "no", "n"].includes(v)) return false;
+  }
   const amountDue = pickMoney(flat, ["amount_due", "balance_due", "balance"]);
   if (amountDue !== undefined) return amountDue <= 0.0005;
-  const status = (pickStr(flat, ["invoice_status", "status", "payment_status"]) || "").toLowerCase();
+  const status = (pickStr(flat, ["invoice_status", "payment_status", "status"]) || "").toLowerCase();
   if (!status) return undefined;
-  if (status.includes("paid in full") || status === "paid") return true;
+  if (status.includes("paid in full") || status === "paid" || status === "paid closed") return true;
   if (status.includes("partial") || status.includes("failed") || status.includes("due")) return false;
   return undefined;
 }
 
 function remoteAmountPaid(flat: Record<string, unknown>): number | undefined {
-  const explicit = pickMoney(flat, ["amount_paid", "amountPaid", "previous_payments", "paid_amount"]);
+  const explicit = pickMoney(flat, [
+    "amount_paid",
+    "amountPaid",
+    "previous_payments",
+    "previousPayments",
+    "paid_amount",
+  ]);
   if (explicit !== undefined) return Math.max(0, explicit);
   const total = pickMoney(flat, ["total", "invoice_total", "invoiced_total"]);
   const amountDue = pickMoney(flat, ["amount_due", "balance_due", "balance"]);

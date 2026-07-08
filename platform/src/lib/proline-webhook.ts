@@ -246,11 +246,23 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
   }
 
   if (body.paidInFull === undefined) {
-    const amountDue = numberFromUnknown(body.amount_due);
-    const status = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
-    if (amountDue !== undefined) {
+    const explicitPaid =
+      boolFromUnknown(body.paid_in_full) ??
+      boolFromUnknown(body.paidInFull) ??
+      boolFromUnknown(body.is_paid) ??
+      boolFromUnknown(body.payment_complete);
+    const amountDue =
+      numberFromUnknown(body.amount_due) ??
+      numberFromUnknown(body.balance_due) ??
+      numberFromUnknown(body.balance);
+    const statusCandidates = [body.status, body.invoice_status, body.payment_status]
+      .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+      .map((v) => v.trim().toLowerCase());
+    if (explicitPaid !== undefined) {
+      body.paidInFull = explicitPaid;
+    } else if (amountDue !== undefined) {
       body.paidInFull = amountDue <= 0.0005;
-    } else if (status === "paid" || status.includes("paid in full")) {
+    } else if (statusCandidates.some((s) => s === "paid" || s.includes("paid in full") || s === "paid closed")) {
       body.paidInFull = true;
     }
   }
