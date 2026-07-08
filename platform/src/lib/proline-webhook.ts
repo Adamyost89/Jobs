@@ -43,6 +43,8 @@ export type NormalizedProlineEvent = {
   quoteName?: string | null;
   shareLink?: string;
   amountPaid?: number;
+  /** Cumulative gross/payment revenue from ProLine (`gross_revenue`, etc.). */
+  grossRevenue?: number;
   invoicedDelta?: number;
   invoiceId?: string;
   invoiceNumber?: string;
@@ -76,6 +78,47 @@ function boolFromUnknown(v: unknown): boolean | undefined {
     if (["false", "0", "no", "n", "off"].includes(s)) return false;
   }
   return undefined;
+}
+
+function isInvoicePaidLikeLabel(v: unknown): boolean {
+  if (typeof v !== "string") return false;
+  const s = v
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return s === "invoice paid" || s === "paid closed" || s === "paid in full";
+}
+
+/** Cumulative customer cash from native ProLine project payloads (authoritative when present). */
+export function pickProlineRecognizedPaidRevenue(body: Record<string, unknown>): number | undefined {
+  const n =
+    numberFromUnknown(body.payments_received) ??
+    numberFromUnknown(body.gross_revenue) ??
+    numberFromUnknown(body.net_revenue);
+  if (n === undefined) return undefined;
+  return Math.max(0, n);
+}
+
+function resolveAmountPaidFromBody(body: Record<string, unknown>): number | undefined {
+  const candidates: number[] = [];
+  const explicit = numberFromUnknown(body.amountPaid);
+  if (explicit !== undefined) candidates.push(explicit);
+
+  const previousPayments = numberFromUnknown(body.previous_payments);
+  if (previousPayments !== undefined) candidates.push(previousPayments);
+
+  const total = numberFromUnknown(body.total);
+  const amountDue = numberFromUnknown(body.amount_due);
+  if (total !== undefined && amountDue !== undefined) {
+    candidates.push(Math.max(0, total - amountDue));
+  }
+
+  const recognized = pickProlineRecognizedPaidRevenue(body);
+  if (recognized !== undefined) candidates.push(recognized);
+
+  if (!candidates.length) return undefined;
+  return Math.max(...candidates);
 }
 
 /** Shared with REST sync: resolve ProLine / Bubble project id from a flat object. */
@@ -234,14 +277,11 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
     if (total !== undefined) body.invoicedDelta = total;
   }
 
-  if (body.amountPaid === undefined) {
-    const previousPayments = numberFromUnknown(body.previous_payments);
-    const total = numberFromUnknown(body.total);
-    const amountDue = numberFromUnknown(body.amount_due);
-    if (previousPayments !== undefined) {
-      body.amountPaid = previousPayments;
-    } else if (total !== undefined && amountDue !== undefined) {
-      body.amountPaid = Math.max(0, total - amountDue);
+  {
+    const resolved = resolveAmountPaidFromBody(body);
+    if (resolved !== undefined) {
+      // ProLine gross/payment revenue is cumulative; always keep the highest seen value.
+      body.amountPaid = resolved;
     }
   }
 
@@ -258,10 +298,13 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
     const statusCandidates = [body.status, body.invoice_status, body.payment_status]
       .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
       .map((v) => v.trim().toLowerCase());
+    const stagePaidLike = isInvoicePaidLikeLabel(body.stage);
     if (explicitPaid !== undefined) {
       body.paidInFull = explicitPaid;
     } else if (amountDue !== undefined) {
       body.paidInFull = amountDue <= 0.0005;
+    } else if (stagePaidLike) {
+      body.paidInFull = true;
     } else if (statusCandidates.some((s) => s === "paid" || s.includes("paid in full") || s === "paid closed")) {
       body.paidInFull = true;
     }
@@ -407,6 +450,7 @@ export function normalizeProlineWebhookBody(
       quoteName: (body.quoteName as string | null | undefined) ?? null,
       shareLink: typeof body.shareLink === "string" ? body.shareLink : undefined,
       amountPaid: typeof body.amountPaid === "number" ? body.amountPaid : undefined,
+      grossRevenue: pickProlineRecognizedPaidRevenue(body),
       invoicedDelta: typeof body.invoicedDelta === "number" ? body.invoicedDelta : undefined,
       invoiceId: typeof body.invoiceId === "string" ? body.invoiceId : undefined,
       invoiceNumber: typeof body.invoiceNumber === "string" ? body.invoiceNumber : undefined,

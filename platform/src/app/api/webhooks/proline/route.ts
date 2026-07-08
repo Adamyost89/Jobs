@@ -141,7 +141,7 @@ export async function POST(req: Request) {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, " ")
       .trim();
-    return s === "paid closed";
+    return s === "paid closed" || s === "invoice paid" || s === "paid in full";
   }
 
   function skipProlineCreate(): boolean {
@@ -155,6 +155,7 @@ export async function POST(req: Request) {
       e.cost !== undefined ||
       e.costingComplete !== undefined ||
       e.amountPaid !== undefined ||
+      e.grossRevenue !== undefined ||
       e.paidInFull !== undefined ||
       e.paidDate !== undefined ||
       e.invoicedDelta !== undefined;
@@ -371,8 +372,10 @@ export async function POST(req: Request) {
     data: Prisma.JobUpdateInput;
     invoiceDeltaApplied: boolean;
     invoiceDeltaSkippedDuplicate: boolean;
+    paymentAmountIncreased: boolean;
   }> {
     const data: Prisma.JobUpdateInput = {};
+    let paymentAmountIncreased = false;
     if (e.name !== undefined) data.name = e.name;
     if (e.leadNumber !== undefined) {
       const incomingLead = e.leadNumber?.trim() || null;
@@ -421,9 +424,19 @@ export async function POST(req: Request) {
     }
     if (e.cost !== undefined) data.cost = asDecimal(e.cost);
     if (e.costingComplete !== undefined) data.costingComplete = e.costingComplete;
-    if (e.amountPaid !== undefined) {
-      const paid = Math.max(0, e.amountPaid);
-      data.amountPaid = asDecimal(paid);
+    {
+      const incomingPaid = e.amountPaid ?? e.grossRevenue;
+      if (incomingPaid !== undefined) {
+        const existingPaid = existing.amountPaid?.toNumber() ?? 0;
+        const paid = Math.max(existingPaid, Math.max(0, incomingPaid));
+        paymentAmountIncreased = paid > existingPaid + 0.005;
+        data.amountPaid = asDecimal(paid);
+        const currentInvoiced = existing.invoicedTotal.toNumber();
+        if (currentInvoiced < paid - 0.005) {
+          data.invoicedTotal = asDecimal(paid);
+          data.invoiceFlag = true;
+        }
+      }
     }
     if (e.paidInFull !== undefined) data.paidInFull = e.paidInFull;
     if (isPaidAndClosedLabel(incomingLifecycleFromEvent()) || isPaidAndClosedLabel(e.prolineStage)) {
@@ -468,7 +481,7 @@ export async function POST(req: Request) {
       data.invoiceFlag = true;
     }
 
-    return { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate };
+    return { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate, paymentAmountIncreased };
   }
 
   async function createJob(): Promise<
@@ -821,7 +834,8 @@ export async function POST(req: Request) {
           "Job update skipped: requires Open/Won/Complete/Closed (or an existing job already in that lifecycle).",
       });
     }
-    const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate } = await computeUpdateForExistingJob(existing);
+    const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate, paymentAmountIncreased } =
+      await computeUpdateForExistingJob(existing);
     logProlineWebhook("upsert_update", {
       jobId: existing.id,
       jobNumber: existing.jobNumber,
@@ -851,12 +865,15 @@ export async function POST(req: Request) {
       });
     }
     const paymentFieldsChanged =
+      paymentAmountIncreased ||
       Object.prototype.hasOwnProperty.call(data, "amountPaid") ||
       Object.prototype.hasOwnProperty.call(data, "paidInFull") ||
       Object.prototype.hasOwnProperty.call(data, "paidDate");
     await recalculateJobAndCommissions(existing.id, {
       forceCommissionRecalc: paymentFieldsChanged,
-      forceCommissionRecalcReason: "proline.webhook.upsert.update.payment_fields_changed",
+      forceCommissionRecalcReason: paymentAmountIncreased
+        ? "proline.webhook.upsert.update.gross_revenue_increased"
+        : "proline.webhook.upsert.update.payment_fields_changed",
     });
     await ensureRequiredNameWriteback(existing, e.name);
     return NextResponse.json({ ok: true, jobId: existing.id, jobNumber: existing.jobNumber, upsert: "updated" });
@@ -891,7 +908,8 @@ export async function POST(req: Request) {
     });
   }
 
-  const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate } = await computeUpdateForExistingJob(existing);
+  const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate, paymentAmountIncreased } =
+    await computeUpdateForExistingJob(existing);
 
   logProlineWebhook("typed_update", {
     internalType: e.internalType,
@@ -923,12 +941,15 @@ export async function POST(req: Request) {
     });
   }
   const paymentFieldsChanged =
+    paymentAmountIncreased ||
     Object.prototype.hasOwnProperty.call(data, "amountPaid") ||
     Object.prototype.hasOwnProperty.call(data, "paidInFull") ||
     Object.prototype.hasOwnProperty.call(data, "paidDate");
   await recalculateJobAndCommissions(existing.id, {
     forceCommissionRecalc: paymentFieldsChanged,
-    forceCommissionRecalcReason: "proline.webhook.typed_update.payment_fields_changed",
+    forceCommissionRecalcReason: paymentAmountIncreased
+      ? "proline.webhook.typed_update.gross_revenue_increased"
+      : "proline.webhook.typed_update.payment_fields_changed",
   });
   return NextResponse.json({
     ok: true,

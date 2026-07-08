@@ -1,6 +1,6 @@
 import { type PrismaClient } from "@prisma/client";
 import { extractProjectListPage, prolineApiGet, readProlineApiEnv } from "@/lib/proline-api-client";
-import { pickProlineProjectIdFromRecord } from "@/lib/proline-webhook";
+import { pickProlineProjectIdFromRecord, pickProlineRecognizedPaidRevenue } from "@/lib/proline-webhook";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -67,6 +67,7 @@ function remotePaidInFull(flat: Record<string, unknown>): boolean | undefined {
 }
 
 function remoteAmountPaid(flat: Record<string, unknown>): number | undefined {
+  const candidates: number[] = [];
   const explicit = pickMoney(flat, [
     "amount_paid",
     "amountPaid",
@@ -74,17 +75,26 @@ function remoteAmountPaid(flat: Record<string, unknown>): number | undefined {
     "previousPayments",
     "paid_amount",
   ]);
-  if (explicit !== undefined) return Math.max(0, explicit);
+  if (explicit !== undefined) candidates.push(explicit);
   const total = pickMoney(flat, ["total", "invoice_total", "invoiced_total"]);
   const amountDue = pickMoney(flat, ["amount_due", "balance_due", "balance"]);
-  if (total !== undefined && amountDue !== undefined) return Math.max(0, total - amountDue);
-  return undefined;
+  if (total !== undefined && amountDue !== undefined) {
+    candidates.push(Math.max(0, total - amountDue));
+  }
+  const recognized = pickProlineRecognizedPaidRevenue(flat);
+  if (recognized !== undefined) candidates.push(recognized);
+  if (!candidates.length) return undefined;
+  return Math.max(0, Math.max(...candidates));
 }
 
 function remoteInvoicedTotal(flat: Record<string, unknown>): number | undefined {
+  const candidates: number[] = [];
   const total = pickMoney(flat, ["total", "invoice_total", "invoiced_total", "invoicedTotal"]);
-  if (total === undefined) return undefined;
-  return Math.max(0, total);
+  if (total !== undefined) candidates.push(total);
+  const recognized = pickProlineRecognizedPaidRevenue(flat);
+  if (recognized !== undefined) candidates.push(recognized);
+  if (!candidates.length) return undefined;
+  return Math.max(0, Math.max(...candidates));
 }
 
 export type ReconcileProlinePaymentsOpts = {
@@ -198,9 +208,18 @@ export async function reconcileProlinePaymentsFromApi(
       const localDateIso = local.paidDate ? local.paidDate.toISOString() : null;
       const remoteDateIso = remoteDate ? remoteDate.toISOString() : undefined;
 
+      const targetAmountPaid =
+        remotePaid !== undefined ? Math.max(localAmountPaid ?? 0, remotePaid) : undefined;
+      const targetInvoiced =
+        remoteInvoiced !== undefined ? Math.max(localInvoiced, remoteInvoiced) : undefined;
+
       const changed: string[] = [];
-      if (remotePaid !== undefined && !approxEqual(localAmountPaid, remotePaid, tolerance)) changed.push("amountPaid");
-      if (remoteInvoiced !== undefined && !approxEqual(localInvoiced, remoteInvoiced, tolerance)) changed.push("invoicedTotal");
+      if (targetAmountPaid !== undefined && !approxEqual(localAmountPaid, targetAmountPaid, tolerance)) {
+        changed.push("amountPaid");
+      }
+      if (targetInvoiced !== undefined && !approxEqual(localInvoiced, targetInvoiced, tolerance)) {
+        changed.push("invoicedTotal");
+      }
       if (remotePif !== undefined && local.paidInFull !== remotePif) changed.push("paidInFull");
       if (remoteDateIso !== undefined && localDateIso !== remoteDateIso) changed.push("paidDate");
       if (!changed.length) continue;
@@ -219,8 +238,8 @@ export async function reconcileProlinePaymentsFromApi(
             paidDate: localDateIso,
           },
           remote: {
-            amountPaid: remotePaid,
-            invoicedTotal: remoteInvoiced,
+            amountPaid: targetAmountPaid ?? remotePaid,
+            invoicedTotal: targetInvoiced ?? remoteInvoiced,
             paidInFull: remotePif,
             paidDate: remoteDateIso,
           },
@@ -230,8 +249,8 @@ export async function reconcileProlinePaymentsFromApi(
       if (!opts.apply) continue;
 
       const data: Record<string, unknown> = {};
-      if (changed.includes("amountPaid") && remotePaid !== undefined) data.amountPaid = remotePaid;
-      if (changed.includes("invoicedTotal") && remoteInvoiced !== undefined) data.invoicedTotal = remoteInvoiced;
+      if (changed.includes("amountPaid") && targetAmountPaid !== undefined) data.amountPaid = targetAmountPaid;
+      if (changed.includes("invoicedTotal") && targetInvoiced !== undefined) data.invoicedTotal = targetInvoiced;
       if (changed.includes("paidInFull") && remotePif !== undefined) data.paidInFull = remotePif;
       if (changed.includes("paidDate")) data.paidDate = remoteDate ?? null;
 
@@ -251,8 +270,8 @@ export async function reconcileProlinePaymentsFromApi(
               paidDate: localDateIso,
             },
             remote: {
-              amountPaid: remotePaid ?? null,
-              invoicedTotal: remoteInvoiced ?? null,
+              amountPaid: targetAmountPaid ?? remotePaid ?? null,
+              invoicedTotal: targetInvoiced ?? remoteInvoiced ?? null,
               paidInFull: remotePif ?? null,
               paidDate: remoteDateIso ?? null,
             },
