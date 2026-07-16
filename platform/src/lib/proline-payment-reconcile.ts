@@ -1,6 +1,10 @@
 import { type PrismaClient } from "@prisma/client";
 import { extractProjectListPage, prolineApiGet, readProlineApiEnv } from "@/lib/proline-api-client";
-import { pickProlineProjectIdFromRecord, pickProlineRecognizedPaidRevenue } from "@/lib/proline-webhook";
+import {
+  hasProlineAuthoritativeNetPaid,
+  pickProlineProjectIdFromRecord,
+  pickProlineRecognizedPaidRevenue,
+} from "@/lib/proline-webhook";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -208,10 +212,19 @@ export async function reconcileProlinePaymentsFromApi(
       const localDateIso = local.paidDate ? local.paidDate.toISOString() : null;
       const remoteDateIso = remoteDate ? remoteDate.toISOString() : undefined;
 
+      const authoritativeNet = hasProlineAuthoritativeNetPaid(flat);
       const targetAmountPaid =
-        remotePaid !== undefined ? Math.max(localAmountPaid ?? 0, remotePaid) : undefined;
+        remotePaid === undefined
+          ? undefined
+          : authoritativeNet
+            ? Math.max(0, remotePaid)
+            : Math.max(localAmountPaid ?? 0, remotePaid);
       const targetInvoiced =
-        remoteInvoiced !== undefined ? Math.max(localInvoiced, remoteInvoiced) : undefined;
+        remoteInvoiced === undefined
+          ? undefined
+          : authoritativeNet
+            ? Math.max(0, remoteInvoiced)
+            : Math.max(localInvoiced, remoteInvoiced);
 
       const changed: string[] = [];
       if (targetAmountPaid !== undefined && !approxEqual(localAmountPaid, targetAmountPaid, tolerance)) {

@@ -428,11 +428,23 @@ export async function POST(req: Request) {
       const incomingPaid = e.amountPaid ?? e.grossRevenue;
       if (incomingPaid !== undefined) {
         const existingPaid = existing.amountPaid?.toNumber() ?? 0;
-        const paid = Math.max(existingPaid, Math.max(0, incomingPaid));
+        // Net revenue is authoritative for commissions; allow correcting jobs previously
+        // inflated by fee-inclusive `gross_revenue`.
+        const paid = e.authoritativeNetPaid
+          ? Math.max(0, incomingPaid)
+          : Math.max(existingPaid, Math.max(0, incomingPaid));
         paymentAmountIncreased = paid > existingPaid + 0.005;
         data.amountPaid = asDecimal(paid);
         const currentInvoiced = existing.invoicedTotal.toNumber();
         if (currentInvoiced < paid - 0.005) {
+          data.invoicedTotal = asDecimal(paid);
+          data.invoiceFlag = true;
+        } else if (
+          e.authoritativeNetPaid &&
+          currentInvoiced > paid + 0.005 &&
+          Math.abs(currentInvoiced - existingPaid) <= 0.005
+        ) {
+          // Invoiced was bumped to match fee-inclusive paid; pull back to net.
           data.invoicedTotal = asDecimal(paid);
           data.invoiceFlag = true;
         }

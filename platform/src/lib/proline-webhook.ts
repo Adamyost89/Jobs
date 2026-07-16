@@ -43,8 +43,13 @@ export type NormalizedProlineEvent = {
   quoteName?: string | null;
   shareLink?: string;
   amountPaid?: number;
-  /** Cumulative gross/payment revenue from ProLine (`gross_revenue`, etc.). */
+  /**
+   * Cumulative paid revenue for commissions (net of card/merchant fees when ProLine
+   * provides `net_revenue` or `merchant_fees`).
+   */
   grossRevenue?: number;
+  /** True when paid amount came from ProLine net (or gross minus merchant fees). */
+  authoritativeNetPaid?: boolean;
   invoicedDelta?: number;
   invoiceId?: string;
   invoiceNumber?: string;
@@ -90,17 +95,49 @@ function isInvoicePaidLikeLabel(v: unknown): boolean {
   return s === "invoice paid" || s === "paid closed" || s === "paid in full";
 }
 
-/** Cumulative customer cash from native ProLine project payloads (authoritative when present). */
+/**
+ * Cumulative paid revenue from native ProLine project payloads, net of card fees.
+ * Prefer `net_revenue`; otherwise strip `merchant_fees` from gross when present.
+ */
 export function pickProlineRecognizedPaidRevenue(body: Record<string, unknown>): number | undefined {
-  const n =
-    numberFromUnknown(body.payments_received) ??
-    numberFromUnknown(body.gross_revenue) ??
-    numberFromUnknown(body.net_revenue);
-  if (n === undefined) return undefined;
-  return Math.max(0, n);
+  const net = numberFromUnknown(body.net_revenue);
+  if (net !== undefined) return Math.max(0, net);
+
+  const gross = numberFromUnknown(body.gross_revenue);
+  const fees = numberFromUnknown(body.merchant_fees);
+  if (gross !== undefined && fees !== undefined) {
+    return Math.max(0, gross - fees);
+  }
+
+  const paymentsReceived = numberFromUnknown(body.payments_received);
+  if (paymentsReceived !== undefined) {
+    if (fees !== undefined) return Math.max(0, paymentsReceived - fees);
+    return Math.max(0, paymentsReceived);
+  }
+
+  if (gross !== undefined) return Math.max(0, gross);
+  return undefined;
+}
+
+/** True when ProLine sent an authoritative net paid figure (not fee-inclusive gross alone). */
+export function hasProlineAuthoritativeNetPaid(body: Record<string, unknown>): boolean {
+  if (numberFromUnknown(body.net_revenue) !== undefined) return true;
+  const fees = numberFromUnknown(body.merchant_fees);
+  if (fees === undefined || fees <= 0.0005) return false;
+  return (
+    numberFromUnknown(body.gross_revenue) !== undefined ||
+    numberFromUnknown(body.payments_received) !== undefined
+  );
 }
 
 function resolveAmountPaidFromBody(body: Record<string, unknown>): number | undefined {
+  const recognized = pickProlineRecognizedPaidRevenue(body);
+  // When ProLine provides net (or gross minus fees), that is the commission basis —
+  // do not Math.max with fee-inclusive gross from other fields.
+  if (recognized !== undefined && hasProlineAuthoritativeNetPaid(body)) {
+    return recognized;
+  }
+
   const candidates: number[] = [];
   const explicit = numberFromUnknown(body.amountPaid);
   if (explicit !== undefined) candidates.push(explicit);
@@ -110,11 +147,13 @@ function resolveAmountPaidFromBody(body: Record<string, unknown>): number | unde
 
   const total = numberFromUnknown(body.total);
   const amountDue = numberFromUnknown(body.amount_due);
-  if (total !== undefined && amountDue !== undefined) {
-    candidates.push(Math.max(0, total - amountDue));
+  const balance = numberFromUnknown(body.balance);
+  // Prefer `balance` when present: ProLine sometimes leaves `amount_due` stale after card pay.
+  const dueForPaidCalc = balance !== undefined ? balance : amountDue;
+  if (total !== undefined && dueForPaidCalc !== undefined) {
+    candidates.push(Math.max(0, total - dueForPaidCalc));
   }
 
-  const recognized = pickProlineRecognizedPaidRevenue(body);
   if (recognized !== undefined) candidates.push(recognized);
 
   if (!candidates.length) return undefined;
@@ -280,7 +319,7 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
   {
     const resolved = resolveAmountPaidFromBody(body);
     if (resolved !== undefined) {
-      // ProLine gross/payment revenue is cumulative; always keep the highest seen value.
+      // ProLine payment revenue is cumulative; prefer net (job amount) over card gross.
       body.amountPaid = resolved;
     }
   }
@@ -291,21 +330,33 @@ function applyProlineNativeAliases(body: Record<string, unknown>): void {
       boolFromUnknown(body.paidInFull) ??
       boolFromUnknown(body.is_paid) ??
       boolFromUnknown(body.payment_complete);
-    const amountDue =
-      numberFromUnknown(body.amount_due) ??
-      numberFromUnknown(body.balance_due) ??
-      numberFromUnknown(body.balance);
+    // Prefer `balance` — ProLine invoice webhooks can keep `amount_due` at the invoice
+    // total after a card payment while `balance` correctly goes to 0.
+    const balance = numberFromUnknown(body.balance) ?? numberFromUnknown(body.balance_due);
+    const amountDue = numberFromUnknown(body.amount_due);
+    const remainingDue = balance !== undefined ? balance : amountDue;
     const statusCandidates = [body.status, body.invoice_status, body.payment_status]
       .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
       .map((v) => v.trim().toLowerCase());
     const stagePaidLike = isInvoicePaidLikeLabel(body.stage);
+    const hasPaidDate = typeof body.paidDate === "string" && body.paidDate.trim() !== "";
     if (explicitPaid !== undefined) {
       body.paidInFull = explicitPaid;
-    } else if (amountDue !== undefined) {
-      body.paidInFull = amountDue <= 0.0005;
+    } else if (hasPaidDate) {
+      body.paidInFull = true;
+    } else if (remainingDue !== undefined) {
+      body.paidInFull = remainingDue <= 0.0005;
     } else if (stagePaidLike) {
       body.paidInFull = true;
-    } else if (statusCandidates.some((s) => s === "paid" || s.includes("paid in full") || s === "paid closed")) {
+    } else if (
+      statusCandidates.some(
+        (s) =>
+          s === "paid" ||
+          s === "complete" ||
+          s.includes("paid in full") ||
+          s === "paid closed"
+      )
+    ) {
       body.paidInFull = true;
     }
   }
@@ -451,6 +502,7 @@ export function normalizeProlineWebhookBody(
       shareLink: typeof body.shareLink === "string" ? body.shareLink : undefined,
       amountPaid: typeof body.amountPaid === "number" ? body.amountPaid : undefined,
       grossRevenue: pickProlineRecognizedPaidRevenue(body),
+      authoritativeNetPaid: hasProlineAuthoritativeNetPaid(body),
       invoicedDelta: typeof body.invoicedDelta === "number" ? body.invoicedDelta : undefined,
       invoiceId: typeof body.invoiceId === "string" ? body.invoiceId : undefined,
       invoiceNumber: typeof body.invoiceNumber === "string" ? body.invoiceNumber : undefined,
