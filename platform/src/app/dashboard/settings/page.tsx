@@ -10,6 +10,7 @@ import { JobsDashboardPrefsSettingsCard } from "@/components/JobsDashboardPrefsS
 import { loadSalespeopleWithKindForAdmin } from "@/lib/salespeople-kind-db";
 import { ProLineConnectionAssistant } from "@/components/ProLineConnectionAssistant";
 import { ProlineNameAliasSettings } from "@/components/ProlineNameAliasSettings";
+import { ReconcileProlinePaymentsButton } from "@/components/ReconcileProlinePaymentsButton";
 import { StatusBadgeColorSettings } from "@/components/StatusBadgeColorSettings";
 import { EndOfJobFormSettingsCard } from "@/components/EndOfJobFormSettingsCard";
 import { SyncCommissionLedgerButton } from "@/components/SyncCommissionLedgerButton";
@@ -197,6 +198,10 @@ export default async function SettingsPage({
               <code>/api/1.1/obj/&lt;typename&gt;</code> candidates)
             </li>
             <li>
+              ProLine payment reconcile: <code>POST /api/integrations/proline/reconcile-payments</code> (Admin; use when
+              webhooks are down but REST still works)
+            </li>
+            <li>
               Zapier bridge: <code>POST /api/integrations/zapier-bridge</code> (Bearer{" "}
               <code>ZAPIER_BRIDGE_SECRET</code>)
             </li>
@@ -205,6 +210,9 @@ export default async function SettingsPage({
               <code>END_OF_JOB_FORM_ZAP_SECRET</code> as Bearer / <code>X-Bridge-Secret</code>
             </li>
           </ul>
+          <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />
+          <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine payment reconcile</h3>
+          <ReconcileProlinePaymentsButton />
           <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />
           <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine API assistant</h3>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>

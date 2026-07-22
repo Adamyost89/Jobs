@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canEditJobs, canViewAllJobs } from "@/lib/rbac";
 import { JobsTableSection, type JobsTableRowDTO } from "@/components/JobsTableSection";
+import { ManualJobCreateForm } from "@/components/ManualJobCreateForm";
 import { Prisma } from "@prisma/client";
 import { normalizeJobsSortParam, sortJobs } from "@/lib/job-sort";
 import {
@@ -364,6 +365,7 @@ export default async function JobsPage({
       cost,
       costingComplete: j.costingComplete,
       paidInFull: paidInFullDerived,
+      paidInFullStored: j.paidInFull,
       gp: effectiveGp,
       gpPercent: canSeeGp ? (effectiveMargin ?? 0) : 0,
       projectRevenue: canSeeGp ? j.projectRevenue.toNumber() : 0,
@@ -501,6 +503,13 @@ export default async function JobsPage({
           Commission columns = <strong>all reps</strong> on that job (incl. manager lines).
         </span>
       </p>
+
+      {canEditJobs(user) ? (
+        <ManualJobCreateForm
+          defaultYear={typeof preferredY === "number" ? preferredY : calendarY}
+          salespersonNames={salespersonOptions}
+        />
+      ) : null}
 
       <JobsTableSection rows={tableRows} user={user} statusBadgeColors={statusBadgeColors} statusOptions={statusOptions} />
     </div>

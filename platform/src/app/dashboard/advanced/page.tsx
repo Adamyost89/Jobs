@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { Role } from "@prisma/client";
 import { canEditJobs, canViewExcelSnapshots } from "@/lib/rbac";
+import { ReconcileProlinePaymentsButton } from "@/components/ReconcileProlinePaymentsButton";
 
 export default async function AdvancedHubPage() {
   const user = await getSession();
@@ -44,6 +45,12 @@ export default async function AdvancedHubPage() {
           </li>
         ) : null}
       </ul>
+      {canEditJobs(user) ? (
+        <div className="card" style={{ display: "grid", gap: "0.65rem" }}>
+          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>ProLine payment reconcile</h2>
+          <ReconcileProlinePaymentsButton />
+        </div>
+      ) : null}
     </div>
   );
 }

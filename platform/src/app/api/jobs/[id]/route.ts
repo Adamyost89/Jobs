@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { Prisma, Role } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canEditJobs } from "@/lib/rbac";
@@ -50,13 +50,7 @@ export async function PATCH(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
   const p = parsed.data;
-  const isSuperAdmin = user.role === Role.SUPER_ADMIN;
-  if (!isSuperAdmin && (p.amountPaid !== undefined || p.paidDate !== undefined || p.paidInFull !== undefined)) {
-    return NextResponse.json(
-      { error: "Only Super Admin can manually edit payment fields (amount paid, paid date, paid in full)." },
-      { status: 403 }
-    );
-  }
+  // Admin + Super Admin may edit payment fields manually (e.g. while ProLine webhooks are down).
   const data: Prisma.JobUpdateInput = {};
   if (p.name !== undefined) data.name = p.name;
   if (p.leadNumber !== undefined) data.leadNumber = p.leadNumber;
@@ -127,16 +121,16 @@ export async function PATCH(
     where: { id },
     data,
   });
+  const paymentFieldsChanged =
+    p.amountPaid !== undefined || p.paidDate !== undefined || p.paidInFull !== undefined;
   await prisma.jobEvent.create({
     data: {
       jobId: id,
-      type: "JOB_UPDATED",
-      source: "api",
-      payload: { by: user.id, patch: p },
+      type: paymentFieldsChanged ? "MANUAL_PAYMENT_UPDATE" : "JOB_UPDATED",
+      source: "manual",
+      payload: { by: user.id, role: user.role, patch: p },
     },
   });
-  const paymentFieldsChanged =
-    p.amountPaid !== undefined || p.paidDate !== undefined || p.paidInFull !== undefined;
   await recalculateJobAndCommissions(id, {
     forceCommissionRecalc: paymentFieldsChanged,
     forceCommissionRecalcReason: "api.jobs.patch.payment_fields",

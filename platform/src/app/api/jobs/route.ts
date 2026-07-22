@@ -76,7 +76,7 @@ export async function POST(req: Request) {
     data: {
       jobId: job.id,
       type: "JOB_CREATED",
-      source: "api",
+      source: "manual",
       payload: { by: user.id },
     },
   });

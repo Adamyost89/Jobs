@@ -50,7 +50,10 @@ export type JobsTableRowDTO = {
   insurancePercent: number | null;
   cost: number;
   costingComplete: boolean;
+  /** Derived for row highlights (paidInFull || costingComplete). */
   paidInFull: boolean;
+  /** Actual Job.paidInFull flag for manual edits. */
+  paidInFullStored: boolean;
   gp: number;
   gpPercent: number;
   projectRevenue: number;
@@ -105,8 +108,9 @@ export function JobsTableSection({
   const router = useRouter();
   const canEdit = canEditJobs(user);
   const canManageRowActions = user.role === "SUPER_ADMIN";
-  const showRowEditColumn = canManageRowActions || canEdit;
-  const canEditPayments = user.role === "SUPER_ADMIN";
+  const showRowEditColumn = canEdit;
+  /** Admins can edit payment fields manually while ProLine webhooks are unavailable. */
+  const canEditPayments = canEdit;
   const canSeeGp = canViewAllJobs(user);
   const canEditTablePrefs = user.role === "SUPER_ADMIN";
   const [prefs, setPrefs] = useState<JobsTablePrefsV1>(DEFAULT_JOBS_TABLE_PREFS);
@@ -128,6 +132,7 @@ export function JobsTableSection({
     amountPaid: string;
     projectRevenue: string;
     paidDate: string;
+    paidInFull: boolean;
     contractSignedAt: string;
   } | null>(null);
   const [editMsg, setEditMsg] = useState<string | null>(null);
@@ -266,6 +271,7 @@ export function JobsTableSection({
       amountPaid: row.amountPaid == null ? "" : String(row.amountPaid),
       projectRevenue: String(row.projectRevenue),
       paidDate: toDateInputValue(row.paidDate),
+      paidInFull: row.paidInFullStored,
       contractSignedAt: toDateInputValue(row.contractSignedAt),
     };
   }
@@ -275,7 +281,7 @@ export function JobsTableSection({
     setDeleteMsg(null);
     setEditMsg(null);
     setEditingId(row.id);
-    setEditForm(canManageRowActions ? toEditForm(row) : null);
+    setEditForm(canEdit ? toEditForm(row) : null);
   }
 
   function cancelEdit() {
@@ -292,7 +298,7 @@ export function JobsTableSection({
 
   const saveEdit = useCallback(
     async (row: JobsTableRowDTO) => {
-      if (!canManageRowActions || !editForm || editingId !== row.id || savingEditId) return;
+      if (!canEdit || !editForm || editingId !== row.id || savingEditId) return;
       const status = editForm.status.trim();
       if (!status) {
         setEditMsg("Status is required.");
@@ -337,6 +343,7 @@ export function JobsTableSection({
           ? {
               amountPaid: editForm.amountPaid.trim() ? amountPaid.value : null,
               paidDate: editForm.paidDate.trim() ? editForm.paidDate.trim() : null,
+              paidInFull: editForm.paidInFull,
             }
           : null),
       };
@@ -365,7 +372,7 @@ export function JobsTableSection({
         setSavingEditId(null);
       }
     },
-    [canManageRowActions, canEditPayments, editForm, editingId, savingEditId, router]
+    [canEdit, canEditPayments, editForm, editingId, savingEditId, router]
   );
 
   const legendBad = {
@@ -793,6 +800,18 @@ export function JobsTableSection({
                                         setEditForm((prev) => (prev ? { ...prev, paidDate: e.target.value } : prev))
                                       }
                                     />
+                                  </label>
+                                  <label className="filter-check" style={{ alignSelf: "end", marginBottom: "0.35rem" }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={editForm.paidInFull}
+                                      onChange={(e) =>
+                                        setEditForm((prev) =>
+                                          prev ? { ...prev, paidInFull: e.target.checked } : prev
+                                        )
+                                      }
+                                    />
+                                    <span>Paid in full</span>
                                   </label>
                                 </>
                               ) : null}
