@@ -28,6 +28,34 @@ function normalizeTrigger(raw: string | undefined | null): ProlineTriggerKind | 
   return null;
 }
 
+/**
+ * Native ProLine "Quote Sent or Approved" bodies include project_id/name/number plus quote_* fields.
+ * Those must route as quote events (create job on approve), not as generic project upsert —
+ * otherwise status "Fully Signed" fails the Open/Won/Complete/Closed create gate.
+ */
+export function looksLikeProlineQuoteWebhook(body: Record<string, unknown>): boolean {
+  if (body.quote_id !== undefined || body.quoteId !== undefined) return true;
+  if (body.quote_name !== undefined || body.quoteName !== undefined) return true;
+  if (typeof body.share_link === "string" && /\/quotes\//i.test(body.share_link)) return true;
+  if (typeof body.shareLink === "string" && /\/quotes\//i.test(body.shareLink)) return true;
+  const status = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
+  const signedLike =
+    /\bfully\s*signed\b/.test(status) ||
+    status === "signed" ||
+    status === "approved" ||
+    status === "quote approved";
+  if (
+    signedLike &&
+    (body.approved_date !== undefined ||
+      body.approvedDate !== undefined ||
+      body.approved_total !== undefined ||
+      body.approvedTotal !== undefined)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export type NormalizedProlineEvent = {
   internalType: z.infer<typeof legacyType> | "job.upsert";
   prolineJobId: string;
@@ -458,6 +486,10 @@ export function normalizeProlineWebhookBody(
   } else if (trig === "project_created_or_updated") {
     internalType = "job.upsert";
   } else if (trig === "quote_sent_or_approved") {
+    internalType = "job.updated";
+  } else if (looksLikeProlineQuoteWebhook(body)) {
+    // Quote approve/sign payloads often include project_id; still treat as quote → job.updated
+    // so the handler can create a job when approved_date is present.
     internalType = "job.updated";
   } else if (trig === "invoice_sent_or_paid") {
     const paid = body.paidInFull === true;

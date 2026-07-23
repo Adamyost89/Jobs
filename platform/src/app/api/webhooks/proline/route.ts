@@ -585,19 +585,39 @@ export async function POST(req: Request) {
   }
 
   function isQuoteApprovedWebhook(): boolean {
-    if (e.internalType !== "job.updated") return false;
     const raw = e.raw;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
     const body = raw as Record<string, unknown>;
     const trigger = typeof body.trigger === "string" ? body.trigger.trim().toLowerCase() : "";
-    return (
+    const hasQuoteMarkers =
       trigger.includes("quote") ||
       body.quote_id !== undefined ||
       body.quote_name !== undefined ||
+      body.quoteId !== undefined ||
+      body.quoteName !== undefined ||
+      (typeof body.share_link === "string" && /\/quotes\//i.test(body.share_link)) ||
+      (typeof body.shareLink === "string" && /\/quotes\//i.test(body.shareLink));
+    const hasApprovalFields =
       body.approved_total !== undefined ||
       body.approved_value !== undefined ||
-      body.approved_date !== undefined
-    );
+      body.approved_date !== undefined ||
+      body.approvedTotal !== undefined ||
+      body.approvedValue !== undefined ||
+      body.approvedDate !== undefined;
+    const status = typeof body.status === "string" ? body.status.trim().toLowerCase() : "";
+    const signedLike =
+      /\bfully\s*signed\b/.test(status) ||
+      status === "signed" ||
+      status === "approved" ||
+      status === "quote approved";
+
+    // Prefer quote path for native quote payloads even when they also carry project_id
+    // (those otherwise normalize as job.upsert and get skipped on "Fully Signed").
+    if (hasQuoteMarkers && (hasApprovalFields || signedLike || e.internalType === "job.updated")) {
+      return true;
+    }
+    if (e.internalType !== "job.updated") return false;
+    return hasApprovalFields;
   }
 
   function approvedDateFromEvent(): Date | null {
@@ -718,6 +738,10 @@ export async function POST(req: Request) {
       const nextContract = approvedAmountFromEvent();
       data.contractAmount = nextContract;
       data.projectRevenue = nextContract;
+    }
+    {
+      const lifecycle = incomingLifecycleFromEvent();
+      if (lifecycle !== undefined) data.status = normalizeStatus(lifecycle);
     }
     if (e.name !== undefined) data.name = e.name;
     if (e.prolineJobId) data.prolineJobId = e.prolineJobId;

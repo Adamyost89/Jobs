@@ -20,5 +20,9 @@ export function normalizeStatus(raw: string | null | undefined): JobStatus {
   if (s.includes("open")) return "IN_PROGRESS";
   if (s.includes("sold")) return "SOLD";
   if (s.includes("won")) return "SOLD";
+  // ProLine quote signatures arrive as "Fully Signed" (not Open/Won/Closed).
+  if (/\bfully\s*signed\b/.test(s) || s === "signed" || s === "approved" || s === "quote approved") {
+    return "SOLD";
+  }
   return "UNKNOWN";
 }
