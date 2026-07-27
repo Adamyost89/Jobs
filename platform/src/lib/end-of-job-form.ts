@@ -9,12 +9,19 @@ export type EndOfJobFormTriggerConfig = {
 
 export type EndOfJobFormFieldType = "text" | "textarea" | "number" | "boolean" | "select";
 
+/** Show this field only when another field's answer is one of `equals`. */
+export type EndOfJobFormShowIf = {
+  fieldId: string;
+  equals: string[];
+};
+
 export type EndOfJobFormField = {
   id: string;
   label: string;
   type: EndOfJobFormFieldType;
   required?: boolean;
   options?: string[];
+  showIf?: EndOfJobFormShowIf;
 };
 
 export type EndOfJobFormConfig = {
@@ -39,6 +46,18 @@ export function parseEndOfJobFormTrigger(raw: unknown): EndOfJobFormTriggerConfi
   const value = typeof raw.value === "string" ? raw.value.trim() : DEFAULT_TRIGGER.value;
   if (!value) return { ...DEFAULT_TRIGGER, match };
   return { match, value };
+}
+
+function parseShowIf(raw: unknown, fieldId: string): { ok: true; value?: EndOfJobFormShowIf } | { ok: false; error: string } {
+  if (raw === undefined || raw === null) return { ok: true, value: undefined };
+  if (!isRecord(raw)) return { ok: false, error: `Field "${fieldId}" has invalid showIf` };
+  const depId = typeof raw.fieldId === "string" ? raw.fieldId.trim() : "";
+  if (!depId) return { ok: false, error: `Field "${fieldId}" showIf needs a fieldId` };
+  if (depId === fieldId) return { ok: false, error: `Field "${fieldId}" showIf cannot reference itself` };
+  if (!Array.isArray(raw.equals)) return { ok: false, error: `Field "${fieldId}" showIf needs equals[]` };
+  const equals = raw.equals.map((o) => String(o).trim()).filter(Boolean);
+  if (equals.length === 0) return { ok: false, error: `Field "${fieldId}" showIf needs at least one equals value` };
+  return { ok: true, value: { fieldId: depId, equals } };
 }
 
 export function parseEndOfJobFormConfig(raw: unknown): { ok: true; value: EndOfJobFormConfig } | { ok: false; error: string } {
@@ -66,9 +85,56 @@ export function parseEndOfJobFormConfig(raw: unknown): { ok: true; value: EndOfJ
       options = fr.options.map((o) => String(o).trim()).filter(Boolean);
       if (options.length === 0) return { ok: false, error: `Select field "${id}" needs at least one option` };
     }
-    fields.push({ id, label, type, required: required || undefined, options });
+    const showIfParsed = parseShowIf(fr.showIf, id);
+    if (!showIfParsed.ok) return showIfParsed;
+    fields.push({
+      id,
+      label,
+      type,
+      required: required || undefined,
+      options,
+      ...(showIfParsed.value ? { showIf: showIfParsed.value } : {}),
+    });
+  }
+  const ids = new Set(fields.map((f) => f.id));
+  for (const field of fields) {
+    if (!field.showIf) continue;
+    if (!ids.has(field.showIf.fieldId)) {
+      return { ok: false, error: `Field "${field.id}" showIf references unknown field "${field.showIf.fieldId}"` };
+    }
   }
   return { ok: true, value: { version, fields } };
+}
+
+/** Normalize an answer for showIf matching (select/text compare as trimmed strings). */
+export function endOfJobAnswerMatchString(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  const s = String(value).trim();
+  return s === "" ? null : s;
+}
+
+/**
+ * Whether `field` should be shown given current answers.
+ * Walks the showIf chain so a hidden parent cannot unlock a child.
+ */
+export function isEndOfJobFieldVisible(
+  field: EndOfJobFormField,
+  values: Record<string, unknown>,
+  allFields: EndOfJobFormField[] = []
+): boolean {
+  if (!field.showIf) return true;
+  const fieldsById = new Map(allFields.map((f) => [f.id, f]));
+  const seen = new Set<string>();
+  let current: EndOfJobFormField | undefined = field;
+  while (current?.showIf) {
+    if (seen.has(current.id)) return false;
+    seen.add(current.id);
+    const answer = endOfJobAnswerMatchString(values[current.showIf.fieldId]);
+    if (answer === null || !current.showIf.equals.includes(answer)) return false;
+    current = fieldsById.get(current.showIf.fieldId);
+  }
+  return true;
 }
 
 export function shouldRequireEndOfJobFormFromStage(
@@ -108,6 +174,11 @@ export function validateEndOfJobFormSubmission(
   const values: ValidatedEndOfJobResponses = {};
 
   for (const field of config.fields) {
+    if (!isEndOfJobFieldVisible(field, body, config.fields)) {
+      values[field.id] = null;
+      continue;
+    }
+
     const raw = body[field.id];
     const missing = raw === undefined || raw === null || (typeof raw === "string" && raw.trim() === "");
 

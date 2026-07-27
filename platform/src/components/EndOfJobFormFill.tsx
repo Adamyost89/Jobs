@@ -2,7 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { EndOfJobFormField } from "@/lib/end-of-job-form";
+import { isEndOfJobFieldVisible, type EndOfJobFormField } from "@/lib/end-of-job-form";
+
+function emptyValueForField(f: EndOfJobFormField): string | boolean {
+  return f.type === "boolean" ? false : "";
+}
 
 export function EndOfJobFormFill({
   jobId,
@@ -19,8 +23,7 @@ export function EndOfJobFormFill({
   const [values, setValues] = useState<Record<string, string | boolean>>(() => {
     const o: Record<string, string | boolean> = {};
     for (const f of fields) {
-      if (f.type === "boolean") o[f.id] = false;
-      else o[f.id] = "";
+      o[f.id] = emptyValueForField(f);
     }
     return o;
   });
@@ -28,12 +31,28 @@ export function EndOfJobFormFill({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
+  function setFieldValue(fieldId: string, next: string | boolean) {
+    setValues((prev) => {
+      const updated: Record<string, string | boolean> = { ...prev, [fieldId]: next };
+      // Clear dependents that become hidden after this change.
+      for (const f of fields) {
+        if (!f.showIf) continue;
+        if (!isEndOfJobFieldVisible(f, updated, fields)) {
+          updated[f.id] = emptyValueForField(f);
+        }
+      }
+      return updated;
+    });
+  }
+
+  const visibleFields = fields.filter((f) => isEndOfJobFieldVisible(f, values, fields));
+
   async function submit() {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     const body: Record<string, unknown> = {};
-    for (const f of fields) {
+    for (const f of visibleFields) {
       const raw = values[f.id];
       if (f.type === "number") {
         body[f.id] = typeof raw === "string" ? raw.trim() : raw;
@@ -78,7 +97,7 @@ export function EndOfJobFormFill({
   return (
     <div className="card" style={{ display: "grid", gap: "0.85rem", maxWidth: "36rem" }}>
       <h2 style={{ margin: 0, fontSize: "1.15rem" }}>End-of-job checklist · {jobNumber}</h2>
-      {fields.map((f) => (
+      {visibleFields.map((f) => (
         <label key={f.id} style={{ display: "grid", gap: "0.35rem" }}>
           <span>
             {f.label}
@@ -90,21 +109,21 @@ export function EndOfJobFormFill({
               rows={4}
               value={String(values[f.id] ?? "")}
               disabled={!canSubmit}
-              onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
+              onChange={(e) => setFieldValue(f.id, e.target.value)}
             />
           ) : f.type === "boolean" ? (
             <input
               type="checkbox"
               checked={values[f.id] === true}
               disabled={!canSubmit}
-              onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.checked }))}
+              onChange={(e) => setFieldValue(f.id, e.target.checked)}
             />
           ) : f.type === "select" ? (
             <select
               className="input"
               value={String(values[f.id] ?? "")}
               disabled={!canSubmit}
-              onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
+              onChange={(e) => setFieldValue(f.id, e.target.value)}
             >
               <option value="">—</option>
               {(f.options ?? []).map((opt) => (
@@ -119,7 +138,7 @@ export function EndOfJobFormFill({
               type={f.type === "number" ? "number" : "text"}
               value={String(values[f.id] ?? "")}
               disabled={!canSubmit}
-              onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
+              onChange={(e) => setFieldValue(f.id, e.target.value)}
             />
           )}
         </label>
