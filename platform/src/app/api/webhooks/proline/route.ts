@@ -30,6 +30,14 @@ function invoiceDeltaMarkerType(invoiceId: string): string {
   return `PROLINE_INVOICE_DELTA_${safe || "UNKNOWN"}`;
 }
 
+function paymentDeltaMarkerType(paymentId: string): string {
+  const safe = String(paymentId)
+    .trim()
+    .replace(/[^a-zA-Z0-9:_-]+/g, "_")
+    .slice(0, 120);
+  return `PROLINE_PAYMENT_DELTA_${safe || "UNKNOWN"}`;
+}
+
 function prolineWebhookDebugEnabled(): boolean {
   const v = (process.env.PROLINE_WEBHOOK_DEBUG || "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
@@ -127,6 +135,8 @@ export async function POST(req: Request) {
     hasContract:
       e.contractAmount !== undefined || e.approvedValue !== undefined || e.approvedTotal !== undefined,
     hasCost: e.cost !== undefined,
+    paymentId: e.paymentId ?? null,
+    paymentDelta: e.paymentDelta ?? null,
   });
 
   function incomingLifecycleFromEvent(): string | undefined {
@@ -156,6 +166,7 @@ export async function POST(req: Request) {
       e.costingComplete !== undefined ||
       e.amountPaid !== undefined ||
       e.grossRevenue !== undefined ||
+      e.paymentDelta !== undefined ||
       e.paidInFull !== undefined ||
       e.paidDate !== undefined ||
       e.invoicedDelta !== undefined;
@@ -372,10 +383,14 @@ export async function POST(req: Request) {
     data: Prisma.JobUpdateInput;
     invoiceDeltaApplied: boolean;
     invoiceDeltaSkippedDuplicate: boolean;
+    paymentDeltaApplied: boolean;
+    paymentDeltaSkippedDuplicate: boolean;
     paymentAmountIncreased: boolean;
   }> {
     const data: Prisma.JobUpdateInput = {};
     let paymentAmountIncreased = false;
+    let paymentDeltaApplied = false;
+    let paymentDeltaSkippedDuplicate = false;
     if (e.name !== undefined) data.name = e.name;
     if (e.leadNumber !== undefined) {
       const incomingLead = e.leadNumber?.trim() || null;
@@ -424,7 +439,27 @@ export async function POST(req: Request) {
     }
     if (e.cost !== undefined) data.cost = asDecimal(e.cost);
     if (e.costingComplete !== undefined) data.costingComplete = e.costingComplete;
-    {
+    // Per-payment webhooks: add net amount once per payment_id (do not replace cumulative paid).
+    if (e.paymentDelta !== undefined && e.paymentDelta > 0.0005 && e.paymentId) {
+      const marker = await prisma.jobEvent.findFirst({
+        where: { jobId: existing.id, type: paymentDeltaMarkerType(e.paymentId) },
+        select: { id: true },
+      });
+      if (marker) {
+        paymentDeltaSkippedDuplicate = true;
+      } else {
+        const existingPaid = existing.amountPaid?.toNumber() ?? 0;
+        const paid = existingPaid + e.paymentDelta;
+        paymentAmountIncreased = e.paymentDelta > 0.005;
+        data.amountPaid = asDecimal(paid);
+        paymentDeltaApplied = true;
+        const currentInvoiced = existing.invoicedTotal.toNumber();
+        if (currentInvoiced < paid - 0.005) {
+          data.invoicedTotal = asDecimal(paid);
+          data.invoiceFlag = true;
+        }
+      }
+    } else {
       const incomingPaid = e.amountPaid ?? e.grossRevenue;
       if (incomingPaid !== undefined) {
         const existingPaid = existing.amountPaid?.toNumber() ?? 0;
@@ -493,7 +528,14 @@ export async function POST(req: Request) {
       data.invoiceFlag = true;
     }
 
-    return { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate, paymentAmountIncreased };
+    return {
+      data,
+      invoiceDeltaApplied,
+      invoiceDeltaSkippedDuplicate,
+      paymentDeltaApplied,
+      paymentDeltaSkippedDuplicate,
+      paymentAmountIncreased,
+    };
   }
 
   async function createJob(): Promise<
@@ -549,7 +591,12 @@ export async function POST(req: Request) {
         projectRevenue: contract,
         cost: asDecimal(Math.max(0, e.cost ?? 0)),
         costingComplete: e.costingComplete ?? false,
-        amountPaid: e.amountPaid !== undefined ? asDecimal(Math.max(0, e.amountPaid)) : null,
+        amountPaid:
+          e.paymentDelta !== undefined
+            ? asDecimal(Math.max(0, e.paymentDelta))
+            : e.amountPaid !== undefined
+              ? asDecimal(Math.max(0, e.amountPaid))
+              : null,
         salespersonId,
         prolineJobId: e.prolineJobId,
         status: normalizeStatus(lifecycle),
@@ -575,7 +622,27 @@ export async function POST(req: Request) {
         payload: buildProlineEventPayload(),
       },
     });
-    const paymentFieldsPresent = e.amountPaid !== undefined || e.paidInFull !== undefined || e.paidDate !== undefined;
+    if (e.paymentDelta !== undefined && e.paymentDelta > 0.0005 && e.paymentId) {
+      await prisma.jobEvent.create({
+        data: {
+          jobId: job.id,
+          type: paymentDeltaMarkerType(e.paymentId),
+          source: "proline",
+          payload: {
+            paymentId: e.paymentId,
+            paymentNumber: e.paymentNumber ?? null,
+            paymentDelta: e.paymentDelta,
+            invoiceId: e.invoiceId ?? null,
+            invoiceNumber: e.invoiceNumber ?? null,
+          },
+        },
+      });
+    }
+    const paymentFieldsPresent =
+      e.paymentDelta !== undefined ||
+      e.amountPaid !== undefined ||
+      e.paidInFull !== undefined ||
+      e.paidDate !== undefined;
     await recalculateJobAndCommissions(job.id, {
       forceCommissionRecalc: paymentFieldsPresent,
       forceCommissionRecalcReason: "proline.webhook.create.payment_fields_present",
@@ -870,12 +937,19 @@ export async function POST(req: Request) {
           "Job update skipped: requires Open/Won/Complete/Closed (or an existing job already in that lifecycle).",
       });
     }
-    const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate, paymentAmountIncreased } =
-      await computeUpdateForExistingJob(existing);
+    const {
+      data,
+      invoiceDeltaApplied,
+      invoiceDeltaSkippedDuplicate,
+      paymentDeltaApplied,
+      paymentDeltaSkippedDuplicate,
+      paymentAmountIncreased,
+    } = await computeUpdateForExistingJob(existing);
     logProlineWebhook("upsert_update", {
       jobId: existing.id,
       jobNumber: existing.jobNumber,
       patchKeys: Object.keys(data),
+      paymentDeltaSkippedDuplicate,
     });
     await prisma.job.update({ where: { id: existing.id }, data });
     await prisma.jobEvent.create({
@@ -883,7 +957,10 @@ export async function POST(req: Request) {
         jobId: existing.id,
         type: "PROLINE_UPSERT",
         source: "proline",
-        payload: buildProlineEventPayload({ invoiceDeltaSkippedDuplicate }),
+        payload: buildProlineEventPayload({
+          invoiceDeltaSkippedDuplicate,
+          paymentDeltaSkippedDuplicate,
+        }),
       },
     });
     if (invoiceDeltaApplied && e.invoiceId) {
@@ -900,6 +977,22 @@ export async function POST(req: Request) {
         },
       });
     }
+    if (paymentDeltaApplied && e.paymentId) {
+      await prisma.jobEvent.create({
+        data: {
+          jobId: existing.id,
+          type: paymentDeltaMarkerType(e.paymentId),
+          source: "proline",
+          payload: {
+            paymentId: e.paymentId,
+            paymentNumber: e.paymentNumber ?? null,
+            paymentDelta: e.paymentDelta ?? null,
+            invoiceId: e.invoiceId ?? null,
+            invoiceNumber: e.invoiceNumber ?? null,
+          },
+        },
+      });
+    }
     const paymentFieldsChanged =
       paymentAmountIncreased ||
       Object.prototype.hasOwnProperty.call(data, "amountPaid") ||
@@ -912,7 +1005,13 @@ export async function POST(req: Request) {
         : "proline.webhook.upsert.update.payment_fields_changed",
     });
     await ensureRequiredNameWriteback(existing, e.name);
-    return NextResponse.json({ ok: true, jobId: existing.id, jobNumber: existing.jobNumber, upsert: "updated" });
+    return NextResponse.json({
+      ok: true,
+      jobId: existing.id,
+      jobNumber: existing.jobNumber,
+      upsert: "updated",
+      paymentDeltaSkippedDuplicate,
+    });
   }
 
   const existing = await findExistingJobForWebhook();
@@ -944,14 +1043,21 @@ export async function POST(req: Request) {
     });
   }
 
-  const { data, invoiceDeltaApplied, invoiceDeltaSkippedDuplicate, paymentAmountIncreased } =
-    await computeUpdateForExistingJob(existing);
+  const {
+    data,
+    invoiceDeltaApplied,
+    invoiceDeltaSkippedDuplicate,
+    paymentDeltaApplied,
+    paymentDeltaSkippedDuplicate,
+    paymentAmountIncreased,
+  } = await computeUpdateForExistingJob(existing);
 
   logProlineWebhook("typed_update", {
     internalType: e.internalType,
     jobId: existing.id,
     jobNumber: existing.jobNumber,
     patchKeys: Object.keys(data),
+    paymentDeltaSkippedDuplicate,
   });
   await prisma.job.update({ where: { id: existing.id }, data });
   await prisma.jobEvent.create({
@@ -959,7 +1065,10 @@ export async function POST(req: Request) {
       jobId: existing.id,
       type: "PROLINE_" + e.internalType.toUpperCase().replace(/\./g, "_"),
       source: "proline",
-      payload: buildProlineEventPayload({ invoiceDeltaSkippedDuplicate }),
+      payload: buildProlineEventPayload({
+        invoiceDeltaSkippedDuplicate,
+        paymentDeltaSkippedDuplicate,
+      }),
     },
   });
   if (invoiceDeltaApplied && e.invoiceId) {
@@ -972,6 +1081,22 @@ export async function POST(req: Request) {
           invoiceId: e.invoiceId,
           invoiceNumber: e.invoiceNumber ?? null,
           invoicedDelta: e.invoicedDelta ?? null,
+        },
+      },
+    });
+  }
+  if (paymentDeltaApplied && e.paymentId) {
+    await prisma.jobEvent.create({
+      data: {
+        jobId: existing.id,
+        type: paymentDeltaMarkerType(e.paymentId),
+        source: "proline",
+        payload: {
+          paymentId: e.paymentId,
+          paymentNumber: e.paymentNumber ?? null,
+          paymentDelta: e.paymentDelta ?? null,
+          invoiceId: e.invoiceId ?? null,
+          invoiceNumber: e.invoiceNumber ?? null,
         },
       },
     });
@@ -992,5 +1117,6 @@ export async function POST(req: Request) {
     jobId: existing.id,
     jobNumber: existing.jobNumber,
     invoiceDeltaSkippedDuplicate,
+    paymentDeltaSkippedDuplicate,
   });
 }
