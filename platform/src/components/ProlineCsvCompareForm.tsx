@@ -52,8 +52,8 @@ const FIELD_LABELS: Record<ProlineCsvCompareField, string> = {
   contractAmount: "Contract / approved",
   cost: "Cost",
   costingComplete: "Costing complete",
-  amountPaid: "Amount paid (net revenue)",
-  invoicedTotal: "Invoiced (gross revenue)",
+  amountPaid: "Amount paid (net of fees)",
+  invoicedTotal: "Invoiced (net of fees)",
 };
 
 function formatVal(v: unknown): string {

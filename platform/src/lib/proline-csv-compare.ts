@@ -131,6 +131,7 @@ type ParsedCsvRow = {
   costingComplete?: boolean;
   netRevenue?: number;
   grossRevenue?: number;
+  merchantFees?: number;
   accountsReceivable?: number;
 };
 
@@ -183,6 +184,7 @@ const HEADER_MAP: Record<string, keyof ParsedCsvRow> = {
   "costing complete": "costingComplete",
   "net revenue": "netRevenue",
   "gross revenue": "grossRevenue",
+  "merchant fees": "merchantFees",
   "accounts receivable": "accountsReceivable",
 };
 
@@ -305,21 +307,38 @@ export function mapCsvRowsToParsed(rows: string[][]): ParsedCsvRow[] {
       costingComplete: parseBool(get("costingComplete")),
       netRevenue: parseMoney(get("netRevenue")),
       grossRevenue: parseMoney(get("grossRevenue")),
+      merchantFees: parseMoney(get("merchantFees")),
       accountsReceivable: parseMoney(get("accountsReceivable")),
     });
   }
   return out;
 }
 
+/**
+ * Map CSV money columns to local Job fields.
+ * ProLine Gross Revenue includes card surcharge/fees; Net Revenue and Gross−Fees do not.
+ * Both amountPaid and invoicedTotal must stay fee-exclusive.
+ */
 export function remoteValuesFromParsed(row: ParsedCsvRow): ProlineCsvRemoteValues {
   const contractAmount =
     row.approvedValue !== undefined ? row.approvedValue : row.contractValue;
-  let invoicedTotal = row.grossRevenue;
+
+  const fees = Math.max(0, row.merchantFees ?? 0);
+  const netFromGross =
+    row.grossRevenue !== undefined ? Math.max(0, row.grossRevenue - fees) : undefined;
+
+  // Prefer authoritative Net Revenue; otherwise strip merchant fees from Gross.
+  const amountPaid =
+    row.netRevenue !== undefined ? Math.max(0, row.netRevenue) : netFromGross;
+
+  // Invoiced = fee-exclusive revenue recognized (never Payments Received with surcharge).
+  let invoicedTotal = netFromGross;
   if (invoicedTotal === undefined) {
     if (row.netRevenue !== undefined || row.accountsReceivable !== undefined) {
       invoicedTotal = Math.max(0, (row.netRevenue ?? 0) + (row.accountsReceivable ?? 0));
     }
   }
+
   return {
     jobNumber: row.jobNumber,
     leadNumber: row.leadNumber,
@@ -330,7 +349,7 @@ export function remoteValuesFromParsed(row: ParsedCsvRow): ProlineCsvRemoteValue
     contractAmount,
     cost: row.projectCosts,
     costingComplete: row.costingComplete,
-    amountPaid: row.netRevenue,
+    amountPaid,
     invoicedTotal,
   };
 }
@@ -405,7 +424,7 @@ function diffFields(
   if (remote.costingComplete !== undefined && local.costingComplete !== remote.costingComplete) {
     changed.push("costingComplete");
   }
-  if (remote.amountPaid !== undefined && !approxEqual(local.amountPaid, remote.amountPaid, tolerance)) {
+  if (remote.amountPaid !== undefined && !approxEqual(local.amountPaid ?? 0, remote.amountPaid, tolerance)) {
     changed.push("amountPaid");
   }
   if (remote.invoicedTotal !== undefined && !approxEqual(local.invoicedTotal, remote.invoicedTotal, tolerance)) {
