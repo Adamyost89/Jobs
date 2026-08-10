@@ -39,12 +39,25 @@ function pickString(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
-function commissionsListUrl(params: { payday?: string; spn?: string }): string {
+function commissionsListUrl(params: {
+  payday?: string;
+  spn?: string;
+  /** When true, show only checklist-blocked lines (default list hides them). */
+  blocked?: boolean;
+}): string {
   const q = new URLSearchParams();
   if (params.payday?.trim()) q.set("payday", params.payday.trim());
   if (params.spn?.trim()) q.set("spn", params.spn.trim());
+  if (params.blocked) q.set("blocked", "1");
   const s = q.toString();
   return s ? `/dashboard/commissions?${s}` : "/dashboard/commissions";
+}
+
+function parseBlockedParam(raw: string | string[] | undefined): boolean {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v) return false;
+  const t = String(v).trim().toLowerCase();
+  return t === "1" || t === "true" || t === "yes";
 }
 
 export default async function CommissionsPage({
@@ -58,6 +71,7 @@ export default async function CommissionsPage({
   const showCalcTrace = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
   const canFilterBySalesperson = canViewHrPayroll(user);
   const salespersonDisplayToken = canFilterBySalesperson ? pickString(sp.spn)?.trim() : undefined;
+  const showBlocked = parseBlockedParam(sp.blocked);
 
   const defaultPaydayIso = getUpcomingFridayIsoForPayrollTz(new Date());
   const selectedPaydayIso = parsePaydayParam(sp.payday) ?? defaultPaydayIso;
@@ -185,7 +199,7 @@ export default async function CommissionsPage({
     return { c, key, lines, linesAllLen, displayPaid, displayOwed, payoutSum, sub, rowHl };
   });
 
-  const rowModels = rowModelsAll
+  const owedRowModels = rowModelsAll
     .filter((m) => roundMoney(m.displayOwed) > 0.005)
     .sort((a, b) => {
       const jnA = a.c.job.jobNumber;
@@ -197,6 +211,11 @@ export default async function CommissionsPage({
       return a.c.salespersonId.localeCompare(b.c.salespersonId);
     });
 
+  const blockedCount = owedRowModels.filter((m) => commissionPayoutBlockedForJob(m.c.job)).length;
+  const rowModels = showBlocked
+    ? owedRowModels.filter((m) => commissionPayoutBlockedForJob(m.c.job))
+    : owedRowModels.filter((m) => !commissionPayoutBlockedForJob(m.c.job));
+
   const money2 = (n: number) =>
     n.toLocaleString(undefined, {
       style: "currency",
@@ -205,13 +224,18 @@ export default async function CommissionsPage({
       maximumFractionDigits: 2,
     });
 
+  const listUrlBase = {
+    payday: canMarkCommissionPaid(user) ? selectedPaydayIso : undefined,
+    spn: salespersonDisplayToken,
+  };
+
   return (
     <div className="page-stack page-stack--full">
       <div className="page-title-row">
         <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Commission lines</h1>
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 520 }}>
-          Outstanding balances only (all job years). Pay is blocked until the end-of-job checklist is submitted. Full
-          payout rollups: <Link href="/dashboard/commissions/payout-summary">Payout rollups</Link>
+          Outstanding balances only (all job years). Checklist-blocked lines stay hidden until you open them from the
+          filters. Full payout rollups: <Link href="/dashboard/commissions/payout-summary">Payout rollups</Link>
         </p>
       </div>
 
@@ -220,12 +244,13 @@ export default async function CommissionsPage({
           Payday default when posting: <code>{selectedPaydayIso}</code> (pay period: <code>{suggestedPayPeriod}</code>)
         </p>
       ) : null}
-      {canFilterBySalesperson ? (
-        <form method="get" className="card" style={{ padding: "0.85rem 1.15rem" }}>
-          <div className="filter-bar">
-            {canMarkCommissionPaid(user) ? (
-              <input type="hidden" name="payday" value={selectedPaydayIso} />
-            ) : null}
+      <form method="get" className="card" style={{ padding: "0.85rem 1.15rem" }}>
+        <div className="filter-bar">
+          {canMarkCommissionPaid(user) ? (
+            <input type="hidden" name="payday" value={selectedPaydayIso} />
+          ) : null}
+          {showBlocked ? <input type="hidden" name="blocked" value="1" /> : null}
+          {canFilterBySalesperson ? (
             <label>
               Salesperson
               <select name="spn" defaultValue={salespersonDisplayToken || ""}>
@@ -237,28 +262,48 @@ export default async function CommissionsPage({
                 ))}
               </select>
             </label>
-            <div className="filter-bar__actions">
-              <button className="btn" type="submit">
-                Apply
-              </button>
-              <Link
-                href={commissionsListUrl({
-                  payday: canMarkCommissionPaid(user) ? selectedPaydayIso : undefined,
-                })}
-                className="btn secondary"
-                style={{ textDecoration: "none" }}
-              >
-                All reps
-              </Link>
-            </div>
+          ) : null}
+          <div className="filter-bar__actions">
+            {canFilterBySalesperson ? (
+              <>
+                <button className="btn" type="submit">
+                  Apply
+                </button>
+                <Link
+                  href={commissionsListUrl({
+                    payday: canMarkCommissionPaid(user) ? selectedPaydayIso : undefined,
+                    blocked: showBlocked,
+                  })}
+                  className="btn secondary"
+                  style={{ textDecoration: "none" }}
+                >
+                  All reps
+                </Link>
+              </>
+            ) : null}
+            <Link
+              href={commissionsListUrl({ ...listUrlBase, blocked: !showBlocked })}
+              className={showBlocked ? "btn" : "btn secondary"}
+              style={{ textDecoration: "none" }}
+              title={
+                showBlocked
+                  ? "Hide checklist-blocked lines and return to payable balances"
+                  : "Show lines waiting on end-of-job checklist"
+              }
+            >
+              {showBlocked
+                ? `Hide blocked${blockedCount ? ` (${blockedCount})` : ""}`
+                : `Blocked commissions${blockedCount ? ` (${blockedCount})` : ""}`}
+            </Link>
           </div>
-        </form>
-      ) : null}
+        </div>
+      </form>
       {canMarkCommissionPaid(user) ? (
         <form method="GET" className="page-actions-inline">
           {salespersonDisplayToken ? (
             <input type="hidden" name="spn" value={salespersonDisplayToken} />
           ) : null}
+          {showBlocked ? <input type="hidden" name="blocked" value="1" /> : null}
           <label htmlFor="payday" style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
             Payday for all lines:
           </label>
@@ -274,7 +319,7 @@ export default async function CommissionsPage({
           </button>
           <Link
             className="btn btn-ghost"
-            href={commissionsListUrl({ spn: salespersonDisplayToken })}
+            href={commissionsListUrl({ spn: salespersonDisplayToken, blocked: showBlocked })}
             style={{ fontSize: "0.82rem" }}
           >
             Reset to today
@@ -289,7 +334,19 @@ export default async function CommissionsPage({
         </p>
       ) : null}
 
-      {canFilterBySalesperson && salespersonDisplayToken ? (
+      {showBlocked ? (
+        <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)" }}>
+          Showing <strong style={{ color: "var(--text)" }}>{rowModels.length}</strong> checklist-blocked line
+          {rowModels.length === 1 ? "" : "s"}
+          {salespersonDisplayToken ? (
+            <>
+              {" "}
+              for <strong style={{ color: "var(--text)" }}>{salespersonDisplayToken}</strong>
+            </>
+          ) : null}
+          . Pay stays blocked until the form is submitted.
+        </p>
+      ) : canFilterBySalesperson && salespersonDisplayToken ? (
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)" }}>
           Showing <strong style={{ color: "var(--text)" }}>{rowModels.length}</strong> line
           {rowModels.length === 1 ? "" : "s"} for <strong style={{ color: "var(--text)" }}>{salespersonDisplayToken}</strong>
@@ -324,7 +381,10 @@ export default async function CommissionsPage({
                   }
                   style={{ color: "var(--muted)" }}
                 >
-                  No commission lines with a balance still owed (after ledger + posted checks).
+                  No commission lines with a balance still owed
+                  {showBlocked
+                    ? " that are checklist-blocked."
+                    : " (checklist-blocked lines are hidden — use Blocked commissions to view them)."}
                 </td>
               </tr>
             ) : (
