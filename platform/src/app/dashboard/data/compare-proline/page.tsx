@@ -21,8 +21,8 @@ export default async function CompareProlineCsvPage() {
         </Link>
       </div>
       <p className="help" style={{ margin: 0 }}>
-        Scan a ProLine projects export against local jobs for identity and money mismatches, then optionally
-        apply selected fixes (same dry-run → apply flow as payment reconcile).
+        Scan a ProLine projects export against local jobs for identity, status, and money mismatches, then
+        optionally apply selected fixes (same dry-run → apply flow as payment reconcile).
       </p>
       <ProlineCsvCompareForm />
     </div>

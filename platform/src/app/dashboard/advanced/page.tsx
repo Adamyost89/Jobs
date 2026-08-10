@@ -49,8 +49,8 @@ export default async function AdvancedHubPage() {
         <div className="card" style={{ display: "grid", gap: "0.65rem" }}>
           <h2 style={{ margin: 0, fontSize: "1.05rem" }}>ProLine tools</h2>
           <p style={{ margin: 0, fontSize: "0.88rem" }}>
-            <Link href="/dashboard/data/compare-proline">Compare ProLine CSV export</Link> — dry-run identity
-            and money fields against local jobs, then apply selected fixes.
+            <Link href="/dashboard/data/compare-proline">Compare ProLine CSV export</Link> — dry-run identity,
+            status, and money fields against local jobs, then apply selected fixes.
           </p>
           <ReconcileProlinePaymentsButton />
         </div>

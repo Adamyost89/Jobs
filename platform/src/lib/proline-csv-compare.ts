@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
+import { normalizeStatus } from "@/lib/status";
 
 /** Fields that can be reported / applied from a ProLine projects CSV. */
 export const PROLINE_CSV_COMPARE_FIELDS = [
@@ -7,6 +8,8 @@ export const PROLINE_CSV_COMPARE_FIELDS = [
   "leadNumber",
   "prolineJobId",
   "name",
+  "status",
+  "prolineStage",
   "contractAmount",
   "cost",
   "costingComplete",
@@ -16,11 +19,13 @@ export const PROLINE_CSV_COMPARE_FIELDS = [
 
 export type ProlineCsvCompareField = (typeof PROLINE_CSV_COMPARE_FIELDS)[number];
 
-/** Default apply set: identity + money, excluding high-caution jobNumber. */
+/** Default apply set: identity + status + money, excluding high-caution jobNumber. */
 export const DEFAULT_APPLY_FIELDS: ProlineCsvCompareField[] = [
   "leadNumber",
   "prolineJobId",
   "name",
+  "status",
+  "prolineStage",
   "contractAmount",
   "cost",
   "costingComplete",
@@ -37,6 +42,10 @@ export type ProlineCsvRemoteValues = {
   leadNumber?: string;
   prolineJobId?: string;
   name?: string;
+  /** Normalized lifecycle status (SOLD, COMPLETE, …). */
+  status?: string;
+  /** Raw ProLine pipeline stage from CSV Stage column. */
+  prolineStage?: string;
   contractAmount?: number;
   cost?: number;
   costingComplete?: boolean;
@@ -49,6 +58,8 @@ export type ProlineCsvLocalValues = {
   leadNumber: string | null;
   prolineJobId: string | null;
   name: string | null;
+  status: string;
+  prolineStage: string | null;
   contractAmount: number;
   cost: number;
   costingComplete: boolean;
@@ -110,6 +121,10 @@ type ParsedCsvRow = {
   leadNumber?: string;
   prolineJobId?: string;
   name?: string;
+  /** Raw ProLine Status column (won, complete, open, …). */
+  statusRaw?: string;
+  /** Raw ProLine Stage column. */
+  stageRaw?: string;
   approvedValue?: number;
   contractValue?: number;
   projectCosts?: number;
@@ -125,6 +140,8 @@ type JobSelect = {
   leadNumber: string | null;
   prolineJobId: string | null;
   name: string | null;
+  status: string;
+  prolineStage: string | null;
   contractAmount: Prisma.Decimal;
   cost: Prisma.Decimal;
   costingComplete: boolean;
@@ -138,6 +155,8 @@ const JOB_SELECT = {
   leadNumber: true,
   prolineJobId: true,
   name: true,
+  status: true,
+  prolineStage: true,
   contractAmount: true,
   cost: true,
   costingComplete: true,
@@ -156,6 +175,8 @@ const HEADER_MAP: Record<string, keyof ParsedCsvRow> = {
   "job number2": "jobNumber",
   "project number": "leadNumber",
   "proline project id": "prolineJobId",
+  status: "statusRaw",
+  stage: "stageRaw",
   "approved value": "approvedValue",
   "contract value": "contractValue",
   "project costs": "projectCosts",
@@ -276,6 +297,8 @@ export function mapCsvRowsToParsed(rows: string[][]): ParsedCsvRow[] {
       jobNumber: parseStr(get("jobNumber")),
       leadNumber: parseStr(get("leadNumber")),
       prolineJobId: parseStr(get("prolineJobId")),
+      statusRaw: parseStr(get("statusRaw")),
+      stageRaw: parseStr(get("stageRaw")),
       approvedValue: parseMoney(get("approvedValue")),
       contractValue: parseMoney(get("contractValue")),
       projectCosts: parseMoney(get("projectCosts")),
@@ -302,6 +325,8 @@ export function remoteValuesFromParsed(row: ParsedCsvRow): ProlineCsvRemoteValue
     leadNumber: row.leadNumber,
     prolineJobId: row.prolineJobId,
     name: row.name,
+    status: row.statusRaw ? normalizeStatus(row.statusRaw) : undefined,
+    prolineStage: row.stageRaw,
     contractAmount,
     cost: row.projectCosts,
     costingComplete: row.costingComplete,
@@ -328,12 +353,22 @@ function localSnapshot(job: JobSelect): ProlineCsvLocalValues {
     leadNumber: job.leadNumber,
     prolineJobId: job.prolineJobId,
     name: job.name,
+    status: job.status,
+    prolineStage: job.prolineStage,
     contractAmount: job.contractAmount.toNumber(),
     cost: job.cost.toNumber(),
     costingComplete: job.costingComplete,
     amountPaid: job.amountPaid ? job.amountPaid.toNumber() : null,
     invoicedTotal: job.invoicedTotal.toNumber(),
   };
+}
+
+function statusEqual(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a ?? "").trim().toUpperCase() === (b ?? "").trim().toUpperCase();
+}
+
+function stageEqual(a: string | null | undefined, b: string | null | undefined): boolean {
+  return (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
 }
 
 function diffFields(
@@ -354,6 +389,12 @@ function diffFields(
   }
   if (remote.name !== undefined && !namesEqual(local.name, remote.name)) {
     changed.push("name");
+  }
+  if (remote.status !== undefined && !statusEqual(local.status, remote.status)) {
+    changed.push("status");
+  }
+  if (remote.prolineStage !== undefined && !stageEqual(local.prolineStage, remote.prolineStage)) {
+    changed.push("prolineStage");
   }
   if (remote.contractAmount !== undefined && !approxEqual(local.contractAmount, remote.contractAmount, tolerance)) {
     changed.push("contractAmount");
@@ -436,6 +477,12 @@ function buildUpdateData(
         break;
       case "name":
         if (remote.name) data.name = remote.name;
+        break;
+      case "status":
+        if (remote.status) data.status = remote.status;
+        break;
+      case "prolineStage":
+        if (remote.prolineStage) data.prolineStage = remote.prolineStage;
         break;
       case "contractAmount":
         if (remote.contractAmount !== undefined) {

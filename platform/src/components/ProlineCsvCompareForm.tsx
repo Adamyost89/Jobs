@@ -32,6 +32,8 @@ const IDENTITY_FIELDS: ProlineCsvCompareField[] = [
   "jobNumber",
 ];
 
+const STATUS_FIELDS: ProlineCsvCompareField[] = ["status", "prolineStage"];
+
 const MONEY_FIELDS: ProlineCsvCompareField[] = [
   "contractAmount",
   "cost",
@@ -45,6 +47,8 @@ const FIELD_LABELS: Record<ProlineCsvCompareField, string> = {
   leadNumber: "Lead / project #",
   prolineJobId: "ProLine ID",
   name: "Name",
+  status: "Lifecycle status",
+  prolineStage: "ProLine stage",
   contractAmount: "Contract / approved",
   cost: "Cost",
   costingComplete: "Costing complete",
@@ -162,7 +166,7 @@ export function ProlineCsvCompareForm() {
     <div style={{ display: "grid", gap: "1rem" }}>
       <div className="card" style={{ display: "grid", gap: "0.75rem" }}>
         <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem" }}>
-          Upload a ProLine <code>projects-export-*.csv</code>. Dry-run first to see identity and money
+          Upload a ProLine <code>projects-export-*.csv</code>. Dry-run first to see identity, status, and money
           mismatches, then apply selected field fixes to matching jobs. Unmatched CSV rows are reported
           only (no creates).
         </p>
@@ -198,6 +202,15 @@ export function ProlineCsvCompareForm() {
               type="button"
               className="btn secondary"
               style={{ fontSize: "0.8rem" }}
+              onClick={() => setCategory(STATUS_FIELDS, true)}
+              disabled={busy}
+            >
+              Status
+            </button>
+            <button
+              type="button"
+              className="btn secondary"
+              style={{ fontSize: "0.8rem" }}
               onClick={() => setCategory(MONEY_FIELDS, true)}
               disabled={busy}
             >
@@ -222,7 +235,7 @@ export function ProlineCsvCompareForm() {
               Clear
             </button>
           </div>
-          <div style={{ display: "grid", gap: "0.65rem", gridTemplateColumns: "1fr 1fr" }}>
+          <div style={{ display: "grid", gap: "0.65rem", gridTemplateColumns: "1fr 1fr 1fr" }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.35rem" }}>Identity</div>
               {IDENTITY_FIELDS.map((f) => (
@@ -237,6 +250,20 @@ export function ProlineCsvCompareForm() {
                   {f === "jobNumber" ? (
                     <span style={{ color: "var(--muted)", fontSize: "0.78rem" }}>(caution)</span>
                   ) : null}
+                </label>
+              ))}
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.35rem" }}>Status</div>
+              {STATUS_FIELDS.map((f) => (
+                <label key={f} style={{ display: "flex", gap: "0.4rem", alignItems: "center", fontSize: "0.88rem" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedFields.has(f)}
+                    onChange={() => toggleField(f)}
+                    disabled={busy}
+                  />
+                  {FIELD_LABELS[f]}
                 </label>
               ))}
             </div>
