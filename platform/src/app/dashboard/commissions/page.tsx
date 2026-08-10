@@ -21,7 +21,7 @@ import {
   salespersonCommissionFilterByDisplayToken,
 } from "@/lib/salesperson-name";
 import { CommissionExplainButton } from "@/components/CommissionExplainButton";
-import { commissionJobAllowedForPayoutSheetWhere } from "@/lib/end-of-job-form";
+import { commissionPayoutBlockedForJob } from "@/lib/end-of-job-form";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
 import { JobContractPaidHints } from "@/components/JobContractPaidHints";
@@ -66,7 +66,6 @@ export default async function CommissionsPage({
 
   const parts: Prisma.CommissionWhereInput[] = [];
   parts.push({ owedAmount: { gt: 0 } });
-  parts.push(commissionJobAllowedForPayoutSheetWhere);
   if (!canViewAllJobs(user)) {
     parts.push(
       user.salespersonIds.length > 0
@@ -111,6 +110,8 @@ export default async function CommissionsPage({
           leadNumber: true,
           contractAmount: true,
           amountPaid: true,
+          endOfJobFormRequiredAt: true,
+          endOfJobFormSubmittedAt: true,
         },
       },
       salesperson: { select: { name: true, active: true } },
@@ -209,8 +210,8 @@ export default async function CommissionsPage({
       <div className="page-title-row">
         <h1 style={{ margin: 0, fontSize: "1.65rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Commission lines</h1>
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 520 }}>
-          Outstanding balances only (all job years). Full payout rollups:{" "}
-          <Link href="/dashboard/commissions/payout-summary">Payout rollups</Link>
+          Outstanding balances only (all job years). Pay is blocked until the end-of-job checklist is submitted. Full
+          payout rollups: <Link href="/dashboard/commissions/payout-summary">Payout rollups</Link>
         </p>
       </div>
 
@@ -329,6 +330,7 @@ export default async function CommissionsPage({
             ) : (
               rowModels.map((m) => {
                 const { c, lines, linesAllLen, displayPaid, displayOwed, payoutSum, sub, rowHl } = m;
+                const formPending = commissionPayoutBlockedForJob(c.job);
                 const more = linesAllLen > 15 ? (
                   <p style={{ margin: "0.35rem 0 0", fontSize: "0.78rem", color: "var(--muted)" }}>
                     Showing 15 most recent — open <Link href="/dashboard/commissions/payout-summary">Payout rollups</Link>{" "}
@@ -351,6 +353,14 @@ export default async function CommissionsPage({
                         />
                       </div>
                       {sub && <div className="cell-sub">{sub}</div>}
+                      {formPending ? (
+                        <div className="cell-sub" style={{ color: "salmon" }}>
+                          Checklist pending ·{" "}
+                          <Link href={`/dashboard/forms/${c.jobId}`} style={{ color: "inherit" }}>
+                            Open form
+                          </Link>
+                        </div>
+                      ) : null}
                       {canViewJobContractAndPaidForCommissions(user) ? (
                         <JobContractPaidHints
                           contractAmount={c.job.contractAmount.toNumber()}
@@ -378,7 +388,12 @@ export default async function CommissionsPage({
                     <td>{c.override ? <span className="status-pill status-pill--warn">Override</span> : ""}</td>
                     {canMarkCommissionPaid(user) && (
                       <td style={{ verticalAlign: "top" }}>
-                        {!c.override && c.salesperson.active && displayOwed > 0 ? (
+                        {formPending ? (
+                          <span style={{ fontSize: "0.82rem", color: "salmon", lineHeight: 1.35 }}>
+                            Pay blocked until checklist submitted.{" "}
+                            <Link href={`/dashboard/forms/${c.jobId}`}>Open form</Link>
+                          </span>
+                        ) : !c.override && c.salesperson.active && displayOwed > 0 ? (
                           <PayCommissionForm
                             commissionId={c.id}
                             defaultOwed={displayOwed}
