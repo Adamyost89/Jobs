@@ -389,6 +389,21 @@ export async function computePaceProjection(
     return (current * currentWeight + historical * historicalWeight) / (currentWeight + historicalWeight);
   }
 
+  /**
+   * For volume (# / $): history can lift someone behind their run-rate, but never
+   * drag down a seasonality pace that already exceeds historical (top performers).
+   */
+  function blendHistoryAsFloor(
+    pace: number,
+    historical: number,
+    currentWeight: number,
+    historicalWeight: number
+  ): number {
+    if (!(historical > 0.005) || historicalWeight <= 0) return pace;
+    if (pace >= historical) return pace;
+    return blendWithHistory(pace, historical, currentWeight, historicalWeight);
+  }
+
   const scale =
     expectedShareComplete > 0.02 && !isFinal && !isFutureYear ? 1 / expectedShareComplete : 1;
 
@@ -429,9 +444,12 @@ export async function computePaceProjection(
       const paceCount = ytd.jobCount * scale;
       const paceTotal = ytd.total * scale;
 
+      // Volume: seasonality pace, with history only as a floor when behind.
       const jobCount = Math.max(
         ytd.jobCount,
-        Math.round(blendWithHistory(paceCount, historicalAvgAnnualCount, ytdWeight, histWeight))
+        Math.round(
+          blendHistoryAsFloor(paceCount, historicalAvgAnnualCount, ytdWeight, histWeight)
+        )
       );
 
       const histAvgTicket =
@@ -440,6 +458,7 @@ export async function computePaceProjection(
           : historicalCompanyAvgPerContract > 0.005
             ? historicalCompanyAvgPerContract
             : 0;
+      // Ticket size / GP%: still regress toward historical mean (two-way blend).
       let avgPerContract = blendWithHistory(
         ytd.avgPerContract,
         histAvgTicket,
@@ -447,8 +466,7 @@ export async function computePaceProjection(
         histWeight
       );
 
-      // Signed $: blend seasonality-scaled YTD $ with historical annual $, and with count × avg.
-      const fromPaceAndHist = blendWithHistory(
+      const fromPaceAndHist = blendHistoryAsFloor(
         paceTotal,
         historicalAvgAnnualTotal,
         ytdWeight,
