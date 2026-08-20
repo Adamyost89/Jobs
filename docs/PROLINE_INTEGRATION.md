@@ -64,7 +64,7 @@ ProLine’s **Create Webhook** dialog exposes these triggers:
 | **Quote Sent or Approved** | On **approve/sign** (`approved_date` present, e.g. status `Fully Signed`): **create** a `Job` if none exists for that project, else update contract/signed date. Quote-only *sent* events (no `approved_date`) are ignored. Native bodies that include both `quote_id` and `project_id` still use this path (not project upsert). |
 | **Invoice Sent or Paid** | Update **invoiced** totals and/or **paid** state (maps to `invoice` / `payment`). |
 
-The HTTP handler accepts either the **legacy** `type` field (`job.signed`, `job.updated`, `invoice`, `payment`) or a **`trigger`** string that matches the labels above (case/spacing flexible). **Native ProLine project webhooks** often send flat fields such as `project_id`, `project_name`, `project_number`, `type` (job category like `Remodel`, not legacy routing), `approved_value` / `quoted_value`, `status`, and `assigned_to_id` / `assigned_to_name`; those are mapped to the internal upsert path automatically.
+The HTTP handler accepts either the **legacy** `type` field (`job.signed`, `job.updated`, `invoice`, `payment`) or a **`trigger`** string that matches the labels above (case/spacing flexible). **Native ProLine project webhooks** often send flat fields such as `project_id`, `project_name`, `project_number`, `type` (job category like `Remodel`, not legacy routing), `approved_value` / `quoted_value`, `status`, `location` (office/branch, e.g. Troy), and `assigned_to_id` / `assigned_to_name`; those are mapped to the internal upsert path automatically.
 
 ## ProLine user IDs → salesperson
 

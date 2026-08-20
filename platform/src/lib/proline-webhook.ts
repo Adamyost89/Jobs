@@ -131,6 +131,8 @@ export type NormalizedProlineEvent = {
   status?: string;
   /** Pipeline stage for display; automation uses `status` only. */
   prolineStage?: string;
+  /** ProLine office/branch location (e.g. "Troy"). */
+  location?: string | null;
   paidInFull?: boolean;
   paidDate?: string | null;
   cost?: number;
@@ -261,6 +263,13 @@ export function pickProlineStageFromRecord(body: Record<string, unknown>): strin
     const v = body[k];
     if (typeof v === "string" && v.trim()) return v.trim();
   }
+  return undefined;
+}
+
+/** ProLine office/branch location (distinct from contact `city`). */
+export function pickProlineLocationFromRecord(body: Record<string, unknown>): string | undefined {
+  const v = body.location;
+  if (typeof v === "string" && v.trim()) return v.trim();
   return undefined;
 }
 
@@ -617,6 +626,7 @@ export function normalizeProlineWebhookBody(
       invoiceNumber: typeof body.invoiceNumber === "string" ? body.invoiceNumber : undefined,
       status: typeof body.status === "string" ? body.status : undefined,
       prolineStage: pickProlineStageFromRecord(body),
+      location: pickProlineLocationFromRecord(body),
       paidInFull: typeof body.paidInFull === "boolean" ? body.paidInFull : undefined,
       paidDate: (body.paidDate as string | null | undefined) ?? null,
       approvedDate: (body.approvedDate as string | null | undefined) ?? null,

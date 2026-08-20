@@ -424,6 +424,10 @@ export async function POST(req: Request) {
       const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
       data.prolineStage = s === "" ? null : s;
     }
+    if (e.location !== undefined) {
+      const loc = e.location == null ? "" : String(e.location).trim();
+      data.location = loc === "" ? null : loc;
+    }
     {
       let nextProlineStageForChecklist: string | null | undefined = existing.prolineStage;
       if (e.prolineStage !== undefined) {
@@ -601,6 +605,7 @@ export async function POST(req: Request) {
         prolineJobId: e.prolineJobId,
         status: normalizeStatus(lifecycle),
         prolineStage: e.prolineStage ?? null,
+        location: e.location?.trim() || null,
         paidInFull:
           isPaidAndClosedLabel(incomingLifecycleFromEvent()) || isPaidAndClosedLabel(e.prolineStage)
             ? true
@@ -747,6 +752,7 @@ export async function POST(req: Request) {
         prolineJobId: e.prolineJobId,
         status: normalizeStatus(statusRaw ?? "UNKNOWN"),
         prolineStage: e.prolineStage ?? null,
+        location: e.location?.trim() || null,
         paidInFull:
           isPaidAndClosedLabel(incomingLifecycleFromEvent()) || isPaidAndClosedLabel(e.prolineStage)
             ? true
@@ -828,6 +834,10 @@ export async function POST(req: Request) {
     if (e.prolineStage !== undefined) {
       const s = e.prolineStage == null ? "" : String(e.prolineStage).trim();
       data.prolineStage = s === "" ? null : s;
+    }
+    if (e.location !== undefined) {
+      const loc = e.location == null ? "" : String(e.location).trim();
+      data.location = loc === "" ? null : loc;
     }
     {
       let nextProlineStageForChecklist: string | null | undefined = existing.prolineStage;

@@ -156,6 +156,7 @@ export async function syncProlineJobsFromApi(
         continue;
       }
       const stageStr = pickProlineStageFromRecord(flat);
+      const locationStr = pickStr(flat, ["location"]);
       const contractAmount = pickOptionalMoney(flat, [
         "approved_value",
         "approved_total",
@@ -192,6 +193,7 @@ export async function syncProlineJobsFromApi(
             prolineJobId,
             status: normalizeStatus(lifecycleStr),
             prolineStage: stageStr ?? null,
+            location: locationStr ?? null,
             sourceSheet: "proline_api",
             endOfJobFormRequiredAt:
               endOfJobFormRequiredAtIfNewlyTriggered(
@@ -224,6 +226,7 @@ export async function syncProlineJobsFromApi(
       }
       data.status = normalizeStatus(lifecycleStr);
       if (stageStr) data.prolineStage = stageStr;
+      if (locationStr) data.location = locationStr;
       const nextStage = stageStr ?? existing.prolineStage;
       const requiredAt = endOfJobFormRequiredAtIfNewlyTriggered(existing, nextStage, endOfJobFormTrigger);
       if (requiredAt) data.endOfJobFormRequiredAt = requiredAt;

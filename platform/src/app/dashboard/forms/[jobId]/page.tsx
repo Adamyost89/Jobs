@@ -32,6 +32,7 @@ export default async function FormForJobPage({ params }: { params: Promise<{ job
         year: true,
         name: true,
         leadNumber: true,
+        location: true,
         prolineJobId: true,
         prolineStage: true,
         salespersonId: true,
@@ -86,6 +87,7 @@ export default async function FormForJobPage({ params }: { params: Promise<{ job
         <span>
           <strong style={{ color: "var(--text)" }}>{job.jobNumber}</strong>
           {job.name ? ` · ${job.name}` : ""}
+          {job.location?.trim() ? ` · ${job.location.trim()}` : ""}
           {job.salesperson ? ` · ${displaySalespersonName(job.salesperson.name)}` : ""}
           {job.leadNumber ? ` · Lead ${job.leadNumber}` : ""}
         </span>

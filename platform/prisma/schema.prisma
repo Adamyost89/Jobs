@@ -103,6 +103,8 @@ model Job {
   status           String    @default("UNKNOWN")
   /** ProLine pipeline stage (shown in Jobs “Status” column when set; separate from lifecycle `status`). */
   prolineStage     String?
+  /** ProLine office/branch location (e.g. "Troy"); used on Forms + review-request Zap. */
+  location         String?
   drewParticipation String?
   paidDate         DateTime?
   salespersonId  String?

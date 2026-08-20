@@ -125,6 +125,7 @@ export default async function FormsQueuePage({
         year: true,
         name: true,
         leadNumber: true,
+        location: true,
         prolineStage: true,
         endOfJobFormRequiredAt: true,
         endOfJobFormSubmittedAt: true,
@@ -269,6 +270,7 @@ export default async function FormsQueuePage({
                 <th>Year</th>
                 <th>Rep</th>
                 <th>Customer</th>
+                <th>Location</th>
                 <th>Stage</th>
                 <th>{view === "pending" ? "Required since (ET)" : "Submitted (ET)"}</th>
                 <th></th>
@@ -283,6 +285,7 @@ export default async function FormsQueuePage({
                     {j.salesperson ? displaySalespersonName(j.salesperson.name) : "—"}
                   </td>
                   <td style={{ maxWidth: 220 }}>{j.name?.trim() || "—"}</td>
+                  <td className="cell-nowrap">{j.location?.trim() || "—"}</td>
                   <td style={{ maxWidth: 200 }}>{j.prolineStage?.trim() || "—"}</td>
                   <td className="cell-nowrap">
                     {view === "pending"
