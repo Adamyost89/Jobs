@@ -22,7 +22,7 @@ export type PaceAmRow = {
   name: string;
   ytd: PaceMetricBlock;
   projected: PaceMetricBlock;
-  /** Average full-year signed $ across complete prior years (0 if none). */
+  /** Average full-year signed $ across prior years (partial tenure years are annualized). */
   historicalAvgAnnualTotal: number;
   historicalAvgAnnualCount: number;
   /** Historical average signed $ per contract (0 if none). */
@@ -114,6 +114,42 @@ function emptyAmYear(): AmYearAgg {
     yearCount: 0,
     yearGp: 0,
     yearGpRevenue: 0,
+  };
+}
+
+/**
+ * Fraction of the calendar year an AM appears active, from first→last month with a
+ * signed date. Mid-year starts (e.g. James in 2024) return < 1 so we can annualize.
+ * Returns null when there is too little dated activity to trust (< ~3 months).
+ */
+function activeYearFraction(agg: AmYearAgg): number | null {
+  let first = 0;
+  let last = 0;
+  for (let m = 1; m <= 12; m++) {
+    if (agg.byMonth[m]!.count <= 0) continue;
+    if (first === 0) first = m;
+    last = m;
+  }
+  if (first === 0) {
+    // Undated-only year — cannot detect a partial start; treat as full year if any volume.
+    return agg.yearCount > 0 ? 1 : null;
+  }
+  const months = last - first + 1;
+  if (months < 3) return null;
+  return months / 12;
+}
+
+/** Annualize a partial tenure year to a full-year run-rate (no-op when fraction is 1). */
+function annualizeForHistory(
+  agg: AmYearAgg
+): { total: number; count: number; gp: number; gpRevenue: number } | null {
+  const fraction = activeYearFraction(agg);
+  if (fraction == null || fraction <= 0) return null;
+  return {
+    total: agg.yearTotal / fraction,
+    count: agg.yearCount / fraction,
+    gp: agg.yearGp,
+    gpRevenue: agg.yearGpRevenue,
   };
 }
 
@@ -281,17 +317,23 @@ export async function computePaceProjection(
   for (const [amName, yearMap] of byAmYear) {
     let totalSum = 0;
     let countSum = 0;
+    let actualTotalSum = 0;
+    let actualCountSum = 0;
     let years = 0;
     let gp = 0;
     let gpRevenue = 0;
     for (const y of sortedPrior) {
       const agg = yearMap.get(y);
       if (!agg || agg.yearCount === 0) continue;
-      totalSum += agg.yearTotal;
-      countSum += agg.yearCount;
+      const annualized = annualizeForHistory(agg);
+      if (!annualized) continue;
+      totalSum += annualized.total;
+      countSum += annualized.count;
+      actualTotalSum += agg.yearTotal;
+      actualCountSum += agg.yearCount;
       years += 1;
-      gp += agg.yearGp;
-      gpRevenue += agg.yearGpRevenue;
+      gp += annualized.gp;
+      gpRevenue += annualized.gpRevenue;
     }
     histGp += gp;
     histGpRevenue += gpRevenue;
@@ -300,7 +342,8 @@ export async function computePaceProjection(
     amHist.set(amName, {
       avgTotal: years > 0 ? totalSum / years : 0,
       avgCount: years > 0 ? countSum / years : 0,
-      avgPerContract: countSum > 0 ? totalSum / countSum : 0,
+      // Ticket size from actual contracts (annualizing cancels out on $/contract).
+      avgPerContract: actualCountSum > 0 ? actualTotalSum / actualCountSum : 0,
       years,
       gpPct: gpRevenue > 0.005 ? (gp / gpRevenue) * 100 : null,
     });

@@ -109,9 +109,9 @@ export function PaceSection({ pace }: { pace: PaceProjection }) {
             {pace.seasonalityYearsUsed > 0
               ? ` (${pace.seasonalityYearsUsed} prior year${pace.seasonalityYearsUsed === 1 ? "" : "s"})`
               : ""}
-            , and each account manager&apos;s historical averages. Contract count, signed $, avg /
-            contract, and GP% all blend YTD/pace with prior-year history (sample-weighted). Profit =
-            projected signed $ × blended GP%.
+            , and each account manager&apos;s historical averages (partial start/end years are
+            annualized from first→last signed month). Contract count, signed $, avg / contract,
+            and GP% all blend YTD/pace with that history. Profit = projected signed $ × blended GP%.
           </>
         )}
       </p>
