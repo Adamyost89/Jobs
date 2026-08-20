@@ -94,6 +94,12 @@ jobs:
             echo "User table count unavailable before migration (likely first-time setup)."
           fi
 
+          # Build the new app image BEFORE migrate. `compose run` uses the existing
+          # image otherwise, so new prisma/migrations never get applied while the
+          # rebuilt app expects the new columns (e.g. Job.location).
+          echo "Building app image for migrations and deploy..."
+          docker compose -f "$compose_file" build app
+
           set +e
           migrate_output="$(docker compose -f "$compose_file" run --rm --no-deps app npx prisma migrate deploy 2>&1)"
           migrate_code=$?
@@ -113,7 +119,7 @@ jobs:
             fi
           fi
 
-          docker compose -f "$compose_file" up -d --build --force-recreate --remove-orphans
+          docker compose -f "$compose_file" up -d --force-recreate --remove-orphans
           docker compose -f "$compose_file" ps
 
           after_user_count="$(
