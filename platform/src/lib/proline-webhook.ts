@@ -505,23 +505,24 @@ const idish = z
 
 const looseSchema = z
   .object({
-    type: z.string().optional(),
-    trigger: z.string().optional(),
+    // ProLine often sends null for unused category/type fields — treat as absent.
+    type: z.string().nullish(),
+    trigger: z.string().nullish(),
     prolineJobId: idish,
     projectId: idish,
     project_id: idish,
     id: idish,
     prolineProjectId: idish,
-    year: z.number().int().optional(),
-    leadNumber: z.string().optional().nullable(),
-    name: z.string().optional().nullable(),
-    contractAmount: z.number().optional(),
-    invoicedDelta: z.number().optional(),
-    status: z.string().optional(),
-    paidInFull: z.boolean().optional(),
-    paidDate: z.string().optional().nullable(),
-    salespersonName: z.string().optional(),
-    prolineUserId: z.string().optional(),
+    year: z.number().int().nullish(),
+    leadNumber: z.string().nullish(),
+    name: z.string().nullish(),
+    contractAmount: z.number().nullish(),
+    invoicedDelta: z.number().nullish(),
+    status: z.string().nullish(),
+    paidInFull: z.boolean().nullish(),
+    paidDate: z.string().nullish(),
+    salespersonName: z.string().nullish(),
+    prolineUserId: z.string().nullish(),
   })
   .passthrough();
 
