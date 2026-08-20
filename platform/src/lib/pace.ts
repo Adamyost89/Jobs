@@ -25,6 +25,8 @@ export type PaceAmRow = {
   /** Average full-year signed $ across complete prior years (0 if none). */
   historicalAvgAnnualTotal: number;
   historicalAvgAnnualCount: number;
+  /** Historical average signed $ per contract (0 if none). */
+  historicalAvgPerContract: number;
   historicalYearsUsed: number;
 };
 
@@ -117,8 +119,9 @@ function emptyAmYear(): AmYearAgg {
 
 /**
  * Seasonality-aware year-end pace for signed contracts (admins / super admins).
- * Prior complete work years supply busy/slow monthly weights; each AM’s historical
- * annual run-rate is blended with their YTD pace early in the year.
+ * Prior complete work years supply busy/slow monthly weights. Contract count,
+ * signed $, avg/contract, and GP% always blend seasonality-scaled YTD with each
+ * AM’s historical annual averages (sample-weighted; does not fade mid-year).
  */
 export async function computePaceProjection(
   db: PrismaClient,
@@ -265,12 +268,15 @@ export async function computePaceProjection(
   type AmHist = {
     avgTotal: number;
     avgCount: number;
+    avgPerContract: number;
     years: number;
     gpPct: number | null;
   };
   const amHist = new Map<string, AmHist>();
   let histGp = 0;
   let histGpRevenue = 0;
+  let histCompanyTotal = 0;
+  let histCompanyCount = 0;
 
   for (const [amName, yearMap] of byAmYear) {
     let totalSum = 0;
@@ -289,14 +295,19 @@ export async function computePaceProjection(
     }
     histGp += gp;
     histGpRevenue += gpRevenue;
+    histCompanyTotal += totalSum;
+    histCompanyCount += countSum;
     amHist.set(amName, {
       avgTotal: years > 0 ? totalSum / years : 0,
       avgCount: years > 0 ? countSum / years : 0,
+      avgPerContract: countSum > 0 ? totalSum / countSum : 0,
       years,
       gpPct: gpRevenue > 0.005 ? (gp / gpRevenue) * 100 : null,
     });
   }
   const historicalGpPct = histGpRevenue > 0.005 ? (histGp / histGpRevenue) * 100 : null;
+  const historicalCompanyAvgPerContract =
+    histCompanyCount > 0 ? histCompanyTotal / histCompanyCount : 0;
 
   function ytdFromAgg(agg: AmYearAgg | undefined): PaceMetricBlock {
     if (!agg) return toMetric(0, 0, 0, 0);
@@ -323,8 +334,18 @@ export async function computePaceProjection(
     return toMetric(count, total, gp, gpRevenue);
   }
 
-  // Trust YTD pace more once ~28% of historical annual volume is expected.
-  const paceBlend = expectedShareComplete <= 0 ? 0 : Math.min(1, expectedShareComplete / 0.28);
+  /** Always-on blend of a YTD/pace value with historical — does not fade out mid-year. */
+  function blendWithHistory(
+    current: number,
+    historical: number,
+    currentWeight: number,
+    historicalWeight: number
+  ): number {
+    if (!(historical > 0.005) || historicalWeight <= 0) return current;
+    if (!(current > 0.005) || currentWeight <= 0) return historical;
+    return (current * currentWeight + historical * historicalWeight) / (currentWeight + historicalWeight);
+  }
+
   const scale =
     expectedShareComplete > 0.02 && !isFinal && !isFutureYear ? 1 / expectedShareComplete : 1;
 
@@ -336,46 +357,83 @@ export async function computePaceProjection(
   let projCount = 0;
   let projTotal = 0;
   let projProfit = 0;
+  let projGpPctWeight = 0;
+  let projGpPctAccum = 0;
 
   for (const amName of [...byAmYear.keys()].sort((a, b) => a.localeCompare(b))) {
     const yearMap = byAmYear.get(amName)!;
-    const ytd = ytdFromAgg(yearMap.get(workYear));
+    const workAgg = yearMap.get(workYear);
+    // Only AMs with signed contracts in the selected work year.
+    if (!workAgg || workAgg.yearCount === 0) continue;
+
+    const ytd = ytdFromAgg(workAgg);
+    if (!isFinal && !isFutureYear && ytd.jobCount === 0) continue;
+
     const hist = amHist.get(amName);
     const historicalAvgAnnualTotal = hist?.avgTotal ?? 0;
     const historicalAvgAnnualCount = hist?.avgCount ?? 0;
+    const historicalAvgPerContract = hist?.avgPerContract ?? 0;
     const histYears = hist?.years ?? 0;
-    const gpPctFallback = ytd.gpPct ?? hist?.gpPct ?? historicalGpPct;
+    const histGpPct = hist?.gpPct ?? null;
+
+    const ytdWeight = Math.max(ytd.jobCount, 1);
+    const histWeight = histYears > 0 ? Math.max(historicalAvgAnnualCount, 1) : 0;
 
     let projected: PaceMetricBlock;
     if (isFinal || isFutureYear) {
       projected = { ...ytd };
     } else {
-      const paceTotal = ytd.total * scale;
       const paceCount = ytd.jobCount * scale;
-      let blendedTotal = paceTotal;
-      let blendedCount = paceCount;
-      if (histYears > 0 && historicalAvgAnnualTotal > 0.005) {
-        blendedTotal = paceBlend * paceTotal + (1 - paceBlend) * historicalAvgAnnualTotal;
-        blendedCount = paceBlend * paceCount + (1 - paceBlend) * historicalAvgAnnualCount;
-      }
-      blendedTotal = Math.max(ytd.total, blendedTotal);
-      blendedCount = Math.max(ytd.jobCount, blendedCount);
-      const jobCount = Math.round(blendedCount);
-      const profit =
-        gpPctFallback != null && Number.isFinite(gpPctFallback)
-          ? blendedTotal * (gpPctFallback / 100)
-          : ytd.profit * scale;
-      projected = {
-        jobCount,
-        total: blendedTotal,
-        profit: Math.max(ytd.profit, profit),
-        gpPct: gpPctFallback,
-        avgPerContract: jobCount > 0 ? blendedTotal / jobCount : ytd.avgPerContract,
-      };
-    }
+      const paceTotal = ytd.total * scale;
 
-    if (ytd.jobCount === 0 && projected.jobCount === 0 && historicalAvgAnnualTotal < 0.005) {
-      continue;
+      const jobCount = Math.max(
+        ytd.jobCount,
+        Math.round(blendWithHistory(paceCount, historicalAvgAnnualCount, ytdWeight, histWeight))
+      );
+
+      const histAvgTicket =
+        historicalAvgPerContract > 0.005
+          ? historicalAvgPerContract
+          : historicalCompanyAvgPerContract > 0.005
+            ? historicalCompanyAvgPerContract
+            : 0;
+      let avgPerContract = blendWithHistory(
+        ytd.avgPerContract,
+        histAvgTicket,
+        ytdWeight,
+        histWeight
+      );
+
+      // Signed $: blend seasonality-scaled YTD $ with historical annual $, and with count × avg.
+      const fromPaceAndHist = blendWithHistory(
+        paceTotal,
+        historicalAvgAnnualTotal,
+        ytdWeight,
+        histWeight
+      );
+      const fromCountTimesAvg = jobCount * avgPerContract;
+      let total = Math.max(ytd.total, (fromPaceAndHist + fromCountTimesAvg) / 2);
+      if (jobCount > 0) avgPerContract = total / jobCount;
+
+      const ytdGpPct = ytd.gpPct;
+      const histGpForBlend = histGpPct ?? historicalGpPct;
+      let gpPct: number | null;
+      if (ytdGpPct != null && histGpForBlend != null) {
+        gpPct = blendWithHistory(ytdGpPct, histGpForBlend, ytdWeight, histWeight);
+      } else {
+        gpPct = ytdGpPct ?? histGpForBlend;
+      }
+
+      const profit =
+        gpPct != null && Number.isFinite(gpPct) ? total * (gpPct / 100) : Math.max(ytd.profit, ytd.profit * scale);
+
+      projected = {
+        jobCount: Math.max(1, jobCount),
+        total,
+        profit: Math.max(ytd.profit, profit),
+        gpPct,
+        avgPerContract,
+      };
     }
 
     amRows.push({
@@ -384,18 +442,16 @@ export async function computePaceProjection(
       projected,
       historicalAvgAnnualTotal,
       historicalAvgAnnualCount,
+      historicalAvgPerContract,
       historicalYearsUsed: histYears,
     });
 
     ytdCount += ytd.jobCount;
     ytdTotal += ytd.total;
     ytdGp += ytd.profit;
-    // Recover gp-eligible revenue from the metric (profit / pct) when pct known;
-    // otherwise re-read from agg for accuracy.
-    const workAgg = yearMap.get(workYear);
-    if (isFinal && workAgg) {
+    if (isFinal) {
       ytdGpRevenue += workAgg.yearGpRevenue;
-    } else if (!isFutureYear && workAgg) {
+    } else if (!isFutureYear) {
       for (let m = 1; m <= asOfMonth; m++) ytdGpRevenue += workAgg.byMonth[m]!.gpRevenue;
       ytdGpRevenue += workAgg.undated.gpRevenue;
     }
@@ -403,12 +459,19 @@ export async function computePaceProjection(
     projCount += projected.jobCount;
     projTotal += projected.total;
     projProfit += projected.profit;
+    if (projected.gpPct != null && projected.total > 0.005) {
+      projGpPctAccum += projected.gpPct * projected.total;
+      projGpPctWeight += projected.total;
+    }
   }
 
   amRows.sort((a, b) => b.projected.total - a.projected.total);
 
   const ytdBlock = toMetric(ytdCount, ytdTotal, ytdGp, ytdGpRevenue);
-  const companyGpPct = ytdBlock.gpPct ?? historicalGpPct;
+  const projectedGpPct =
+    projGpPctWeight > 0.005
+      ? projGpPctAccum / projGpPctWeight
+      : ytdBlock.gpPct ?? historicalGpPct;
   const projectedBlock: PaceMetricBlock =
     isFinal
       ? ytdBlock
@@ -418,7 +481,7 @@ export async function computePaceProjection(
             jobCount: projCount,
             total: projTotal,
             profit: projProfit,
-            gpPct: companyGpPct,
+            gpPct: projectedGpPct,
             avgPerContract: projCount > 0 ? projTotal / projCount : 0,
           };
 

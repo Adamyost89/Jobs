@@ -109,8 +109,9 @@ export function PaceSection({ pace }: { pace: PaceProjection }) {
             {pace.seasonalityYearsUsed > 0
               ? ` (${pace.seasonalityYearsUsed} prior year${pace.seasonalityYearsUsed === 1 ? "" : "s"})`
               : ""}
-            , and each account manager&apos;s historical annual run-rate. GP% uses costing-complete jobs
-            (falls back to prior-year GP% when needed). Profit = projected signed $ × GP%.
+            , and each account manager&apos;s historical averages. Contract count, signed $, avg /
+            contract, and GP% all blend YTD/pace with prior-year history (sample-weighted). Profit =
+            projected signed $ × blended GP%.
           </>
         )}
       </p>
@@ -173,6 +174,7 @@ export function PaceSection({ pace }: { pace: PaceProjection }) {
                 <th className="cell-num">{pace.isFinal ? "Final #" : "Proj #"}</th>
                 <th className="cell-num">{pace.isFinal ? "Final $" : "Proj $"}</th>
                 <th className="cell-num">Hist. avg $/yr</th>
+                <th className="cell-num">Hist. avg / contract</th>
                 <th className="cell-num">Proj GP%</th>
                 <th className="cell-num">Proj profit</th>
                 <th className="cell-num">Proj avg</th>
@@ -189,6 +191,9 @@ export function PaceSection({ pace }: { pace: PaceProjection }) {
                   <td className="cell-num">
                     {r.historicalYearsUsed > 0 ? formatUsd(r.historicalAvgAnnualTotal) : "—"}
                   </td>
+                  <td className="cell-num">
+                    {r.historicalAvgPerContract > 0.005 ? formatUsd(r.historicalAvgPerContract) : "—"}
+                  </td>
                   <td className="cell-num">{formatPctOrDash(r.projected.gpPct)}</td>
                   <td className="cell-num">{formatUsd(r.projected.profit)}</td>
                   <td className="cell-num">{formatUsd(r.projected.avgPerContract)}</td>
@@ -200,6 +205,7 @@ export function PaceSection({ pace }: { pace: PaceProjection }) {
                 <td className="cell-num">{formatUsd(pace.ytd.total)}</td>
                 <td className="cell-num">{fmtCount(pace.projected.jobCount)}</td>
                 <td className="cell-num">{formatUsd(pace.projected.total)}</td>
+                <td className="cell-num">—</td>
                 <td className="cell-num">—</td>
                 <td className="cell-num">{formatPctOrDash(pace.projected.gpPct)}</td>
                 <td className="cell-num">{formatUsd(pace.projected.profit)}</td>
