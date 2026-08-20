@@ -15,9 +15,11 @@ import {
   getSignedContractsAnalytics,
   type SignedContractsAnalytics,
 } from "@/lib/report-analytics";
+import { computePaceProjection, type PaceProjection } from "@/lib/pace";
 import { jobsDrilldownUrl } from "@/lib/jobs-drilldown-url";
 import { DrilldownTableRow } from "@/components/DrilldownTableRow";
 import { SignedMonthlyDrillGrid } from "@/components/SignedMonthlyDrillGrid";
+import { PaceSection } from "@/components/PaceSection";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +71,11 @@ export default async function DashboardHome({
     if (!("error" in m)) monthly = m;
   }
 
+  let pace: PaceProjection | null = null;
+  if (canSeeGp) {
+    pace = await computePaceProjection(prisma, workYear);
+  }
+
   return (
     <div className="page-stack">
       <div className="page-title-row">
@@ -103,6 +110,8 @@ export default async function DashboardHome({
         <Link href={`/dashboard/jobs?year=${workYear}`}>Open job list</Link> ·{" "}
         <Link href="/dashboard/advanced">Advanced</Link>
       </p>
+
+      {pace ? <PaceSection pace={pace} /> : null}
 
       <div className="card" style={{ padding: "0.35rem 0 0.85rem" }}>
         <h2 style={{ margin: "0.65rem 1rem 0.5rem", fontSize: "1.05rem" }}>By account manager</h2>
