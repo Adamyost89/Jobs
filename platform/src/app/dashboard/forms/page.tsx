@@ -6,6 +6,7 @@ import { Role, type Prisma } from "@prisma/client";
 import { canClearEndOfJobForm, canViewAllJobs } from "@/lib/rbac";
 import { RemoveEndOfJobFormButton } from "@/components/RemoveEndOfJobFormButton";
 import { FormsNavTabs } from "@/components/FormsNavTabs";
+import { SubmittedFormAnswerFilters } from "@/components/SubmittedFormAnswerFilters";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { formatDateTimeInEastern } from "@/lib/payout-display";
 import { formsListUrl, type FormsSort, type FormsView } from "@/lib/forms-list-url";
@@ -101,24 +102,19 @@ export default async function FormsQueuePage({
     }
   })();
 
-  let eojFieldOptions: string[] | undefined;
-  if (view === "submitted" && eojField && eojValue) {
-    const cfgRow = await prisma.systemConfig.findUnique({
-      where: { id: "singleton" },
-      select: { endOfJobForm: true },
-    });
-    const parsed = parseEndOfJobFormConfig(cfgRow?.endOfJobForm);
-    if (parsed.ok) {
-      const field = parsed.value.fields.find((f) => f.id === eojField && f.type === "select");
-      eojFieldOptions = field?.options;
-    }
-  }
+  const answerFilterActive = Boolean(view === "submitted" && eojField && eojValue);
 
-  const [jobsRaw, salespersonRows] = await Promise.all([
+  const [cfgRow, jobsRaw, salespersonRows] = await Promise.all([
+    view === "submitted"
+      ? prisma.systemConfig.findUnique({
+          where: { id: "singleton" },
+          select: { endOfJobForm: true },
+        })
+      : Promise.resolve(null),
     prisma.job.findMany({
       where,
       orderBy,
-      take: eojField && eojValue ? 500 : 300,
+      take: answerFilterActive ? 500 : 300,
       select: {
         id: true,
         jobNumber: true,
@@ -147,8 +143,21 @@ export default async function FormsQueuePage({
       : Promise.resolve([]),
   ]);
 
+  const selectFilterFields = (() => {
+    if (!cfgRow) return [];
+    const parsed = parseEndOfJobFormConfig(cfgRow.endOfJobForm);
+    if (!parsed.ok) return [];
+    return parsed.value.fields
+      .filter((f) => f.type === "select" && (f.options?.length ?? 0) > 0)
+      .map((f) => ({ id: f.id, label: f.label, options: f.options ?? [] }));
+  })();
+
+  const eojFieldMeta = selectFilterFields.find((f) => f.id === eojField);
+  const eojFieldOptions = eojFieldMeta?.options;
+  const eojFieldLabel = eojFieldMeta?.label ?? eojField;
+
   const jobs =
-    view === "submitted" && eojField && eojValue
+    answerFilterActive
       ? jobsRaw.filter((j) =>
           endOfJobResponseMatchesFilter(j.endOfJobFormResponses, eojField, eojValue, eojFieldOptions)
         )
@@ -186,8 +195,6 @@ export default async function FormsQueuePage({
 
       <form method="get" className="card" style={{ padding: "1rem 1.15rem" }}>
         <input type="hidden" name="view" value={view} />
-        {eojField ? <input type="hidden" name="eojField" value={eojField} /> : null}
-        {eojValue ? <input type="hidden" name="eojValue" value={eojValue} /> : null}
         <div className="filter-bar">
           {canViewAllJobs(user) ? (
             <label>
@@ -223,6 +230,14 @@ export default async function FormsQueuePage({
               )}
             </select>
           </label>
+          {view === "submitted" && selectFilterFields.length > 0 ? (
+            <SubmittedFormAnswerFilters
+              key={`${eojField}|${eojValue}`}
+              fields={selectFilterFields}
+              initialFieldId={eojField}
+              initialValue={eojValue}
+            />
+          ) : null}
           <div className="filter-bar__actions">
             <button className="btn" type="submit">
               Apply
@@ -238,11 +253,15 @@ export default async function FormsQueuePage({
         </div>
       </form>
 
-      {eojField && eojValue ? (
+      {answerFilterActive ? (
         <p className="card" style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)" }}>
-          Filtered by answer: <strong style={{ color: "var(--text)" }}>{eojValue}</strong> ({eojField})
+          Filtered by answer: <strong style={{ color: "var(--text)" }}>{eojValue}</strong>
           {" · "}
-          <Link href={formsListUrl({ view: "submitted", sp: spId || undefined })}>Clear answer filter</Link>
+          {eojFieldLabel}
+          {" · "}
+          <Link href={formsListUrl({ view: "submitted", sp: spId || undefined, sort })}>
+            Clear answer filter
+          </Link>
           {" · "}
           <Link href="/dashboard/forms/analytics">Back to analytics</Link>
         </p>
@@ -252,7 +271,7 @@ export default async function FormsQueuePage({
         <p className="card" style={{ margin: 0, color: "var(--muted)" }}>
           {view === "pending"
             ? "No pending checklists for this filter."
-            : eojField && eojValue
+            : answerFilterActive
               ? "No submitted checklists match this answer filter."
               : "No submitted checklists for this filter."}
         </p>
@@ -261,7 +280,7 @@ export default async function FormsQueuePage({
           <p style={{ margin: "0.65rem 1rem 0", fontSize: "0.85rem", color: "var(--muted)" }}>
             Showing {jobs.length} job{jobs.length === 1 ? "" : "s"}
             {spId ? ` · filtered by rep` : ""}
-            {eojField && eojValue ? ` · answer filter` : ""}
+            {answerFilterActive ? ` · answer filter` : ""}
           </p>
           <table className="table table-data">
             <thead>
