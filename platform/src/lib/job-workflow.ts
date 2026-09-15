@@ -6,7 +6,7 @@ import { commissionPlanForJobYear } from "./commission-plan-defaults";
 import { loadCommissionTierTotalsForYear } from "./commission-tier-totals";
 import { loadSalespersonFlagsByName } from "./salespeople-kind-db";
 import { resolveOrCreateSalespersonByName } from "./salesperson-name";
-import { deriveChangeOrdersNumber, moneyEq, shouldAutoDeriveChangeOrders } from "./change-orders";
+import { moneyEq, resolvedChangeOrders } from "./change-orders";
 
 function dec(n: Prisma.Decimal | number | string): number {
   if (n instanceof Prisma.Decimal) return n.toNumber();
@@ -83,13 +83,13 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
       salesperson: true,
     },
   });
-  const shouldDeriveChangeOrders = shouldAutoDeriveChangeOrders(job.status, job.prolineStage);
-  const derivedChangeOrders = shouldDeriveChangeOrders
-    ? deriveChangeOrdersNumber(job.contractAmount, job.invoicedTotal, job.amountPaid)
-    : null;
-  const effectiveChangeOrders = shouldDeriveChangeOrders
-    ? (derivedChangeOrders ?? dec(job.changeOrders))
-    : 0;
+  const effectiveChangeOrders = resolvedChangeOrders({
+    contractAmount: job.contractAmount,
+    invoicedTotal: job.invoicedTotal,
+    status: job.status,
+    prolineStage: job.prolineStage,
+    paidInFull: job.paidInFull,
+  });
   const gpJob = {
     ...job,
     changeOrders: new Prisma.Decimal(effectiveChangeOrders.toFixed(2)),

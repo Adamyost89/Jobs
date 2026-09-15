@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { countsTowardSignedTotals } from "@/lib/insurance-job";
-import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { resolvedChangeOrders } from "@/lib/change-orders";
 import {
   CONTRACT_SIGN_CHART_TIMEZONE,
   CONTRACT_SIGN_MONTH_LABELS,
@@ -198,6 +198,8 @@ export async function computePaceProjection(
       prolineStage: true,
       contractAmount: true,
       changeOrders: true,
+      invoicedTotal: true,
+      paidInFull: true,
       cost: true,
       costingComplete: true,
       contractSignedAt: true,
@@ -222,8 +224,13 @@ export async function computePaceProjection(
     }
 
     const c = num(j.contractAmount);
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const revenue = c + co;
     const costingComplete = j.costingComplete === true;
     const gp =

@@ -8,7 +8,7 @@ import { Prisma } from "@prisma/client";
 import { normalizeStatus } from "@/lib/status";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
 import { pickJobScalarWriteFields } from "@/lib/job-prisma-write-fields";
-import { deriveChangeOrdersNumber, moneyEq, MONEY_EPSILON, shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { moneyEq, MONEY_EPSILON, resolvedChangeOrders } from "@/lib/change-orders";
 import {
   buildModernColumnMapManualOnly,
   cell,
@@ -264,19 +264,18 @@ type ParsedRow = {
 
 /**
  * Import safety net:
- * Auto-derive Change Orders only for paid/closed stages.
- * Otherwise force Change Orders to zero.
+ * Change orders follow invoiced − contract. Positive COs always apply.
+ * Negative COs stay 0 until paid / paid & closed.
  */
 function normalizeParsedFinancials(p: ParsedRow): ParsedRow {
-  if (!shouldAutoDeriveChangeOrders(p.statusRaw)) {
-    if (moneyEq(p.changeOrders, 0)) return p;
-    return { ...p, changeOrders: 0 };
-  }
-  const derived = deriveChangeOrdersNumber(p.contractAmount, p.invoicedTotal, p.amountPaid);
-  if (derived !== null && !moneyEq(derived, p.changeOrders)) {
-    return { ...p, changeOrders: derived };
-  }
-  return p;
+  const derived = resolvedChangeOrders({
+    contractAmount: p.contractAmount,
+    invoicedTotal: p.invoicedTotal,
+    status: p.statusRaw,
+    paidInFull: p.paidInFull,
+  });
+  if (moneyEq(derived, p.changeOrders)) return p;
+  return { ...p, changeOrders: derived };
 }
 
 function looksLikeJobNumber(s: string): boolean {

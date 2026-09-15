@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { countsTowardSignedTotals, isInsuranceCustomerName } from "@/lib/insurance-job";
-import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { resolvedChangeOrders } from "@/lib/change-orders";
 import { statusColumnLabel } from "@/lib/status-badge-colors";
 
 export type AmSummaryRow = {
@@ -134,8 +134,13 @@ export async function loadAmSummaryForYear(
     }
 
     const c = num(j.contractAmount);
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const revenue = c + co;
     const paid = num(j.amountPaid);
     const costingComplete = (j as { costingComplete?: boolean | null }).costingComplete === true;
@@ -214,8 +219,13 @@ export async function loadAmSummaryForYear(
   let grandInsGp = 0;
   for (const j of jobs) {
     if (!countsTowardSignedTotals(j.name)) continue;
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const revenue = num(j.contractAmount) + co;
     const costingComplete = (j as { costingComplete?: boolean | null }).costingComplete === true;
     const gpReady = hasGpData(costingComplete);

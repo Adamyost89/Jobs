@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/rbac";
 import { canRunFullReports } from "@/lib/rbac";
 import { displaySalespersonName } from "@/lib/salesperson-name";
-import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { resolvedChangeOrders } from "@/lib/change-orders";
 import { countsTowardSignedTotals } from "@/lib/insurance-job";
 
 export type FinancialYearlyPoint = {
@@ -167,6 +167,7 @@ export async function getFinancialMetricsAnalytics(
       contractAmount: true,
       changeOrders: true,
       invoicedTotal: true,
+      paidInFull: true,
       cost: true,
       gp: true,
       gpPercent: true,
@@ -190,8 +191,13 @@ export async function getFinancialMetricsAnalytics(
   for (const j of jobsTrend) {
     if (!countsTowardSignedTotals(j.name)) continue;
     const c = num(j.contractAmount);
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const inv = num(j.invoicedTotal);
     const cost = num(j.cost);
     const revenue = c + co;
@@ -262,8 +268,13 @@ export async function getFinancialMetricsAnalytics(
     const sid = j.salespersonId;
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const c = num(j.contractAmount);
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const inv = num(j.invoicedTotal);
     const cost = num(j.cost);
     const revenue = c + co;

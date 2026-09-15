@@ -1,7 +1,6 @@
 /**
- * Reconcile Change Orders data:
- * prefer Invoiced Total - Contract Amount when invoiced is present;
- * otherwise fall back to Amount Paid - Contract Amount.
+ * Reconcile Change Orders:
+ * invoicedTotal - contractAmount (positives always; negatives only when paid / paid & closed).
  *
  * Run:
  *   npx tsx scripts/normalize-change-orders-when-paid-equals-contract.ts

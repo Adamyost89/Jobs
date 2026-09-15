@@ -21,7 +21,7 @@ import {
 import { normalizeStatusBadgeColorMap, statusColumnLabel } from "@/lib/status-badge-colors";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
-import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { resolvedChangeOrders } from "@/lib/change-orders";
 import { commissionPayoutBlockedForJob } from "@/lib/end-of-job-form";
 
 /**
@@ -332,8 +332,13 @@ export default async function JobsPage({
     const cx = commByJob.get(j.id);
     const payout = payoutByJob.get(j.id);
     const contractAmount = j.contractAmount.toNumber();
-    const rawChangeOrders = j.changeOrders.toNumber();
-    const changeOrders = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawChangeOrders : 0;
+    const changeOrders = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const invoicedTotal = j.invoicedTotal.toNumber();
     const amountPaid = j.amountPaid?.toNumber() ?? null;
     const cost = j.cost.toNumber();

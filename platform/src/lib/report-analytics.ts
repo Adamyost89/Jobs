@@ -3,7 +3,7 @@ import type { SessionUser } from "@/lib/rbac";
 import { canRunFullReports } from "@/lib/rbac";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 import { countsTowardSignedTotals, isInsuranceCustomerName } from "@/lib/insurance-job";
-import { shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { resolvedChangeOrders } from "@/lib/change-orders";
 import { statusColumnLabel } from "@/lib/status-badge-colors";
 import {
   CONTRACT_SIGN_CHART_TIMEZONE,
@@ -133,6 +133,8 @@ export async function getSignedContractsAnalytics(
       prolineStage: true,
       contractAmount: true,
       changeOrders: true,
+      invoicedTotal: true,
+      paidInFull: true,
       cost: true,
       gp: true,
       gpPercent: true,
@@ -147,8 +149,13 @@ export async function getSignedContractsAnalytics(
   for (const j of jobsTrend) {
     if (!countsTowardSignedTotals(j.name)) continue;
     const c = num(j.contractAmount);
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const revenue = c + co;
     const gpReady = hasGpData(j.costingComplete === true);
     const g = effectiveGpForJob(revenue, num(j.cost), j.costingComplete === true);
@@ -207,8 +214,13 @@ export async function getSignedContractsAnalytics(
     const sid = j.salespersonId;
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const c = num(j.contractAmount);
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const revenue = c + co;
     const gpReady = hasGpData(j.costingComplete === true);
     const g = effectiveGpForJob(revenue, num(j.cost), j.costingComplete === true);
@@ -283,8 +295,13 @@ export async function getSignedContractsAnalytics(
   for (const j of jobsSummary) {
     if (!countsTowardSignedTotals(j.name)) continue;
     const c = num(j.contractAmount);
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const revenue = c + co;
     grandSummary.jobCount += 1;
     grandSummary.contractAmt += c;
@@ -320,6 +337,8 @@ export async function getSignedContractsAnalytics(
       prolineStage: true,
       contractAmount: true,
       changeOrders: true,
+      invoicedTotal: true,
+      paidInFull: true,
       salesperson: { select: { id: true, name: true } },
     },
   });
@@ -341,8 +360,13 @@ export async function getSignedContractsAnalytics(
     const name = j.salesperson?.name ? displaySalespersonName(j.salesperson.name) : "Unassigned";
     const sid = j.salesperson?.id;
     if (sid && !salespersonIdByRepName[name]) salespersonIdByRepName[name] = sid;
-    const rawCo = num(j.changeOrders);
-    const co = shouldAutoDeriveChangeOrders(j.status, j.prolineStage) ? rawCo : 0;
+    const co = resolvedChangeOrders({
+      contractAmount: j.contractAmount,
+      invoicedTotal: j.invoicedTotal,
+      status: j.status,
+      prolineStage: j.prolineStage,
+      paidInFull: j.paidInFull,
+    });
     const dollars = num(j.contractAmount) + co;
     repTotals.set(name, (repTotals.get(name) ?? 0) + dollars);
 

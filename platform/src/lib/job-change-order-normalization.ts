@@ -1,38 +1,35 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import { deriveChangeOrdersNumber, MONEY_EPSILON, shouldAutoDeriveChangeOrders } from "@/lib/change-orders";
+import { MONEY_EPSILON, resolvedChangeOrders } from "@/lib/change-orders";
 
 export async function reconcileChangeOrdersFromPaidAndContract(
   db: Pick<PrismaClient, "job">
 ): Promise<{ scanned: number; matched: number; updated: number }> {
   const rows = await db.job.findMany({
     where: {
-      OR: [{ amountPaid: { not: null } }, { invoicedTotal: { not: 0 } }],
-      NOT: { changeOrders: { equals: 0 } },
+      OR: [{ invoicedTotal: { not: 0 } }, { NOT: { changeOrders: { equals: 0 } } }],
     },
     select: {
       id: true,
       contractAmount: true,
       invoicedTotal: true,
-      amountPaid: true,
       changeOrders: true,
       status: true,
+      prolineStage: true,
+      paidInFull: true,
     },
     take: 20_000,
   });
 
   const toUpdate = rows
     .map((row) => {
-      const contract = row.contractAmount.toNumber();
-      const changeOrders = row.changeOrders.toNumber();
-      if (!shouldAutoDeriveChangeOrders(row.status)) {
-        if (Math.abs(changeOrders) <= MONEY_EPSILON) return null;
-        return { id: row.id, derived: 0 };
-      }
-      const paid = row.amountPaid?.toNumber();
-      const invoiced = row.invoicedTotal.toNumber();
-      const derived = deriveChangeOrdersNumber(contract, invoiced, paid);
-      if (derived === null) return null;
-      if (Math.abs(changeOrders - derived) <= MONEY_EPSILON) return null;
+      const derived = resolvedChangeOrders({
+        contractAmount: row.contractAmount,
+        invoicedTotal: row.invoicedTotal,
+        status: row.status,
+        prolineStage: row.prolineStage,
+        paidInFull: row.paidInFull,
+      });
+      if (Math.abs(row.changeOrders.toNumber() - derived) <= MONEY_EPSILON) return null;
       return { id: row.id, derived };
     })
     .filter((row): row is { id: string; derived: number } => row !== null);
