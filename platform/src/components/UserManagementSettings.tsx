@@ -79,8 +79,14 @@ export function UserManagementSettings({
 
   async function deleteUser(id: string, email: string) {
     setMsg(null);
-    const ok = window.confirm(`Delete user "${email}"? This cannot be undone.`);
-    if (!ok) return;
+    const typed = window.prompt(
+      `Delete user "${email}"? This cannot be undone.\n\nType their email to confirm:`
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== email.trim().toLowerCase()) {
+      setMsg("Delete cancelled — email did not match.");
+      return;
+    }
 
     setBusy(true);
     const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
