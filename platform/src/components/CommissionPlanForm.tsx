@@ -7,6 +7,7 @@ import {
   newPersonEditor,
   planToEditors,
   type BonusForm,
+  type BonusTierForm,
   type CommissionPersonEditor,
   type LeadStepForm,
   type ScopeStepForm,
@@ -25,6 +26,19 @@ function updateEditor(
 
 function updateBonus(editors: CommissionPersonEditor[], index: number, patch: Partial<BonusForm>): CommissionPersonEditor[] {
   return editors.map((row, i) => (i === index ? { ...row, bonus: { ...row.bonus, ...patch } } : row));
+}
+
+function updateBonusTier(
+  editors: CommissionPersonEditor[],
+  personIndex: number,
+  tierIndex: number,
+  patch: Partial<BonusTierForm>
+): CommissionPersonEditor[] {
+  return editors.map((row, i) => {
+    if (i !== personIndex) return row;
+    const goalTiers = row.bonus.goalTiers.map((t, j) => (j === tierIndex ? { ...t, ...patch } : t));
+    return { ...row, bonus: { ...row.bonus, goalTiers } };
+  });
 }
 
 function updateLeadStep(
@@ -435,36 +449,77 @@ export function CommissionPlanForm({
                           </option>
                         </select>
                       </label>
-                      <div className="form-row">
-                        <label className="form-field">
-                          <span>When they reach ($)</span>
-                          <input
-                            className="input input-narrow"
-                            type="number"
-                            min={0}
-                            step={1000}
-                            value={ed.bonus.afterDollars}
-                            onChange={(e) =>
-                              setEditors((prev) => updateBonus(prev, idx, { afterDollars: parseFloat(e.target.value) || 0 }))
-                            }
-                          />
-                        </label>
-                        <label className="form-field">
-                          <span>Then use commission %</span>
-                          <input
-                            className="input input-narrow"
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.25}
-                            value={ed.bonus.higherPercent}
-                            onChange={(e) =>
-                              setEditors((prev) =>
-                                updateBonus(prev, idx, { higherPercent: parseFloat(e.target.value) || 0 })
-                              )
-                            }
-                          />
-                        </label>
+                      <div style={{ display: "grid", gap: "0.5rem" }}>
+                        {ed.bonus.goalTiers.map((tier, tIdx) => (
+                          <div key={tIdx} className="form-row" style={{ alignItems: "end" }}>
+                            <label className="form-field">
+                              <span>{tIdx === 0 ? "When they reach ($)" : "Then when they reach ($)"}</span>
+                              <input
+                                className="input input-narrow"
+                                type="number"
+                                min={0}
+                                step={1000}
+                                value={tier.afterDollars}
+                                onChange={(e) =>
+                                  setEditors((prev) =>
+                                    updateBonusTier(prev, idx, tIdx, { afterDollars: parseFloat(e.target.value) || 0 })
+                                  )
+                                }
+                              />
+                            </label>
+                            <label className="form-field">
+                              <span>Then use commission %</span>
+                              <input
+                                className="input input-narrow"
+                                type="number"
+                                min={0}
+                                max={100}
+                                step={0.25}
+                                value={tier.higherPercent}
+                                onChange={(e) =>
+                                  setEditors((prev) =>
+                                    updateBonusTier(prev, idx, tIdx, {
+                                      higherPercent: parseFloat(e.target.value) || 0,
+                                    })
+                                  )
+                                }
+                              />
+                            </label>
+                            {ed.bonus.goalTiers.length > 1 && (
+                              <button
+                                type="button"
+                                className="btn secondary"
+                                onClick={() =>
+                                  setEditors((prev) =>
+                                    updateBonus(prev, idx, {
+                                      goalTiers: prev[idx].bonus.goalTiers.filter((_, j) => j !== tIdx),
+                                    })
+                                  )
+                                }
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="btn secondary"
+                          onClick={() => {
+                            const last = ed.bonus.goalTiers[ed.bonus.goalTiers.length - 1];
+                            const nextDollars = (last?.afterDollars ?? 0) + 250_000;
+                            setEditors((prev) =>
+                              updateBonus(prev, idx, {
+                                goalTiers: [
+                                  ...prev[idx].bonus.goalTiers,
+                                  { afterDollars: nextDollars, higherPercent: last?.higherPercent ?? 0 },
+                                ],
+                              })
+                            );
+                          }}
+                        >
+                          Add another goal tier
+                        </button>
                       </div>
                       <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
                         <input

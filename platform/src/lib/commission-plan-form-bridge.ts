@@ -9,13 +9,15 @@ import {
 export type LeadStepForm = { fromLead: number; usePercent: number };
 export type ScopeStepForm = { fromLead: number; useScope: "all_jobs" | "primary_only" };
 
+/** One yearly-goal threshold: when running total reaches `afterDollars`, use `higherPercent`. */
+export type BonusTierForm = { afterDollars: number; higherPercent: number };
+
 export type BonusForm = {
   enabled: boolean;
   /** User-friendly labels map to metrics in `editorToRule`. */
   basedOn: "paid_this_year" | "sold_jobs_this_year" | "cash_collected_on_sold_jobs_this_year";
-  afterDollars: number;
-  /** Commission % after they hit the goal */
-  higherPercent: number;
+  /** Ascending goals in the UI; engine stores descending by minTotal. */
+  goalTiers: BonusTierForm[];
   /** Before goal — flat % (e.g. James 2026) */
   beforeGoalFlatPercent: number | "";
   /** Before goal — split by lead # (James 2025 style) */
@@ -42,8 +44,7 @@ export type CommissionPersonEditor = {
 export const emptyBonusForm = (): BonusForm => ({
   enabled: false,
   basedOn: "paid_this_year",
-  afterDollars: 1_000_000,
-  higherPercent: 10.5,
+  goalTiers: [{ afterDollars: 1_000_000, higherPercent: 10.5 }],
   beforeGoalFlatPercent: 10,
   beforeGoalUseLeadSplit: false,
   beforeGoalSplitLead: "",
@@ -84,9 +85,14 @@ export function ruleToEditor(name: string, rule: CommissionPersonRuleV1): Commis
         : rule.runningTiers.metric === "ytd_primary_paid_amount"
           ? "cash_collected_on_sold_jobs_this_year"
           : "paid_this_year";
-    const t0 = rule.runningTiers.tiers[0];
-    bonus.afterDollars = t0?.minTotal ?? 0;
-    bonus.higherPercent = Math.round((t0?.rate ?? 0) * 10000) / 100;
+    const sortedTiers = [...rule.runningTiers.tiers].sort((a, b) => a.minTotal - b.minTotal);
+    bonus.goalTiers =
+      sortedTiers.length > 0
+        ? sortedTiers.map((t) => ({
+            afterDollars: t.minTotal,
+            higherPercent: Math.round(t.rate * 10000) / 100,
+          }))
+        : [{ afterDollars: 0, higherPercent: 0 }];
     const br = rule.runningTiers.belowRates;
     if (br?.flat !== undefined) {
       bonus.beforeGoalFlatPercent = Math.round(br.flat * 10000) / 100;
@@ -126,8 +132,14 @@ export function editorToRule(ed: CommissionPersonEditor): CommissionPersonRuleV1
         : ed.bonus.basedOn === "cash_collected_on_sold_jobs_this_year"
           ? "ytd_primary_paid_amount"
           : "ytd_paid_commissions";
-    const high = num(ed.bonus.higherPercent, 0) / 100;
-    const threshold = Math.max(0, num(ed.bonus.afterDollars, 0));
+    const tiers = ed.bonus.goalTiers
+      .map((t) => ({
+        minTotal: Math.max(0, num(t.afterDollars, 0)),
+        rate: num(t.higherPercent, 0) / 100,
+      }))
+      .filter((t) => t.minTotal > 0 || t.rate > 0)
+      .sort((a, b) => b.minTotal - a.minTotal);
+    const highestRate = tiers.reduce((max, t) => Math.max(max, t.rate), 0);
 
     let belowRates: NonNullable<CommissionRunningTierPack["belowRates"]>;
     if (ed.bonus.beforeGoalUseLeadSplit) {
@@ -147,7 +159,7 @@ export function editorToRule(ed: CommissionPersonEditor): CommissionPersonRuleV1
 
     const runningTiers: CommissionRunningTierPack = {
       metric,
-      tiers: [{ minTotal: threshold, rate: high }],
+      tiers: tiers.length > 0 ? tiers : [{ minTotal: 0, rate: highestRate }],
       belowRates,
     };
 
@@ -162,7 +174,7 @@ export function editorToRule(ed: CommissionPersonEditor): CommissionPersonRuleV1
       const bl = runningTiers.belowRates.byLead;
       if (bl != null) {
         rule.elevatedPaidGuard = {
-          elevatedRate: high,
+          elevatedRate: highestRate,
           splitLead: bl.splitLead,
           belowRate: bl.belowRate,
           elseRate: bl.atOrAboveRate,
