@@ -453,7 +453,7 @@ export default async function CommissionsPage({
                             Pay blocked until checklist submitted.{" "}
                             <Link href={`/dashboard/forms/${c.jobId}`}>Open form</Link>
                           </span>
-                        ) : !c.override && c.salesperson.active && displayOwed > 0 ? (
+                        ) : c.salesperson.active && displayOwed > 0 ? (
                           <PayCommissionForm
                             commissionId={c.id}
                             defaultOwed={displayOwed}

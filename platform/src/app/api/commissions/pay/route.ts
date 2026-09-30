@@ -56,7 +56,6 @@ export async function POST(req: Request) {
       });
       if (!c) throw new Error("NOT_FOUND");
       if (commissionPayoutBlockedForJob(c.job)) throw new Error("END_OF_JOB_FORM_PENDING");
-      if (c.override) throw new Error("OVERRIDE_LOCKED");
       const payAmt = amount ?? c.owedAmount.toNumber();
       if (payAmt <= 0) throw new Error("NO_AMOUNT");
 
@@ -96,9 +95,6 @@ export async function POST(req: Request) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error";
     if (msg === "NOT_FOUND") return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (msg === "OVERRIDE_LOCKED") {
-      return NextResponse.json({ error: "Commission is override-locked" }, { status: 400 });
-    }
     if (msg === "NO_AMOUNT") {
       return NextResponse.json({ error: "Nothing to pay" }, { status: 400 });
     }
