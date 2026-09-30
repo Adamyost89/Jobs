@@ -142,7 +142,7 @@ export async function loadRepPaidVsCollected(
     );
     const line = jobLineFor(repFor(c.salesperson.name), c.job);
     line.commissionPaid += displayPaid;
-    if (!c.override) line.commissionOwed += displayOwed;
+    line.commissionOwed += displayOwed;
   }
 
   for (const j of primaryJobs) {

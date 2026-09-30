@@ -45,7 +45,7 @@ export default async function HrCommissionsPayrollPage() {
   if (!canViewHrPayroll(user)) redirect("/dashboard");
 
   const candidates = await prisma.commission.findMany({
-    where: { override: false, owedAmount: { gt: 0 }, salesperson: { active: true } },
+    where: { owedAmount: { gt: 0 }, salesperson: { active: true } },
     include: {
       job: {
         select: {
@@ -220,7 +220,7 @@ export default async function HrCommissionsPayrollPage() {
           </div>
         )}
         <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--muted)" }}>
-          Admins post payments from <Link href="/dashboard/commissions">Commission lines</Link>. Override rows are excluded here.
+          Admins post payments from <Link href="/dashboard/commissions">Commission lines</Link>.
         </p>
       </section>
 
