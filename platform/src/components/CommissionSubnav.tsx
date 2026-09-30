@@ -10,6 +10,9 @@ function isActive(href: string, pathname: string): boolean {
   if (href === "/dashboard/commissions/payout-summary") {
     return pathname.startsWith("/dashboard/commissions/payout-summary");
   }
+  if (href === "/dashboard/commissions/paid-vs-collected") {
+    return pathname.startsWith("/dashboard/commissions/paid-vs-collected");
+  }
   if (href === "/dashboard/hr/commissions") {
     return pathname.startsWith("/dashboard/hr/commissions");
   }
@@ -21,6 +24,7 @@ export function CommissionSubnav({ showPayroll }: { showPayroll: boolean }) {
   const items: { href: string; label: string }[] = [
     { href: "/dashboard/commissions", label: "Commission lines" },
     { href: "/dashboard/commissions/payout-summary", label: "Payout Summary" },
+    { href: "/dashboard/commissions/paid-vs-collected", label: "Paid vs Collected" },
   ];
   if (showPayroll) {
     items.push({ href: "/dashboard/hr/commissions", label: "Payroll log" });
