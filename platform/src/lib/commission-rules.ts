@@ -582,8 +582,12 @@ export function explainCommissionForSalesperson(
     (segments ? earnedFromSegments(segments) : null) ??
     earnedToDateWithRunningTierProgression(rule, ctx, salespersonName, totals, collectedCommissionBase) ??
     collectedCommissionBase * rateDetail.rate;
+  const unknownTierDate = !segments && !!ctx.tierCutovers?.[salespersonName]?.some((c) => c.reachedOn == null);
   const earnedToDateNote =
     (segments ? noteFromSegments(segments, rateDetail.rate) : null) ??
+    (unknownTierDate
+      ? "goal reached date unknown, so all cash uses the tier rate — set 'Goal reached on' in the commission plan"
+      : null) ??
     earnedToDateNoteWithRunningTierProgression(rule, ctx, salespersonName, totals, collectedCommissionBase) ??
     undefined;
 
