@@ -101,7 +101,12 @@ function readPaymentEvent(
     if (!changed.includes("amountPaid") || v === null) return null;
     return { kind: "observed", value: v, authoritative: true };
   }
-  const normalized = normalizeProlineWebhookBody(p, {});
+  let normalized: ReturnType<typeof normalizeProlineWebhookBody>;
+  try {
+    normalized = normalizeProlineWebhookBody(p, {});
+  } catch {
+    return null;
+  }
   if (!normalized.ok) return null;
   const ev = normalized.event;
   const incoming = ev.amountPaid ?? ev.grossRevenue;
@@ -318,29 +323,34 @@ export async function loadRunningTierCutoversForJob(args: {
 
     const rows: CommissionTierCutovers[string] = [];
     for (const t of met) {
-      let reached: TierReached;
-      if (isIsoDate(t.reachedOn)) {
-        const iso = t.reachedOn.trim();
-        reached = { at: payrollDayStart(iso), reachedOn: iso };
-      } else {
-        const key = `${pack.metric}|${args.year}|${name}|${t.minTotal}`;
-        reached = await cached(key, () =>
-          pack.metric === "ytd_paid_commissions"
-            ? reachedByPaidCommissions(args.year, name, t.minTotal, running)
-            : reachedByPrimaryCashCollected(args.year, name, t.minTotal)
-        );
-      }
-      if (!reached) {
+      try {
+        let reached: TierReached;
+        if (isIsoDate(t.reachedOn)) {
+          const iso = t.reachedOn.trim();
+          reached = { at: payrollDayStart(iso), reachedOn: iso };
+        } else {
+          const key = `${pack.metric}|${args.year}|${name}|${t.minTotal}`;
+          reached = await cached(key, () =>
+            pack.metric === "ytd_paid_commissions"
+              ? reachedByPaidCommissions(args.year, name, t.minTotal, running)
+              : reachedByPrimaryCashCollected(args.year, name, t.minTotal)
+          );
+        }
+        if (!reached) {
+          rows.push({ minTotal: t.minTotal, reachedOn: null, customerPaidBefore: null });
+          continue;
+        }
+        const tl = await timeline();
+        const extra = reached.crossingJobId === args.jobId ? (reached.crossingExtra ?? 0) : 0;
+        rows.push({
+          minTotal: t.minTotal,
+          reachedOn: reached.reachedOn,
+          customerPaidBefore: Math.min(Math.max(0, args.customerPaid), paidBefore(tl, reached.at) + extra),
+        });
+      } catch (error) {
+        console.error("commission tier cutover failed", { jobId: args.jobId, salesperson: name, error });
         rows.push({ minTotal: t.minTotal, reachedOn: null, customerPaidBefore: null });
-        continue;
       }
-      const tl = await timeline();
-      const extra = reached.crossingJobId === args.jobId ? (reached.crossingExtra ?? 0) : 0;
-      rows.push({
-        minTotal: t.minTotal,
-        reachedOn: reached.reachedOn,
-        customerPaidBefore: Math.min(Math.max(0, args.customerPaid), paidBefore(tl, reached.at) + extra),
-      });
     }
     out[name] = rows;
   }

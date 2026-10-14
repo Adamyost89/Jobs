@@ -106,7 +106,9 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
     where: { id: jobId },
     data: updateData,
   });
-  await recordCustomerPaidSnapshot(job.id, Math.max(0, dec(job.amountPaid ?? 0)));
+  await recordCustomerPaidSnapshot(job.id, Math.max(0, dec(job.amountPaid ?? 0))).catch((error) =>
+    console.error("customer paid snapshot failed", { jobId: job.id, error })
+  );
 
   const cfg = await prisma.systemConfig.findUnique({
     where: { id: "singleton" },
