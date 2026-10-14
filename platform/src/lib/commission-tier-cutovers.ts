@@ -14,6 +14,8 @@ import { normalizeProlineWebhookBody } from "./proline-webhook";
 /** Dated record of `Job.amountPaid`, written by `recalculateJobAndCommissions` whenever it changes. */
 export const CUSTOMER_PAID_SNAPSHOT_EVENT = "CUSTOMER_PAID_SNAPSHOT";
 const PAYMENT_DELTA_EVENT_PREFIX = "PROLINE_PAYMENT_DELTA_";
+/** Job edit from the app; `payload.patch.amountPaid` is the new value when it was changed. */
+const MANUAL_PAYMENT_EVENT = "MANUAL_PAYMENT_UPDATE";
 /** Bulk corrections that log `{ changed, local, remote }` after setting `amountPaid` to `remote.amountPaid`. */
 const PAYMENT_CORRECTION_EVENTS = new Set(["PROLINE_PAYMENT_RECONCILE", "PROLINE_CSV_COMPARE"]);
 const DATED_TIER_METRICS: CommissionRunningMetric[] = ["ytd_paid_commissions", "ytd_primary_paid_amount"];
@@ -63,7 +65,10 @@ async function loadPaymentHistory(jobIds: string[]): Promise<Map<string, Payment
   const rows = await prisma.jobEvent.findMany({
     where: {
       jobId: { in: jobIds },
-      OR: [{ type: { startsWith: "PROLINE_" } }, { type: CUSTOMER_PAID_SNAPSHOT_EVENT }],
+      OR: [
+        { type: { startsWith: "PROLINE_" } },
+        { type: { in: [CUSTOMER_PAID_SNAPSHOT_EVENT, MANUAL_PAYMENT_EVENT] } },
+      ],
       NOT: [
         { type: { startsWith: "PROLINE_INVOICE_DELTA_" } },
         { type: { startsWith: "PROLINE_NAME_WRITEBACK" } },
@@ -91,6 +96,10 @@ function readPaymentEvent(
     const v = num(p.amountPaid);
     return v === null ? null : { kind: "observed", value: v, authoritative: true };
   }
+  if (e.type === MANUAL_PAYMENT_EVENT) {
+    const v = num(asRecord(p.patch)?.amountPaid);
+    return v === null ? null : { kind: "observed", value: Math.max(0, v), authoritative: true };
+  }
   if (e.type.startsWith(PAYMENT_DELTA_EVENT_PREFIX)) {
     const d = num(p.paymentDelta);
     return d === null ? null : { kind: "delta", amount: d };
@@ -115,8 +124,10 @@ function readPaymentEvent(
 }
 
 /**
- * Rebuilds when the job's cash came in from snapshots, ProLine webhook payloads, per-payment markers and
- * reconciles. Cash not explained by any dated event is treated as collected before the first event.
+ * Rebuilds when the job's cash came in from snapshots, ProLine webhook payloads, per-payment markers,
+ * reconciles and manual edits. Cash not explained by any dated event is treated as collected before the first
+ * event. A job's first snapshot is only a baseline (taken whenever snapshots started), not a payment moment, so
+ * any jump it reveals is also treated as early cash.
  */
 function buildPaidTimeline(currentPaid: number, history: PaymentHistoryEvent[]): PaidTimeline {
   const steps: { at: number; value: number }[] = [];
@@ -124,9 +135,20 @@ function buildPaidTimeline(currentPaid: number, history: PaymentHistoryEvent[]):
   let initial = 0;
   let value = 0;
   let known = false;
+  let sawSnapshot = false;
 
   for (const e of history) {
     const read = readPaymentEvent(e);
+    if (e.type === CUSTOMER_PAID_SNAPSHOT_EVENT && !sawSnapshot) {
+      sawSnapshot = true;
+      if (known && read?.kind === "observed") {
+        const shift = read.value - value;
+        initial += shift;
+        for (const s of steps) s.value += shift;
+        value = read.value;
+        continue;
+      }
+    }
     if (!read) continue;
     const at = e.createdAt.getTime();
     if (read.kind === "delta") {
@@ -273,6 +295,22 @@ async function reachedByPrimaryCashCollected(
   return null;
 }
 
+/** Commission checks to the rep on this job posted (or paid) on or before `reachedOn`. */
+async function commissionPaidOnJobBy(jobId: string, salespersonName: string, reachedOn: string): Promise<number> {
+  const payouts = await prisma.commissionPayout.findMany({
+    where: { jobId, salesperson: { name: salespersonName } },
+    select: { amount: true, payPeriodLabel: true, notes: true, importSourceKey: true, createdAt: true },
+  });
+  let sum = 0;
+  for (const p of payouts) {
+    const posted = formatIsoDateForPayrollTz(p.createdAt);
+    const payday = payoutPaydayIso(p);
+    const earliest = posted < payday ? posted : payday;
+    if (earliest <= reachedOn) sum += p.amount.toNumber();
+  }
+  return sum;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -346,6 +384,7 @@ export async function loadRunningTierCutoversForJob(args: {
           minTotal: t.minTotal,
           reachedOn: reached.reachedOn,
           customerPaidBefore: Math.min(Math.max(0, args.customerPaid), paidBefore(tl, reached.at) + extra),
+          commissionPaidBefore: await commissionPaidOnJobBy(args.jobId, name, reached.reachedOn),
         });
       } catch (error) {
         console.error("commission tier cutover failed", { jobId: args.jobId, salesperson: name, error });

@@ -64,10 +64,12 @@ export type CommissionPlanConfigV1 = {
 /**
  * Per rep: each running tier currently met, with when it was reached and how much customer cash this job
  * had collected before that moment (`null` when unknown — whole job then uses the tier rate).
+ * `commissionPaidBefore` = commission payouts to the rep on this job dated before the tier was reached; cash
+ * behind those checks was necessarily collected earlier.
  */
 export type CommissionTierCutovers = Record<
   string,
-  { minTotal: number; reachedOn: string | null; customerPaidBefore: number | null }[]
+  { minTotal: number; reachedOn: string | null; customerPaidBefore: number | null; commissionPaidBefore?: number }[]
 >;
 
 export type CommissionTierTotals = Record<

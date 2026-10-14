@@ -295,7 +295,7 @@ function earnedToDateNoteWithRunningTierProgression(
   )} @ ${(higherRate * 100).toFixed(2)}%`;
 }
 
-type DatedTierSegment = { amount: number; rate: number; fromDate: string | null };
+type DatedTierSegment = { amount: number; rate: number; fromDate: string | null; untilDate: string | null };
 
 /**
  * Splits this job's collected cash by the dates each met tier was reached: cash collected before a tier date
@@ -327,14 +327,17 @@ function datedTierSegments(
   let prevDate: string | null = null;
   for (const tier of metTiers) {
     const c = cutoverFor(tier.minTotal);
-    const before = tier.minTotal <= 0 ? 0 : (c?.customerPaidBefore ?? prevPaid);
+    const checks = c?.commissionPaidBefore ?? 0;
+    const backedByChecks = prevRate > 0 && checks > 0 ? (checks + 0.005) / prevRate : 0;
+    const before = tier.minTotal <= 0 ? 0 : Math.max(c?.customerPaidBefore ?? prevPaid, backedByChecks);
     const cut = Math.min(collected, Math.max(prevPaid, before));
-    segments.push({ amount: cut - prevPaid, rate: prevRate, fromDate: prevDate });
+    const reachedOn = c?.reachedOn ?? null;
+    segments.push({ amount: cut - prevPaid, rate: prevRate, fromDate: prevDate, untilDate: reachedOn });
     prevPaid = cut;
     prevRate = tier.rate;
-    prevDate = c?.reachedOn ?? null;
+    prevDate = reachedOn;
   }
-  segments.push({ amount: collected - prevPaid, rate: prevRate, fromDate: prevDate });
+  segments.push({ amount: collected - prevPaid, rate: prevRate, fromDate: prevDate, untilDate: null });
   return segments.filter((s) => s.amount > 0.000001);
 }
 
@@ -342,13 +345,16 @@ function earnedFromSegments(segments: DatedTierSegment[]): number {
   return segments.reduce((sum, s) => sum + s.amount * s.rate, 0);
 }
 
-function noteFromSegments(segments: DatedTierSegment[], currentRate: number): string | null {
+function noteFromSegments(segments: DatedTierSegment[]): string | null {
   if (!segments.length) return null;
-  if (segments.length === 1 && Math.abs(segments[0].rate - currentRate) < 0.0000001) return null;
-  const parts = segments.map(
-    (s) =>
-      `${round2(s.amount)} @ ${(s.rate * 100).toFixed(2)}%${s.fromDate ? ` (collected on/after ${s.fromDate})` : " (collected earlier)"}`
-  );
+  const parts = segments.map((s) => {
+    const when = s.untilDate
+      ? `collected before ${s.untilDate}`
+      : s.fromDate
+        ? `collected on/after ${s.fromDate}`
+        : "collected earlier";
+    return `${round2(s.amount)} @ ${(s.rate * 100).toFixed(2)}% (${when})`;
+  });
   return `dated tier split: ${parts.join(" + ")}`;
 }
 
@@ -584,7 +590,7 @@ export function explainCommissionForSalesperson(
     collectedCommissionBase * rateDetail.rate;
   const unknownTierDate = !segments && !!ctx.tierCutovers?.[salespersonName]?.some((c) => c.reachedOn == null);
   const earnedToDateNote =
-    (segments ? noteFromSegments(segments, rateDetail.rate) : null) ??
+    (segments ? noteFromSegments(segments) : null) ??
     (unknownTierDate
       ? "goal reached date unknown, so all cash uses the tier rate — set 'Goal reached on' in the commission plan"
       : null) ??
