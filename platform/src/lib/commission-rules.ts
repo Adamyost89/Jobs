@@ -7,6 +7,7 @@ import type {
   CommissionPersonRuleV1,
   CommissionPlanConfigV1,
   CommissionRunningTierPack,
+  CommissionTierCutovers,
   CommissionTierTotals,
 } from "./commission-plan-types";
 import type { SalesKind } from "./salespeople-kind-db";
@@ -99,6 +100,8 @@ export type CommissionComputeContext = {
   activeBySalespersonName: Record<string, boolean>;
   /** Names that already have a commission row on this job (used to zero-out inactive without dropping history). */
   existingCommissionNamesOnJob: Set<string>;
+  /** Dated tier cutovers (see `loadRunningTierCutoversForJob`); cash collected before a cutover keeps the lower rate. */
+  tierCutovers?: CommissionTierCutovers;
 };
 
 function round2(n: number) {
@@ -292,6 +295,63 @@ function earnedToDateNoteWithRunningTierProgression(
   )} @ ${(higherRate * 100).toFixed(2)}%`;
 }
 
+type DatedTierSegment = { amount: number; rate: number; fromDate: string | null };
+
+/**
+ * Splits this job's collected cash by the dates each met tier was reached: cash collected before a tier date
+ * stays at the prior rate, so a later recalc (e.g. ProLine update) never re-prices older payments upward.
+ */
+function datedTierSegments(
+  rule: CommissionPersonRuleV1,
+  ctx: CommissionComputeContext,
+  salespersonName: string,
+  totals: { ytdPaid: number; ytdPrimaryBasis: number; ytdPrimaryPaidAmount: number },
+  collectedCommissionBase: number
+): DatedTierSegment[] | null {
+  const pack = rule.runningTiers;
+  if (!pack || pack.metric === "ytd_primary_job_basis") return null;
+  const cutovers = ctx.tierCutovers?.[salespersonName];
+  if (!cutovers?.length) return null;
+  const running = runningMetricValue(pack, totals);
+  const metTiers = [...pack.tiers]
+    .filter((t) => running >= t.minTotal)
+    .sort((a, b) => a.minTotal - b.minTotal);
+  if (!metTiers.length) return null;
+  const cutoverFor = (minTotal: number) => cutovers.find((x) => Math.abs(x.minTotal - minTotal) < 0.005);
+  if (metTiers.some((t) => t.minTotal > 0 && cutoverFor(t.minTotal)?.customerPaidBefore == null)) return null;
+
+  const collected = Math.max(0, collectedCommissionBase);
+  const segments: DatedTierSegment[] = [];
+  let prevPaid = 0;
+  let prevRate = rateFromRunningTiersAtValue(pack, ctx.jobIdNum, metTiers[0].minTotal - 0.01);
+  let prevDate: string | null = null;
+  for (const tier of metTiers) {
+    const c = cutoverFor(tier.minTotal);
+    const before = tier.minTotal <= 0 ? 0 : (c?.customerPaidBefore ?? prevPaid);
+    const cut = Math.min(collected, Math.max(prevPaid, before));
+    segments.push({ amount: cut - prevPaid, rate: prevRate, fromDate: prevDate });
+    prevPaid = cut;
+    prevRate = tier.rate;
+    prevDate = c?.reachedOn ?? null;
+  }
+  segments.push({ amount: collected - prevPaid, rate: prevRate, fromDate: prevDate });
+  return segments.filter((s) => s.amount > 0.000001);
+}
+
+function earnedFromSegments(segments: DatedTierSegment[]): number {
+  return segments.reduce((sum, s) => sum + s.amount * s.rate, 0);
+}
+
+function noteFromSegments(segments: DatedTierSegment[], currentRate: number): string | null {
+  if (!segments.length) return null;
+  if (segments.length === 1 && Math.abs(segments[0].rate - currentRate) < 0.0000001) return null;
+  const parts = segments.map(
+    (s) =>
+      `${round2(s.amount)} @ ${(s.rate * 100).toFixed(2)}%${s.fromDate ? ` (collected on/after ${s.fromDate})` : " (collected earlier)"}`
+  );
+  return `dated tier split: ${parts.join(" + ")}`;
+}
+
 function resolvePersonRate(rule: CommissionPersonRuleV1, ctx: CommissionComputeContext, salespersonName: string): number {
   const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
   if (rule.runningTiers) {
@@ -449,7 +509,9 @@ export function computeCommissionsForJob(ctx: CommissionComputeContext): Commiss
     const paidCommission = ctx.existingPaidBySalesperson[sp] ?? 0;
     const rate = resolvePersonRate(rule, ctx, sp);
     const totals = ctx.tierTotals[sp] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
+    const segments = datedTierSegments(rule, ctx, sp, totals, collectedCommissionBase);
     const earnedToDate =
+      (segments ? earnedFromSegments(segments) : null) ??
       earnedToDateWithRunningTierProgression(rule, ctx, sp, totals, collectedCommissionBase) ??
       collectedCommissionBase * rate;
 
@@ -515,10 +577,13 @@ export function explainCommissionForSalesperson(
   const basis = Math.max(0, ctx.basis);
   const rateDetail = resolvePersonRateDetail(rule, ctx, salespersonName);
   const totalCommission = basis * rateDetail.rate;
+  const segments = datedTierSegments(rule, ctx, salespersonName, totals, collectedCommissionBase);
   const earnedToDate =
+    (segments ? earnedFromSegments(segments) : null) ??
     earnedToDateWithRunningTierProgression(rule, ctx, salespersonName, totals, collectedCommissionBase) ??
     collectedCommissionBase * rateDetail.rate;
   const earnedToDateNote =
+    (segments ? noteFromSegments(segments, rateDetail.rate) : null) ??
     earnedToDateNoteWithRunningTierProgression(rule, ctx, salespersonName, totals, collectedCommissionBase) ??
     undefined;
 

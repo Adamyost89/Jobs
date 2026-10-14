@@ -9,8 +9,11 @@ import {
 export type LeadStepForm = { fromLead: number; usePercent: number };
 export type ScopeStepForm = { fromLead: number; useScope: "all_jobs" | "primary_only" };
 
-/** One yearly-goal threshold: when running total reaches `afterDollars`, use `higherPercent`. */
-export type BonusTierForm = { afterDollars: number; higherPercent: number };
+/**
+ * One yearly-goal threshold: when running total reaches `afterDollars`, use `higherPercent`.
+ * `reachedOn` (YYYY-MM-DD) pins the date the goal was hit; blank = derive from payouts / customer payments.
+ */
+export type BonusTierForm = { afterDollars: number; higherPercent: number; reachedOn: string };
 
 export type BonusForm = {
   enabled: boolean;
@@ -44,7 +47,7 @@ export type CommissionPersonEditor = {
 export const emptyBonusForm = (): BonusForm => ({
   enabled: false,
   basedOn: "paid_this_year",
-  goalTiers: [{ afterDollars: 1_000_000, higherPercent: 10.5 }],
+  goalTiers: [{ afterDollars: 1_000_000, higherPercent: 10.5, reachedOn: "" }],
   beforeGoalFlatPercent: 10,
   beforeGoalUseLeadSplit: false,
   beforeGoalSplitLead: "",
@@ -91,8 +94,9 @@ export function ruleToEditor(name: string, rule: CommissionPersonRuleV1): Commis
         ? sortedTiers.map((t) => ({
             afterDollars: t.minTotal,
             higherPercent: Math.round(t.rate * 10000) / 100,
+            reachedOn: t.reachedOn ?? "",
           }))
-        : [{ afterDollars: 0, higherPercent: 0 }];
+        : [{ afterDollars: 0, higherPercent: 0, reachedOn: "" }];
     const br = rule.runningTiers.belowRates;
     if (br?.flat !== undefined) {
       bonus.beforeGoalFlatPercent = Math.round(br.flat * 10000) / 100;
@@ -133,10 +137,14 @@ export function editorToRule(ed: CommissionPersonEditor): CommissionPersonRuleV1
           ? "ytd_primary_paid_amount"
           : "ytd_paid_commissions";
     const tiers = ed.bonus.goalTiers
-      .map((t) => ({
-        minTotal: Math.max(0, num(t.afterDollars, 0)),
-        rate: num(t.higherPercent, 0) / 100,
-      }))
+      .map((t) => {
+        const reachedOn = String(t.reachedOn ?? "").trim();
+        return {
+          minTotal: Math.max(0, num(t.afterDollars, 0)),
+          rate: num(t.higherPercent, 0) / 100,
+          ...(/^\d{4}-\d{2}-\d{2}$/.test(reachedOn) ? { reachedOn } : {}),
+        };
+      })
       .filter((t) => t.minTotal > 0 || t.rate > 0)
       .sort((a, b) => b.minTotal - a.minTotal);
     const highestRate = tiers.reduce((max, t) => Math.max(max, t.rate), 0);

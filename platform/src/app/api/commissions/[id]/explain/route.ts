@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { commissionPlanForJobYear } from "@/lib/commission-plan-defaults";
 import { loadCommissionTierTotalsForYear } from "@/lib/commission-tier-totals";
+import { loadRunningTierCutoversForJob } from "@/lib/commission-tier-cutovers";
 import { loadSalespersonFlagsByName } from "@/lib/salespeople-kind-db";
 import { explainCommissionForSalesperson } from "@/lib/commission-rules";
 import { commissionDisplayAmounts } from "@/lib/commission-display";
@@ -61,6 +62,13 @@ export async function GET(
   ]);
 
   const plan = commissionPlanForJobYear(row.job.year, planRow?.config);
+  const tierCutovers = await loadRunningTierCutoversForJob({
+    jobId: row.jobId,
+    year: row.job.year,
+    plan,
+    tierTotals,
+    customerPaid,
+  });
   const payoutSum = dec(payoutSumRaw._sum.amount);
   const ledgerPaid = dec(row.paidAmount);
   const ledgerOwed = dec(row.owedAmount);
@@ -93,6 +101,7 @@ export async function GET(
       kindBySalespersonName: flags.kindByName,
       activeBySalespersonName: flags.activeByName,
       existingCommissionNamesOnJob: new Set(row.job.commissions.map((c) => c.salesperson.name)),
+      tierCutovers,
     },
     row.salesperson.name
   );

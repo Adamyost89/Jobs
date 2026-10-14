@@ -35,7 +35,7 @@ export type PayoutSummaryByRep = {
   lastPosted: Date;
 };
 
-function inferPayoutYear(row: {
+export function inferPayoutYear(row: {
   createdAt: Date;
   notes?: string | null;
   importSourceKey?: string | null;
@@ -49,7 +49,7 @@ function inferPayoutYear(row: {
   return row.createdAt.getUTCFullYear();
 }
 
-function parsePayPeriodSortDate(payPeriodLabel: string, fallbackYear: number, fallbackDate: Date): Date {
+export function parsePayPeriodSortDate(payPeriodLabel: string, fallbackYear: number, fallbackDate: Date): Date {
   const raw = String(payPeriodLabel || "").trim();
   const parseMonthDay = (token: string, defaultYear: number): Date | null => {
     // Supports labels like "Dec 26th", "Dec 26", or "Dec 26, 2025".

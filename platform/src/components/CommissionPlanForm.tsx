@@ -485,6 +485,21 @@ export function CommissionPlanForm({
                                 }
                               />
                             </label>
+                            {ed.bonus.basedOn !== "sold_jobs_this_year" && (
+                              <label className="form-field">
+                                <span>Goal reached on (blank = automatic)</span>
+                                <input
+                                  className="input input-narrow"
+                                  type="date"
+                                  value={tier.reachedOn}
+                                  onChange={(e) =>
+                                    setEditors((prev) =>
+                                      updateBonusTier(prev, idx, tIdx, { reachedOn: e.target.value })
+                                    )
+                                  }
+                                />
+                              </label>
+                            )}
                             {ed.bonus.goalTiers.length > 1 && (
                               <button
                                 type="button"
@@ -512,7 +527,7 @@ export function CommissionPlanForm({
                               updateBonus(prev, idx, {
                                 goalTiers: [
                                   ...prev[idx].bonus.goalTiers,
-                                  { afterDollars: nextDollars, higherPercent: last?.higherPercent ?? 0 },
+                                  { afterDollars: nextDollars, higherPercent: last?.higherPercent ?? 0, reachedOn: "" },
                                 ],
                               })
                             );

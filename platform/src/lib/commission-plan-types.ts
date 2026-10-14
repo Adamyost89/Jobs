@@ -20,8 +20,13 @@ export type CommissionRunningMetric =
 
 export type CommissionRunningTierPack = {
   metric: CommissionRunningMetric;
-  /** Descending `minTotal` is easiest to reason about; resolver picks first where runningTotal >= minTotal. */
-  tiers: { minTotal: number; rate: number }[];
+  /**
+   * Descending `minTotal` is easiest to reason about; resolver picks first where runningTotal >= minTotal.
+   * `reachedOn` (YYYY-MM-DD, payroll TZ) pins the date the goal was hit; otherwise it is derived from payouts
+   * (`ytd_paid_commissions`) or dated customer payments (`ytd_primary_paid_amount`). Customer cash collected
+   * before that moment keeps the lower rate.
+   */
+  tiers: { minTotal: number; rate: number; reachedOn?: string }[];
   /** When no tier matches (running total below all thresholds). */
   belowRates?: {
     flat?: number;
@@ -55,6 +60,15 @@ export type CommissionPlanConfigV1 = {
   peopleOrder?: string[];
   people: Record<string, CommissionPersonRuleV1>;
 };
+
+/**
+ * Per rep: each running tier currently met, with when it was reached and how much customer cash this job
+ * had collected before that moment (`null` when unknown — whole job then uses the tier rate).
+ */
+export type CommissionTierCutovers = Record<
+  string,
+  { minTotal: number; reachedOn: string | null; customerPaidBefore: number | null }[]
+>;
 
 export type CommissionTierTotals = Record<
   string,

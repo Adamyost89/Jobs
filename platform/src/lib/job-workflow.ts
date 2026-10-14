@@ -4,6 +4,7 @@ import { computeCommissionsForJob } from "./commission-rules";
 import { skipAutoCommissionRecalcForJobYear } from "./commission-import-policy";
 import { commissionPlanForJobYear } from "./commission-plan-defaults";
 import { loadCommissionTierTotalsForYear } from "./commission-tier-totals";
+import { loadRunningTierCutoversForJob, recordCustomerPaidSnapshot } from "./commission-tier-cutovers";
 import { loadSalespersonFlagsByName } from "./salespeople-kind-db";
 import { resolveOrCreateSalespersonByName } from "./salesperson-name";
 import { moneyEq, resolvedChangeOrders } from "./change-orders";
@@ -105,6 +106,7 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
     where: { id: jobId },
     data: updateData,
   });
+  await recordCustomerPaidSnapshot(job.id, Math.max(0, dec(job.amountPaid ?? 0)));
 
   const cfg = await prisma.systemConfig.findUnique({
     where: { id: "singleton" },
@@ -149,6 +151,13 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
       },
     }),
   ]);
+  const tierCutovers = await loadRunningTierCutoversForJob({
+    jobId: job.id,
+    year: job.year,
+    plan,
+    tierTotals,
+    customerPaid,
+  });
   const { kindByName: kindBySalespersonName, activeByName: activeBySalespersonName } = flags;
   const existingCommissionNamesOnJob = new Set(job.commissions.map((c) => c.salesperson.name));
   const payoutPaidBySalesperson: Record<string, number> = {};
@@ -183,6 +192,7 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
     kindBySalespersonName,
     activeBySalespersonName,
     existingCommissionNamesOnJob,
+    tierCutovers,
   });
 
   const computedNames = new Set(rows.map((r) => r.salespersonName));
