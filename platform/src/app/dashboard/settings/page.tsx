@@ -14,6 +14,7 @@ import { ReconcileProlinePaymentsButton } from "@/components/ReconcileProlinePay
 import { StatusBadgeColorSettings } from "@/components/StatusBadgeColorSettings";
 import { EndOfJobFormSettingsCard } from "@/components/EndOfJobFormSettingsCard";
 import { SyncCommissionLedgerButton } from "@/components/SyncCommissionLedgerButton";
+import { RecalculateCommissionsButton } from "@/components/RecalculateCommissionsButton";
 import Link from "next/link";
 import { displaySalespersonName } from "@/lib/salesperson-name";
 
@@ -141,6 +142,12 @@ export default async function SettingsPage({
             <h2 style={{ marginTop: 0 }}>Commission plans by year</h2>
             <CommissionPlanSettings years={years} salespersonNames={salespeople.map((s) => s.name)} />
           </div>
+          <RecalculateCommissionsButton
+            years={years}
+            salespeople={salespeople
+              .map((s) => ({ id: s.id, name: displaySalespersonName(s.name) }))
+              .sort((a, b) => a.name.localeCompare(b.name))}
+          />
           <div className="card">
             <h2 style={{ marginTop: 0 }}>Jobs dashboard</h2>
             <p style={{ color: "var(--muted)" }}>
