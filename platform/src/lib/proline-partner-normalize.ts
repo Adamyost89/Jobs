@@ -33,6 +33,8 @@ export type NormalizedPartnerInvoice = {
 
 export type NormalizedPartnerProject = {
   projectId: string;
+  /** Other ids for the same project (legacy Bubble id, external_id, etc.). */
+  aliasIds: string[];
   externalId: string | null;
   name: string | null;
   projectNumber: string | null;
@@ -290,38 +292,93 @@ export function normalizePartnerInvoice(row: unknown): NormalizedPartnerInvoice 
 export function normalizePartnerProject(row: unknown): NormalizedPartnerProject | null {
   const r = asRecord(row);
   if (!r) return null;
+  // Partner list/projects may use bare id or project_* keys (same family as payments).
   const projectId =
-    pickStr(r, ["id", "project_id", "projectId", "_id"]) ??
+    pickStr(r, ["project_id", "projectId", "id", "_id"]) ??
     nestedId(r, ["project"], ["id", "project_id"]);
   if (!projectId) return null;
 
-  const stageObj = asRecord(r.stage) ?? asRecord(r.project_stage);
+  const aliasIds = new Set<string>();
+  aliasIds.add(projectId);
+  for (const key of [
+    "legacy_id",
+    "legacyId",
+    "legacy_project_id",
+    "bubble_id",
+    "bubbleId",
+    "unique_id",
+    "uniqueId",
+    "old_id",
+    "oldId",
+    "project_unique_id",
+    "_id",
+    "id",
+    "project_id",
+  ]) {
+    const v = pickStr(r, [key]);
+    if (v) aliasIds.add(v);
+  }
+  const externalId = pickStr(r, [
+    "external_id",
+    "externalId",
+    "project_external_id",
+    "projectExternalId",
+  ]);
+  if (externalId) aliasIds.add(externalId);
+
+  const stageObj = asRecord(r.stage) ?? asRecord(r.project_stage) ?? asRecord(r.projectStage);
   const assigneeObj =
-    asRecord(r.assignee) ?? asRecord(r.assigned) ?? asRecord(r.sales_person) ?? asRecord(r.salesperson);
+    asRecord(r.assignee) ??
+    asRecord(r.assigned) ??
+    asRecord(r.sales_person) ??
+    asRecord(r.salesperson) ??
+    asRecord(r.project_assign);
 
   return {
     projectId,
-    externalId: pickStr(r, ["external_id", "externalId", "project_external_id"]),
-    name: pickStr(r, ["name", "project_name", "projectName", "title"]),
-    projectNumber: pickStr(r, ["project_number", "projectNumber", "number", "lead_number", "leadNumber"]),
+    aliasIds: [...aliasIds],
+    externalId,
+    name: pickStr(r, ["project_name", "projectName", "name", "title"]),
+    projectNumber: pickStr(r, [
+      "project_number",
+      "projectNumber",
+      "number",
+      "lead_number",
+      "leadNumber",
+      "project_num",
+    ]),
     stageName:
-      pickStr(r, ["stage", "stage_name", "project_stage", "prolineStage"]) ??
+      pickStr(r, ["project_stage", "projectStage", "stage", "stage_name", "prolineStage"]) ??
       (stageObj ? pickStr(stageObj, ["name", "label", "title"]) : null),
-    stageId: pickStr(r, ["stage_id", "stageId", "project_stage_id"]) ?? (stageObj ? pickStr(stageObj, ["id"]) : null),
-    status: pickStr(r, ["status", "project_status", "lifecycle_status"]),
+    stageId:
+      pickStr(r, ["project_stage_id", "stage_id", "stageId"]) ??
+      (stageObj ? pickStr(stageObj, ["id"]) : null),
+    status: pickStr(r, ["project_status", "projectStatus", "status", "lifecycle_status"]),
     location:
-      pickStr(r, ["location", "location_name", "office", "branch"]) ??
-      nestedId(r, ["location"], ["name", "label"]) ??
+      pickStr(r, ["project_location", "location", "location_name", "office", "branch"]) ??
+      nestedId(r, ["location"], ["name", "label", "id"]) ??
       (asRecord(r.location) ? pickStr(asRecord(r.location)!, ["name", "label", "id"]) : null),
     assigneeName:
-      pickStr(r, ["assignee_name", "salesperson", "salesperson_name", "assigned_name"]) ??
-      (assigneeObj ? pickStr(assigneeObj, ["name", "display_name", "full_name", "email"]) : null),
+      pickStr(r, [
+        "project_assign_name",
+        "assignee_name",
+        "salesperson",
+        "salesperson_name",
+        "assigned_name",
+      ]) ?? (assigneeObj ? pickStr(assigneeObj, ["name", "display_name", "full_name", "email"]) : null),
     assigneeId:
-      pickStr(r, ["assignee", "assignee_id", "project_assign", "user_id"]) ??
+      pickStr(r, ["project_assign", "assignee", "assignee_id", "user_id"]) ??
       (assigneeObj ? pickStr(assigneeObj, ["id", "user_id"]) : null),
-    revenue: pickNum(r, ["revenue", "expected_revenue", "approved_value", "approved_total", "budget"]),
-    budget: pickNum(r, ["budget", "project_budget", "contract_amount"]),
-    createdAt: pickDate(r, ["created_at", "createdAt", "date_created"]),
+    revenue: pickNum(r, [
+      "project_revenue",
+      "revenue",
+      "expected_revenue",
+      "approved_value",
+      "approved_total",
+      "budget",
+    ]),
+    budget: pickNum(r, ["budget", "project_budget", "contract_amount", "project_contract"]),
+    createdAt: pickDate(r, ["created_at", "createdAt", "date_created", "project_created_at"]),
     raw: r,
   };
 }

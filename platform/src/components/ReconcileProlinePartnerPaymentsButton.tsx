@@ -12,8 +12,10 @@ type Diagnostics = {
   localJobsWithProlineId?: number;
   samplePartnerProjectIds?: string[];
   samplePartnerPaymentKeys?: string[];
+  samplePartnerProjectKeys?: string[];
   sampleLocalProlineIds?: string[];
-  matchedBy?: { prolineJobId?: number; leadNumber?: number };
+  partnerProjectsLoaded?: number;
+  matchedBy?: { prolineJobId?: number; leadNumber?: number; projectAlias?: number };
 };
 
 type ReconcileResult = {
@@ -79,7 +81,7 @@ export function ReconcileProlinePartnerPaymentsButton({ partnerConfigured }: Pro
         Array.isArray(j.errors) && j.errors.length > 0 ? ` Notes: ${j.errors.slice(0, 2).join("; ")}` : "";
       const d = j.diagnostics;
       const diag = d
-        ? ` Match: ${d.paymentsWithProjectId ?? 0} payments had project id, ${d.paymentsWithoutProjectId ?? 0} missing, ${d.distinctPartnerProjectIds ?? 0} distinct partner ids, ${d.localJobsWithProlineId ?? 0} local jobs have prolineJobId. Matched via id ${d.matchedBy?.prolineJobId ?? 0} / lead# ${d.matchedBy?.leadNumber ?? 0}. Partner id samples: ${(d.samplePartnerProjectIds ?? []).slice(0, 3).join(", ") || "—"}. Local id samples: ${(d.sampleLocalProlineIds ?? []).slice(0, 3).join(", ") || "—"}. Payment keys: ${(d.samplePartnerPaymentKeys ?? []).slice(0, 12).join(", ") || "—"}.`
+        ? ` Match: ${d.paymentsWithProjectId ?? 0} payments had project id, ${d.paymentsWithoutProjectId ?? 0} missing, ${d.distinctPartnerProjectIds ?? 0} distinct partner ids, ${d.localJobsWithProlineId ?? 0} local jobs have prolineJobId, ${d.partnerProjectsLoaded ?? 0} partner projects loaded. Matched via id ${d.matchedBy?.prolineJobId ?? 0} / alias ${d.matchedBy?.projectAlias ?? 0} / lead# ${d.matchedBy?.leadNumber ?? 0}. Partner id samples: ${(d.samplePartnerProjectIds ?? []).slice(0, 3).join(", ") || "—"}. Local id samples: ${(d.sampleLocalProlineIds ?? []).slice(0, 3).join(", ") || "—"}. Payment keys: ${(d.samplePartnerPaymentKeys ?? []).slice(0, 8).join(", ") || "—"}. Project keys: ${(d.samplePartnerProjectKeys ?? []).slice(0, 8).join(", ") || "—"}.`
         : "";
       setMsg(
         `${apply ? "Applied" : "Dry run"}. Payments ${j.paymentsSeen ?? 0}, invoices ${j.invoicesSeen ?? 0}, matched jobs ${j.matchedJobs ?? 0}, unmatched payments ${j.unmatchedPayments ?? 0}, mismatches ${j.mismatches ?? 0}, events written ${j.paymentEventsWritten ?? 0}, updated ${j.updated ?? 0}.${diag}${sample}${extraErr}`

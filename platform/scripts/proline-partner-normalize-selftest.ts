@@ -49,8 +49,10 @@ assert(inv?.amountPaid === 4000, "invoice amount paid from total-balance");
 assert(inv?.total === 5000, "invoice total");
 
 const proj = normalizePartnerProject({
-  id: "proj_1",
+  id: "vs_new_id",
+  legacy_id: "1767054228890x717983713573208000",
   project_name: "Test Roof",
+  project_number: "2140",
   stage: { id: "st1", name: "Won" },
   status: "won",
   revenue: "18500",
@@ -58,5 +60,8 @@ const proj = normalizePartnerProject({
 assert(proj?.name === "Test Roof", "project name");
 assert(proj?.stageName === "Won", "project stage");
 assert(proj?.revenue === 18500, "project revenue");
+assert(proj?.aliasIds.includes("vs_new_id"), "alias includes new id");
+assert(proj?.aliasIds.includes("1767054228890x717983713573208000"), "alias includes legacy id");
+assert(proj?.projectNumber === "2140", "project number");
 
 console.log("proline-partner-normalize-selftest OK");

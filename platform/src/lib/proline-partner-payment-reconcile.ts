@@ -7,8 +7,10 @@ import {
 import {
   normalizePartnerInvoice,
   normalizePartnerPayment,
+  normalizePartnerProject,
   type NormalizedPartnerInvoice,
   type NormalizedPartnerPayment,
+  type NormalizedPartnerProject,
 } from "@/lib/proline-partner-normalize";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
 
@@ -64,8 +66,14 @@ export type PartnerPaymentReconcileResult = {
     localJobsWithProlineId: number;
     samplePartnerProjectIds: string[];
     samplePartnerPaymentKeys: string[];
+    samplePartnerProjectKeys: string[];
     sampleLocalProlineIds: string[];
-    matchedBy: { prolineJobId: number; leadNumber: number };
+    partnerProjectsLoaded: number;
+    matchedBy: {
+      prolineJobId: number;
+      leadNumber: number;
+      projectAlias: number;
+    };
   };
 };
 
@@ -112,9 +120,25 @@ function emptyDiagnostics(): PartnerPaymentReconcileResult["diagnostics"] {
     localJobsWithProlineId: 0,
     samplePartnerProjectIds: [],
     samplePartnerPaymentKeys: [],
+    samplePartnerProjectKeys: [],
     sampleLocalProlineIds: [],
-    matchedBy: { prolineJobId: 0, leadNumber: 0 },
+    partnerProjectsLoaded: 0,
+    matchedBy: { prolineJobId: 0, leadNumber: 0, projectAlias: 0 },
   };
+}
+
+/** Index Partner projects by every known id + project number so Bubble legacy ids still resolve. */
+function buildPartnerProjectIndex(projects: NormalizedPartnerProject[]): {
+  byAnyId: Map<string, NormalizedPartnerProject>;
+  byNumber: Map<string, NormalizedPartnerProject>;
+} {
+  const byAnyId = new Map<string, NormalizedPartnerProject>();
+  const byNumber = new Map<string, NormalizedPartnerProject>();
+  for (const p of projects) {
+    for (const id of p.aliasIds) byAnyId.set(id, p);
+    if (p.projectNumber) byNumber.set(p.projectNumber, p);
+  }
+  return { byAnyId, byNumber };
 }
 
 export async function reconcileProlinePaymentsFromPartnerApi(
@@ -224,8 +248,41 @@ export async function reconcileProlinePaymentsFromPartnerApi(
   ];
   diagnostics.distinctPartnerProjectIds = partnerProjectIds.length;
 
+  // Load Partner projects so new ids (vs…) can resolve to legacy Bubble ids / project numbers.
+  // Do not apply the payment date window — older projects still receive new payments.
+  const partnerProjects: NormalizedPartnerProject[] = [];
+  try {
+    for await (const page of prolinePartnerListAll(env, "/v1/list/projects", {
+      maxPages: Math.max(maxPages, 200),
+    })) {
+      for (const row of page.results) {
+        if (
+          diagnostics.samplePartnerProjectKeys.length === 0 &&
+          row &&
+          typeof row === "object" &&
+          !Array.isArray(row)
+        ) {
+          diagnostics.samplePartnerProjectKeys = Object.keys(row as object).slice(0, 40);
+        }
+        const proj = normalizePartnerProject(row);
+        if (proj) partnerProjects.push(proj);
+      }
+    }
+  } catch (e) {
+    result.errors.push(`Projects: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  diagnostics.partnerProjectsLoaded = partnerProjects.length;
+  const projectIndex = buildPartnerProjectIndex(partnerProjects);
+
   const partnerLeadNumbers = [
-    ...new Set(allPayments.map((p) => p.projectNumber).filter((n): n is string => !!n)),
+    ...new Set([
+      ...allPayments.map((p) => p.projectNumber).filter((n): n is string => !!n),
+      ...partnerProjects.map((p) => p.projectNumber).filter((n): n is string => !!n),
+    ]),
+  ];
+
+  const allAliasIds = [
+    ...new Set([...partnerProjectIds, ...partnerProjects.flatMap((p) => p.aliasIds)]),
   ];
 
   const localWithProline = await db.job.findMany({
@@ -239,17 +296,19 @@ export async function reconcileProlinePaymentsFromPartnerApi(
     .filter((id): id is string => !!id)
     .slice(0, 8);
 
-  if (!partnerProjectIds.length && !partnerLeadNumbers.length) {
+  if (!partnerProjectIds.length && !partnerLeadNumbers.length && !allAliasIds.length) {
     result.errors.push(
       "Partner payments/invoices had no recognizable project_id or project_number. Check samplePartnerPaymentKeys in diagnostics."
     );
     return result;
   }
 
+  // Load local jobs that can match: any with a ProLine id (Bubble legacy or new), plus lead# hits.
+  // Partner payment_project_id is often the new `vs…` id while Job.prolineJobId is still Bubble `…x…`.
   const jobs = await db.job.findMany({
     where: {
       OR: [
-        ...(partnerProjectIds.length ? [{ prolineJobId: { in: partnerProjectIds } }] : []),
+        { prolineJobId: { not: null } },
         ...(partnerLeadNumbers.length ? [{ leadNumber: { in: partnerLeadNumbers } }] : []),
       ],
     },
@@ -271,40 +330,57 @@ export async function reconcileProlinePaymentsFromPartnerApi(
     if (j.leadNumber) jobByLead.set(j.leadNumber, j);
   }
 
+  function resolveJobForPartnerProjectId(
+    projectId: string | null,
+    projectNumber: string | null
+  ): { job: JobRow; via: "prolineJobId" | "leadNumber" | "projectAlias" } | null {
+    if (projectId && jobByProline.has(projectId)) {
+      return { job: jobByProline.get(projectId)!, via: "prolineJobId" };
+    }
+    const partnerProj =
+      (projectId ? projectIndex.byAnyId.get(projectId) : undefined) ??
+      (projectNumber ? projectIndex.byNumber.get(projectNumber) : undefined);
+    if (partnerProj) {
+      for (const alias of partnerProj.aliasIds) {
+        if (jobByProline.has(alias)) {
+          return { job: jobByProline.get(alias)!, via: "projectAlias" };
+        }
+      }
+      if (partnerProj.projectNumber && jobByLead.has(partnerProj.projectNumber)) {
+        return { job: jobByLead.get(partnerProj.projectNumber)!, via: "leadNumber" };
+      }
+    }
+    if (projectNumber && jobByLead.has(projectNumber)) {
+      return { job: jobByLead.get(projectNumber)!, via: "leadNumber" };
+    }
+    return null;
+  }
+
   /** Group payments onto a matched job id. */
   const paymentsByJobId = new Map<string, NormalizedPartnerPayment[]>();
   const jobById = new Map<string, JobRow>();
 
   for (const p of allPayments) {
-    let job: JobRow | undefined;
-    let via: "prolineJobId" | "leadNumber" | null = null;
-    if (p.projectId && jobByProline.has(p.projectId)) {
-      job = jobByProline.get(p.projectId);
-      via = "prolineJobId";
-    } else if (p.projectNumber && jobByLead.has(p.projectNumber)) {
-      job = jobByLead.get(p.projectNumber);
-      via = "leadNumber";
-    }
-    if (!job || !via) {
+    const resolved = resolveJobForPartnerProjectId(p.projectId, p.projectNumber);
+    if (!resolved) {
       result.unmatchedPayments += 1;
       continue;
     }
-    diagnostics.matchedBy[via] += 1;
-    jobById.set(job.id, job);
-    const list = paymentsByJobId.get(job.id) ?? [];
+    diagnostics.matchedBy[resolved.via] += 1;
+    jobById.set(resolved.job.id, resolved.job);
+    const list = paymentsByJobId.get(resolved.job.id) ?? [];
     list.push(p);
-    paymentsByJobId.set(job.id, list);
+    paymentsByJobId.set(resolved.job.id, list);
   }
 
-  // Invoices matched only by project id today.
   const invoicesByJobId = new Map<string, NormalizedPartnerInvoice[]>();
   for (const [projectId, invs] of invoicesByProject) {
-    const job = jobByProline.get(projectId);
-    if (!job) continue;
-    jobById.set(job.id, job);
-    const existing = invoicesByJobId.get(job.id) ?? [];
+    const resolved = resolveJobForPartnerProjectId(projectId, null);
+    if (!resolved) continue;
+    jobById.set(resolved.job.id, resolved.job);
+    const existing = invoicesByJobId.get(resolved.job.id) ?? [];
     existing.push(...invs);
-    invoicesByJobId.set(job.id, existing);
+    invoicesByJobId.set(resolved.job.id, existing);
   }
 
   const jobIds = [...new Set([...paymentsByJobId.keys(), ...invoicesByJobId.keys()])];
