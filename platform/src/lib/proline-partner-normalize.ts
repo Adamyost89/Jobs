@@ -163,42 +163,51 @@ export function sanitizePartnerRowSample(row: unknown): Record<string, unknown> 
 export function normalizePartnerPayment(row: unknown): NormalizedPartnerPayment | null {
   const r = asRecord(row);
   if (!r) return null;
+  // Partner list/payments uses payment_* keys (confirmed live).
   const paymentId =
-    pickStr(r, ["id", "payment_id", "paymentId", "_id"]) ??
+    pickStr(r, ["payment_id", "paymentId", "id", "_id"]) ??
     nestedId(r, ["payment"], ["id", "payment_id"]);
   if (!paymentId) return null;
 
-  const projectId = pickProjectId(r);
-  const projectNumber = pickProjectNumber(r);
+  const projectId =
+    pickStr(r, ["payment_project_id", "paymentProjectId"]) ?? pickProjectId(r);
+  const projectNumber =
+    pickStr(r, ["payment_project_number", "paymentProjectNumber"]) ?? pickProjectNumber(r);
 
   const invoiceId =
-    pickStr(r, ["invoice_id", "invoiceId"]) ??
+    pickStr(r, ["payment_invoice_id", "paymentInvoiceId", "invoice_id", "invoiceId"]) ??
     nestedId(r, ["invoice", "Invoice"], ["id", "invoice_id", "invoiceId", "_id"]);
 
   const net =
     pickNum(r, [
+      "payment_net_revenue",
+      "paymentNetRevenue",
       "net_revenue",
       "net_amount",
       "netAmount",
       "amount_net",
       "cents_net_revenue",
     ]) ?? null;
-  // cents_net_revenue may already be dollars if not in cents — only divide when key says cents and value looks large
   let netAmount = net;
   if (netAmount != null && "cents_net_revenue" in r && Math.abs(netAmount) >= 1000) {
     const rawCents = pickNum(r, ["cents_net_revenue"]);
-    if (rawCents != null && !("net_revenue" in r)) netAmount = rawCents / 100;
+    if (rawCents != null && !("net_revenue" in r) && !("payment_net_revenue" in r)) {
+      netAmount = rawCents / 100;
+    }
   }
 
   const gross = pickNum(r, [
+    "payment_invoice_revenue",
+    "paymentInvoiceRevenue",
+    "payment_amount",
+    "paymentAmount",
     "amount",
     "total_amount",
-    "payment_amount",
     "gross_revenue",
     "gross_amount",
     "total",
   ]);
-  const fee = pickNum(r, ["merchant_fee", "merchant_fees", "fee"]) ?? 0;
+  const fee = pickNum(r, ["merchant_fee", "merchant_fees", "fee", "payment_merchant_fee"]) ?? 0;
   const derivedNet = gross != null ? Math.max(0, gross - Math.max(0, fee)) : null;
   const amount = Math.max(0, netAmount ?? derivedNet ?? gross ?? 0);
 
@@ -209,10 +218,17 @@ export function normalizePartnerPayment(row: unknown): NormalizedPartnerPayment 
     invoiceId,
     amount,
     grossAmount: gross,
-    status: pickStr(r, ["status", "payment_status", "state"]),
+    status: pickStr(r, ["status", "payment_status", "payment_refusal_description", "state"]),
     method: pickStr(r, ["method", "payment_method", "type"]),
-    createdAt: pickDate(r, ["created_at", "createdAt", "date_created", "payment_date", "paid_at", "paidAt"]),
-    paidAt: pickDate(r, ["paid_at", "paidAt", "payment_date", "paid_date", "date"]),
+    createdAt: pickDate(r, [
+      "payment_date",
+      "created_at",
+      "createdAt",
+      "date_created",
+      "paid_at",
+      "paidAt",
+    ]),
+    paidAt: pickDate(r, ["payment_date", "paid_at", "paidAt", "paid_date", "date"]),
     raw: r,
   };
 }
@@ -220,27 +236,53 @@ export function normalizePartnerPayment(row: unknown): NormalizedPartnerPayment 
 export function normalizePartnerInvoice(row: unknown): NormalizedPartnerInvoice | null {
   const r = asRecord(row);
   if (!r) return null;
+  // Partner list/invoices often uses invoice_* keys (same pattern as payments).
   const invoiceId =
-    pickStr(r, ["id", "invoice_id", "invoiceId", "_id"]) ??
+    pickStr(r, ["invoice_id", "invoiceId", "id", "_id"]) ??
     nestedId(r, ["invoice"], ["id", "invoice_id"]);
   if (!invoiceId) return null;
 
-  const total = pickNum(r, ["total", "invoice_total", "invoiced_total", "amount", "gross_revenue"]);
-  const balance = pickNum(r, ["balance", "balance_due", "amount_due", "amountDue"]);
-  let amountPaid = pickNum(r, ["amount_paid", "amountPaid", "paid_amount", "payments_received", "net_revenue"]);
+  const total = pickNum(r, [
+    "invoice_total",
+    "invoiceTotal",
+    "invoice_revenue",
+    "invoiceRevenue",
+    "total",
+    "invoiced_total",
+    "amount",
+    "gross_revenue",
+  ]);
+  const balance = pickNum(r, [
+    "invoice_balance",
+    "invoiceBalance",
+    "balance",
+    "balance_due",
+    "amount_due",
+    "amountDue",
+  ]);
+  let amountPaid = pickNum(r, [
+    "invoice_amount_paid",
+    "invoiceAmountPaid",
+    "amount_paid",
+    "amountPaid",
+    "paid_amount",
+    "payments_received",
+    "net_revenue",
+  ]);
   if (amountPaid == null && total != null && balance != null) {
     amountPaid = Math.max(0, total - balance);
   }
 
   return {
     invoiceId,
-    projectId: pickProjectId(r),
+    projectId:
+      pickStr(r, ["invoice_project_id", "invoiceProjectId"]) ?? pickProjectId(r),
     total,
     balance,
     amountPaid,
-    status: pickStr(r, ["status", "invoice_status", "state"]),
-    createdAt: pickDate(r, ["created_at", "createdAt", "date_created"]),
-    paidAt: pickDate(r, ["paid_at", "paidAt", "paid_date", "paidDate"]),
+    status: pickStr(r, ["invoice_status", "status", "state"]),
+    createdAt: pickDate(r, ["invoice_date", "created_at", "createdAt", "date_created"]),
+    paidAt: pickDate(r, ["invoice_paid_date", "paid_at", "paidAt", "paid_date", "paidDate"]),
     raw: r,
   };
 }

@@ -13,14 +13,14 @@ function assert(cond: unknown, msg: string) {
 }
 
 const pay = normalizePartnerPayment({
-  id: "pay_1",
-  project_id: "proj_1",
-  net_revenue: 1234.5,
+  payment_id: "pay_1",
+  payment_project_id: "1767054228890x717983713573208000",
+  payment_net_revenue: 1234.5,
+  payment_date: "2026-09-29T15:00:00Z",
   created_at: "2026-09-29T15:00:00Z",
-  status: "completed",
 });
 assert(pay?.paymentId === "pay_1", "payment id");
-assert(pay?.projectId === "proj_1", "payment project");
+assert(pay?.projectId === "1767054228890x717983713573208000", "payment project");
 assert(pay?.amount === 1234.5, "payment amount");
 assert(pay?.createdAt?.toISOString().startsWith("2026-09-29"), "payment date");
 
