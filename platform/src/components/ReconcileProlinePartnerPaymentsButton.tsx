@@ -140,7 +140,8 @@ export function ReconcileProlinePartnerPaymentsButton({ partnerConfigured }: Pro
     <div style={{ display: "grid", gap: "0.5rem" }}>
       <p style={{ margin: 0, color: "var(--muted)", fontSize: "0.88rem" }}>
         Pull dated payments from the ProLine Partner API. Prefer dry run first. Runs in the background so Cloudflare
-        won&apos;t 524. Rate-limited (~1 call / 5s). CLI fallback: <code>{CLI_HINT}</code>
+        won&apos;t 524. Nightly apply is handled by <code>partner-daily</code>. Rate-limited (~1 call / 5s). CLI:{" "}
+        <code>{CLI_HINT}</code>
         {` `}(add <code>-- --apply</code> to write).
       </p>
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>

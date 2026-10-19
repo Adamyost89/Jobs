@@ -31,5 +31,27 @@ services:
       - "3301:3301"
     command: sh -c "npm run start -- -p 3301 -H 0.0.0.0"
 
+  # End-of-day Partner payment reconcile (keeps amountPaid / dated events aligned with ProLine).
+  # Override hour/TZ via platform/.env if needed. Logs: docker compose logs -f partner-daily
+  partner-daily:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://elevated:elevated@db:5432/elevated_jobs?schema=public}
+      TZ: ${PARTNER_DAILY_TZ:-America/New_York}
+      PARTNER_DAILY_RECONCILE: "1"
+      PARTNER_DAILY_RECONCILE_APPLY: ${PARTNER_DAILY_RECONCILE_APPLY:-1}
+      PARTNER_DAILY_RECONCILE_HOUR: ${PARTNER_DAILY_RECONCILE_HOUR:-23}
+      PARTNER_DAILY_RECONCILE_MINUTE: ${PARTNER_DAILY_RECONCILE_MINUTE:-0}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "npm run proline:partner-daily"
+
 volumes:
   elevated_pg:

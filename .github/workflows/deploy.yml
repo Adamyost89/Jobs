@@ -98,7 +98,8 @@ jobs:
           # image otherwise, so new prisma/migrations never get applied while the
           # rebuilt app expects the new columns (e.g. Job.location).
           echo "Building app image for migrations and deploy..."
-          docker compose -f "$compose_file" build app
+          # partner-daily shares the same Dockerfile; build both so the nightly reconcile image is current.
+          docker compose -f "$compose_file" build app partner-daily
 
           set +e
           migrate_output="$(docker compose -f "$compose_file" run --rm --no-deps app npx prisma migrate deploy 2>&1)"

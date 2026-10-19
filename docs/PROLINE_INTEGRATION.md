@@ -22,8 +22,9 @@ When both keys are present:
 - Super Admin **Settings → Integrations** shows Partner configured / not, plus **Dry-run / Apply Partner payments** (`POST /api/integrations/proline/partner-reconcile-payments`). That backfills dated `PROLINE_PARTNER_PAYMENT_*` job events for commission tier cutovers.
 - Optional project field sync: `POST /api/integrations/proline/partner-sync-projects` (Super Admin).
 - Smoke test: `npm run proline:partner-probe` (one page each of projects / payments / invoices; respects ~1 call / 5s rate limits).
+- **Daily reconcile (production):** compose service `partner-daily` runs `npm run proline:partner-daily` once per evening (default **23:00 America/New_York**, apply on). It writes dated `PROLINE_PARTNER_PAYMENT_*` events and refreshes amount paid / paid-in-full. Override via `.env`: `PARTNER_DAILY_TZ`, `PARTNER_DAILY_RECONCILE_HOUR`, `PARTNER_DAILY_RECONCILE_MINUTE`, `PARTNER_DAILY_RECONCILE_APPLY`. Logs: `docker compose -f docker-compose.prod.yml logs -f partner-daily`. Each run also writes an `AuditLog` row (`PROLINE_PARTNER_PAYMENT_RECONCILE_DAILY_*`).
 
-Webhooks stay the live path. Do not poll Partner on every webhook.
+Webhooks stay the live path. Do not poll Partner on every webhook — use the daily job (and manual Settings buttons) to catch misses.
 
 ## REST: pull projects into `Job` (bulk sync)
 

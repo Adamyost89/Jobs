@@ -233,6 +233,11 @@ export default async function SettingsPage({
           </ul>
           <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />
           <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine Partner API payments</h3>
+          <p style={{ color: "var(--muted)", marginTop: 0, fontSize: "0.88rem" }}>
+            Production also runs an automatic end-of-day Partner reconcile (compose service{" "}
+            <code>partner-daily</code>, default 23:00 America/New_York). Manual buttons below are for on-demand
+            checks.
+          </p>
           <ReconcileProlinePartnerPaymentsButton partnerConfigured={partnerApiConfigured} />
           <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />
           <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine REST payment reconcile (legacy)</h3>
