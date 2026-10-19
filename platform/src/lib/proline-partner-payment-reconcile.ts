@@ -55,6 +55,28 @@ export type PartnerPaymentReconcileResult = {
   errors: string[];
   samples: PartnerPaymentMismatch[];
   partnerConfigured: boolean;
+  /** Why matching failed / how ids look (especially useful on dry-run). */
+  diagnostics: {
+    paymentsWithProjectId: number;
+    paymentsWithoutProjectId: number;
+    paymentsNormalizedFailed: number;
+    distinctPartnerProjectIds: number;
+    localJobsWithProlineId: number;
+    samplePartnerProjectIds: string[];
+    samplePartnerPaymentKeys: string[];
+    sampleLocalProlineIds: string[];
+    matchedBy: { prolineJobId: number; leadNumber: number };
+  };
+};
+
+type JobRow = {
+  id: string;
+  jobNumber: string;
+  prolineJobId: string | null;
+  leadNumber: string | null;
+  amountPaid: Prisma.Decimal | null;
+  invoicedTotal: Prisma.Decimal;
+  paidInFull: boolean;
 };
 
 function partnerPaymentEventType(paymentId: string): string {
@@ -81,10 +103,25 @@ function invoiceLooksPaid(inv: NormalizedPartnerInvoice): boolean {
   return s.includes("paid") || s === "complete" || s === "closed";
 }
 
+function emptyDiagnostics(): PartnerPaymentReconcileResult["diagnostics"] {
+  return {
+    paymentsWithProjectId: 0,
+    paymentsWithoutProjectId: 0,
+    paymentsNormalizedFailed: 0,
+    distinctPartnerProjectIds: 0,
+    localJobsWithProlineId: 0,
+    samplePartnerProjectIds: [],
+    samplePartnerPaymentKeys: [],
+    sampleLocalProlineIds: [],
+    matchedBy: { prolineJobId: 0, leadNumber: 0 },
+  };
+}
+
 export async function reconcileProlinePaymentsFromPartnerApi(
   db: PrismaClient,
   opts: PartnerPaymentReconcileOpts
 ): Promise<PartnerPaymentReconcileResult> {
+  const diagnostics = emptyDiagnostics();
   const result: PartnerPaymentReconcileResult = {
     paymentsSeen: 0,
     invoicesSeen: 0,
@@ -96,6 +133,7 @@ export async function reconcileProlinePaymentsFromPartnerApi(
     errors: [],
     samples: [],
     partnerConfigured: hasProlinePartnerKeys(),
+    diagnostics,
   };
 
   if (!result.partnerConfigured) {
@@ -108,7 +146,7 @@ export async function reconcileProlinePaymentsFromPartnerApi(
   const maxPages = opts.maxPages ?? 100;
   const includeInvoices = opts.includeInvoices !== false;
 
-  const paymentsByProject = new Map<string, NormalizedPartnerPayment[]>();
+  const allPayments: NormalizedPartnerPayment[] = [];
   try {
     for await (const page of prolinePartnerListAll(env, "/v1/list/payments", {
       maxPages,
@@ -117,15 +155,33 @@ export async function reconcileProlinePaymentsFromPartnerApi(
     })) {
       for (const row of page.results) {
         result.paymentsSeen += 1;
+        if (
+          diagnostics.samplePartnerPaymentKeys.length === 0 &&
+          row &&
+          typeof row === "object" &&
+          !Array.isArray(row)
+        ) {
+          diagnostics.samplePartnerPaymentKeys = Object.keys(row as object).slice(0, 40);
+        }
         const p = normalizePartnerPayment(row);
-        if (!p) continue;
-        if (!p.projectId) {
+        if (!p) {
+          diagnostics.paymentsNormalizedFailed += 1;
           result.unmatchedPayments += 1;
           continue;
         }
-        const list = paymentsByProject.get(p.projectId) ?? [];
-        list.push(p);
-        paymentsByProject.set(p.projectId, list);
+        if (!p.projectId && !p.projectNumber) {
+          diagnostics.paymentsWithoutProjectId += 1;
+          result.unmatchedPayments += 1;
+          continue;
+        }
+        if (p.projectId) diagnostics.paymentsWithProjectId += 1;
+        else diagnostics.paymentsWithoutProjectId += 1;
+        allPayments.push(p);
+        if (p.projectId && diagnostics.samplePartnerProjectIds.length < 8) {
+          if (!diagnostics.samplePartnerProjectIds.includes(p.projectId)) {
+            diagnostics.samplePartnerProjectIds.push(p.projectId);
+          }
+        }
       }
     }
   } catch (e) {
@@ -148,6 +204,11 @@ export async function reconcileProlinePaymentsFromPartnerApi(
           const list = invoicesByProject.get(inv.projectId) ?? [];
           list.push(inv);
           invoicesByProject.set(inv.projectId, list);
+          if (diagnostics.samplePartnerProjectIds.length < 8) {
+            if (!diagnostics.samplePartnerProjectIds.includes(inv.projectId)) {
+              diagnostics.samplePartnerProjectIds.push(inv.projectId);
+            }
+          }
         }
       }
     } catch (e) {
@@ -155,33 +216,106 @@ export async function reconcileProlinePaymentsFromPartnerApi(
     }
   }
 
-  const projectIds = [...new Set([...paymentsByProject.keys(), ...invoicesByProject.keys()])];
-  if (!projectIds.length) return result;
+  const partnerProjectIds = [
+    ...new Set([
+      ...allPayments.map((p) => p.projectId).filter((id): id is string => !!id),
+      ...invoicesByProject.keys(),
+    ]),
+  ];
+  diagnostics.distinctPartnerProjectIds = partnerProjectIds.length;
+
+  const partnerLeadNumbers = [
+    ...new Set(allPayments.map((p) => p.projectNumber).filter((n): n is string => !!n)),
+  ];
+
+  const localWithProline = await db.job.findMany({
+    where: { prolineJobId: { not: null } },
+    select: { prolineJobId: true },
+    take: 20,
+  });
+  diagnostics.localJobsWithProlineId = await db.job.count({ where: { prolineJobId: { not: null } } });
+  diagnostics.sampleLocalProlineIds = localWithProline
+    .map((j) => j.prolineJobId)
+    .filter((id): id is string => !!id)
+    .slice(0, 8);
+
+  if (!partnerProjectIds.length && !partnerLeadNumbers.length) {
+    result.errors.push(
+      "Partner payments/invoices had no recognizable project_id or project_number. Check samplePartnerPaymentKeys in diagnostics."
+    );
+    return result;
+  }
 
   const jobs = await db.job.findMany({
-    where: { prolineJobId: { in: projectIds } },
+    where: {
+      OR: [
+        ...(partnerProjectIds.length ? [{ prolineJobId: { in: partnerProjectIds } }] : []),
+        ...(partnerLeadNumbers.length ? [{ leadNumber: { in: partnerLeadNumbers } }] : []),
+      ],
+    },
     select: {
       id: true,
       jobNumber: true,
       prolineJobId: true,
+      leadNumber: true,
       amountPaid: true,
       invoicedTotal: true,
       paidInFull: true,
     },
   });
-  const jobByProline = new Map(jobs.map((j) => [j.prolineJobId!, j]));
 
-  for (const projectId of projectIds) {
-    const job = jobByProline.get(projectId);
-    if (!job || !job.prolineJobId) {
-      const orphanPays = paymentsByProject.get(projectId)?.length ?? 0;
-      result.unmatchedPayments += orphanPays;
+  const jobByProline = new Map<string, JobRow>();
+  const jobByLead = new Map<string, JobRow>();
+  for (const j of jobs) {
+    if (j.prolineJobId) jobByProline.set(j.prolineJobId, j);
+    if (j.leadNumber) jobByLead.set(j.leadNumber, j);
+  }
+
+  /** Group payments onto a matched job id. */
+  const paymentsByJobId = new Map<string, NormalizedPartnerPayment[]>();
+  const jobById = new Map<string, JobRow>();
+
+  for (const p of allPayments) {
+    let job: JobRow | undefined;
+    let via: "prolineJobId" | "leadNumber" | null = null;
+    if (p.projectId && jobByProline.has(p.projectId)) {
+      job = jobByProline.get(p.projectId);
+      via = "prolineJobId";
+    } else if (p.projectNumber && jobByLead.has(p.projectNumber)) {
+      job = jobByLead.get(p.projectNumber);
+      via = "leadNumber";
+    }
+    if (!job || !via) {
+      result.unmatchedPayments += 1;
       continue;
     }
-    result.matchedJobs += 1;
+    diagnostics.matchedBy[via] += 1;
+    jobById.set(job.id, job);
+    const list = paymentsByJobId.get(job.id) ?? [];
+    list.push(p);
+    paymentsByJobId.set(job.id, list);
+  }
 
-    const pays = paymentsByProject.get(projectId) ?? [];
-    const invs = invoicesByProject.get(projectId) ?? [];
+  // Invoices matched only by project id today.
+  const invoicesByJobId = new Map<string, NormalizedPartnerInvoice[]>();
+  for (const [projectId, invs] of invoicesByProject) {
+    const job = jobByProline.get(projectId);
+    if (!job) continue;
+    jobById.set(job.id, job);
+    const existing = invoicesByJobId.get(job.id) ?? [];
+    existing.push(...invs);
+    invoicesByJobId.set(job.id, existing);
+  }
+
+  const jobIds = [...new Set([...paymentsByJobId.keys(), ...invoicesByJobId.keys()])];
+  result.matchedJobs = jobIds.length;
+
+  for (const jobId of jobIds) {
+    const job = jobById.get(jobId);
+    if (!job) continue;
+
+    const pays = paymentsByJobId.get(jobId) ?? [];
+    const invs = invoicesByJobId.get(jobId) ?? [];
 
     const paidFromPayments = pays.reduce((s, p) => s + p.amount, 0);
     const paidFromInvoices = invs.reduce((s, i) => s + (i.amountPaid ?? 0), 0);
@@ -218,7 +352,6 @@ export async function reconcileProlinePaymentsFromPartnerApi(
       changed.push("paidInFull");
     }
 
-    // Always try to backfill dated payment events when applying (even if totals already match).
     let eventsToWrite = 0;
     if (opts.apply && pays.length) {
       for (const p of pays) {
@@ -239,7 +372,8 @@ export async function reconcileProlinePaymentsFromPartnerApi(
               paymentId: p.paymentId,
               paymentDelta: p.amount,
               amount: p.amount,
-              projectId,
+              projectId: p.projectId,
+              projectNumber: p.projectNumber,
               invoiceId: p.invoiceId,
               status: p.status,
               method: p.method,
@@ -252,7 +386,13 @@ export async function reconcileProlinePaymentsFromPartnerApi(
       result.paymentEventsWritten += eventsToWrite;
     }
 
-    if (!changed.length && eventsToWrite === 0) continue;
+    if (!changed.length && eventsToWrite === 0) {
+      // Still count as matched for dry-run visibility even when already in sync.
+      if (!opts.apply && !changed.length) {
+        // no-op: matchedJobs already counted
+      }
+      continue;
+    }
 
     if (changed.length) {
       result.mismatches += 1;
@@ -260,7 +400,7 @@ export async function reconcileProlinePaymentsFromPartnerApi(
         result.samples.push({
           jobId: job.id,
           jobNumber: job.jobNumber,
-          prolineJobId: job.prolineJobId,
+          prolineJobId: job.prolineJobId ?? "",
           fields: changed,
           local: {
             amountPaid: localAmountPaid,

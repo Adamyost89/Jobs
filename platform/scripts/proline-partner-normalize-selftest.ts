@@ -24,6 +24,21 @@ assert(pay?.projectId === "proj_1", "payment project");
 assert(pay?.amount === 1234.5, "payment amount");
 assert(pay?.createdAt?.toISOString().startsWith("2026-09-29"), "payment date");
 
+const payNested = normalizePartnerPayment({
+  id: "pay_2",
+  project: { id: "proj_nested", project_number: "2140" },
+  amount: 50,
+});
+assert(payNested?.projectId === "proj_nested", "nested project id");
+assert(payNested?.projectNumber === "2140", "nested project number");
+
+const payBare = normalizePartnerPayment({
+  id: "pay_3",
+  project: "proj_bare",
+  total_amount: 10,
+});
+assert(payBare?.projectId === "proj_bare", "bare string project id");
+
 const inv = normalizePartnerInvoice({
   id: "inv_1",
   project_id: "proj_1",

@@ -6,6 +6,8 @@
 export type NormalizedPartnerPayment = {
   paymentId: string;
   projectId: string | null;
+  /** Project / lead number when Partner embeds it (fallback match to Job.leadNumber). */
+  projectNumber: string | null;
   invoiceId: string | null;
   /** Prefer net (fee-exclusive) when available. */
   amount: number;
@@ -81,10 +83,57 @@ function pickDate(r: Record<string, unknown>, keys: string[]): Date | null {
 
 function nestedId(r: Record<string, unknown>, objectKeys: string[], idKeys: string[]): string | null {
   for (const ok of objectKeys) {
-    const nested = asRecord(r[ok]);
-    if (!nested) continue;
+    const v = r[ok];
+    // Partner sometimes sends the related id as a bare string/number.
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (typeof v === "number" && Number.isFinite(v)) return String(v);
+    const nested = asRecord(v);
+    if (!nested) {
+      if (Array.isArray(v) && v.length > 0) {
+        const first = asRecord(v[0]);
+        if (first) {
+          const id = pickStr(first, idKeys);
+          if (id) return id;
+        } else if (typeof v[0] === "string" && v[0].trim()) {
+          return v[0].trim();
+        }
+      }
+      continue;
+    }
     const id = pickStr(nested, idKeys);
     if (id) return id;
+  }
+  return null;
+}
+
+function pickProjectId(r: Record<string, unknown>): string | null {
+  return (
+    pickStr(r, [
+      "project_id",
+      "projectId",
+      "proline_project_id",
+      "prolineProjectId",
+      "Project",
+      "project_unique_id",
+    ]) ??
+    nestedId(r, ["project", "Project", "projects"], ["id", "project_id", "projectId", "_id", "unique_id"])
+  );
+}
+
+function pickProjectNumber(r: Record<string, unknown>): string | null {
+  const direct = pickStr(r, [
+    "project_number",
+    "projectNumber",
+    "lead_number",
+    "leadNumber",
+    "project_num",
+  ]);
+  if (direct) return direct;
+  for (const ok of ["project", "Project"]) {
+    const nested = asRecord(r[ok]);
+    if (!nested) continue;
+    const n = pickStr(nested, ["project_number", "projectNumber", "number", "lead_number", "leadNumber", "name"]);
+    if (n) return n;
   }
   return null;
 }
@@ -119,12 +168,12 @@ export function normalizePartnerPayment(row: unknown): NormalizedPartnerPayment 
     nestedId(r, ["payment"], ["id", "payment_id"]);
   if (!paymentId) return null;
 
-  const projectId =
-    pickStr(r, ["project_id", "projectId", "proline_project_id"]) ??
-    nestedId(r, ["project"], ["id", "project_id", "_id"]);
+  const projectId = pickProjectId(r);
+  const projectNumber = pickProjectNumber(r);
 
   const invoiceId =
-    pickStr(r, ["invoice_id", "invoiceId"]) ?? nestedId(r, ["invoice"], ["id", "invoice_id", "_id"]);
+    pickStr(r, ["invoice_id", "invoiceId"]) ??
+    nestedId(r, ["invoice", "Invoice"], ["id", "invoice_id", "invoiceId", "_id"]);
 
   const net =
     pickNum(r, [
@@ -156,6 +205,7 @@ export function normalizePartnerPayment(row: unknown): NormalizedPartnerPayment 
   return {
     paymentId,
     projectId,
+    projectNumber,
     invoiceId,
     amount,
     grossAmount: gross,
@@ -184,8 +234,7 @@ export function normalizePartnerInvoice(row: unknown): NormalizedPartnerInvoice 
 
   return {
     invoiceId,
-    projectId:
-      pickStr(r, ["project_id", "projectId"]) ?? nestedId(r, ["project"], ["id", "project_id", "_id"]),
+    projectId: pickProjectId(r),
     total,
     balance,
     amountPaid,
