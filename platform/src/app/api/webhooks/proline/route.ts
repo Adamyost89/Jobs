@@ -38,6 +38,14 @@ function paymentDeltaMarkerType(paymentId: string): string {
   return `PROLINE_PAYMENT_DELTA_${safe || "UNKNOWN"}`;
 }
 
+function partnerPaymentMarkerType(paymentId: string): string {
+  const safe = String(paymentId)
+    .trim()
+    .replace(/[^a-zA-Z0-9:_-]+/g, "_")
+    .slice(0, 120);
+  return `PROLINE_PARTNER_PAYMENT_${safe || "UNKNOWN"}`;
+}
+
 function prolineWebhookDebugEnabled(): boolean {
   const v = (process.env.PROLINE_WEBHOOK_DEBUG || "").trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
@@ -445,9 +453,13 @@ export async function POST(req: Request) {
     if (e.cost !== undefined) data.cost = asDecimal(e.cost);
     if (e.costingComplete !== undefined) data.costingComplete = e.costingComplete;
     // Per-payment webhooks: add net amount once per payment_id (do not replace cumulative paid).
+    // Also skip if Partner reconcile already recorded this payment_id (avoids 715+738 double-count).
     if (e.paymentDelta !== undefined && e.paymentDelta > 0.0005 && e.paymentId) {
       const marker = await prisma.jobEvent.findFirst({
-        where: { jobId: existing.id, type: paymentDeltaMarkerType(e.paymentId) },
+        where: {
+          jobId: existing.id,
+          type: { in: [paymentDeltaMarkerType(e.paymentId), partnerPaymentMarkerType(e.paymentId)] },
+        },
         select: { id: true },
       });
       if (marker) {

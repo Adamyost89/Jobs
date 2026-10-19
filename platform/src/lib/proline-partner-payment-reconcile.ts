@@ -87,12 +87,27 @@ type JobRow = {
   paidInFull: boolean;
 };
 
-function partnerPaymentEventType(paymentId: string): string {
+export function partnerPaymentEventType(paymentId: string): string {
   const safe = String(paymentId)
     .trim()
     .replace(/[^a-zA-Z0-9:_-]+/g, "_")
     .slice(0, 120);
   return `${PARTNER_PAYMENT_EVENT_PREFIX}${safe || "UNKNOWN"}`;
+}
+
+/** Webhook dedupe marker — same payment_id must not also add via Partner. */
+export function webhookPaymentDeltaEventType(paymentId: string): string {
+  const safe = String(paymentId)
+    .trim()
+    .replace(/[^a-zA-Z0-9:_-]+/g, "_")
+    .slice(0, 120);
+  return `PROLINE_PAYMENT_DELTA_${safe || "UNKNOWN"}`;
+}
+
+function partnerPaymentCountsTowardPaid(p: NormalizedPartnerPayment): boolean {
+  const s = (p.status || "").toLowerCase();
+  if (!s) return true;
+  return !/(fail|refus|void|cancel|decline|refund|charge\s*back|chargedback|rejected)/i.test(s);
 }
 
 function approxEqual(a: number | null | undefined, b: number | null | undefined, tolerance = 0.005): boolean {
@@ -359,8 +374,12 @@ export async function reconcileProlinePaymentsFromPartnerApi(
       if (partnerProj.projectNumber && jobByLead.has(partnerProj.projectNumber)) {
         return { job: jobByLead.get(partnerProj.projectNumber)!, via: "leadNumber" };
       }
+      // Known Partner project but no local job — do not fall through to bare payment_project_number
+      // (that was attaching foreign payments onto jobs and inflating amountPaid).
+      return null;
     }
-    if (projectNumber && jobByLead.has(projectNumber)) {
+    // No projectId / project not in index: lead# only when payment has no project id.
+    if (!projectId && projectNumber && jobByLead.has(projectNumber)) {
       return { job: jobByLead.get(projectNumber)!, via: "leadNumber" };
     }
     return null;
@@ -371,6 +390,10 @@ export async function reconcileProlinePaymentsFromPartnerApi(
   const jobById = new Map<string, JobRow>();
 
   for (const p of allPayments) {
+    if (!partnerPaymentCountsTowardPaid(p)) {
+      result.unmatchedPayments += 1;
+      continue;
+    }
     const resolved = resolveJobForPartnerProjectId(p.projectId, p.projectNumber);
     if (!resolved) {
       result.unmatchedPayments += 1;
@@ -442,11 +465,11 @@ export async function reconcileProlinePaymentsFromPartnerApi(
     if (opts.apply && pays.length) {
       for (const p of pays) {
         const type = partnerPaymentEventType(p.paymentId);
-        const existing = await db.jobEvent.findFirst({
+        const alreadyPartner = await db.jobEvent.findFirst({
           where: { jobId: job.id, type },
           select: { id: true },
         });
-        if (existing) continue;
+        if (alreadyPartner) continue;
         const at = paymentEffectiveAt(p);
         await db.jobEvent.create({
           data: {
@@ -464,6 +487,9 @@ export async function reconcileProlinePaymentsFromPartnerApi(
               status: p.status,
               method: p.method,
               createdAt: at.toISOString(),
+              // Webhook may already have PROLINE_PAYMENT_DELTA_* for this id; amountPaid is
+              // overwritten from Partner sum (not added again).
+              webhookDeltaType: webhookPaymentDeltaEventType(p.paymentId),
             },
           },
         });
@@ -472,11 +498,12 @@ export async function reconcileProlinePaymentsFromPartnerApi(
       result.paymentEventsWritten += eventsToWrite;
     }
 
+    // Partner payment sum is authoritative for amountPaid whenever we matched payments.
+    if (pays.length && remoteAmountPaid !== undefined && !approxEqual(localAmountPaid, remoteAmountPaid, tolerance)) {
+      if (!changed.includes("amountPaid")) changed.push("amountPaid");
+    }
+
     if (!changed.length && eventsToWrite === 0) {
-      // Still count as matched for dry-run visibility even when already in sync.
-      if (!opts.apply && !changed.length) {
-        // no-op: matchedJobs already counted
-      }
       continue;
     }
 
@@ -505,9 +532,12 @@ export async function reconcileProlinePaymentsFromPartnerApi(
 
     if (!opts.apply) continue;
 
-    if (changed.length) {
+    if (changed.length || (pays.length > 0 && remoteAmountPaid !== undefined)) {
       const data: Record<string, unknown> = {};
-      if (changed.includes("amountPaid") && remoteAmountPaid !== undefined) {
+      // Always trust Partner payment sum when we have matched payments (fixes webhook double-count).
+      if (pays.length > 0 && remoteAmountPaid !== undefined) {
+        data.amountPaid = new Prisma.Decimal(remoteAmountPaid.toFixed(2));
+      } else if (changed.includes("amountPaid") && remoteAmountPaid !== undefined) {
         data.amountPaid = new Prisma.Decimal(remoteAmountPaid.toFixed(2));
       }
       if (changed.includes("invoicedTotal") && remoteInvoiced !== undefined) {
@@ -517,33 +547,35 @@ export async function reconcileProlinePaymentsFromPartnerApi(
       if (changed.includes("paidInFull") && remotePaidInFull !== undefined) {
         data.paidInFull = remotePaidInFull;
       }
-      await db.job.update({ where: { id: job.id }, data });
-      await db.jobEvent.create({
-        data: {
-          jobId: job.id,
-          type: PARTNER_RECONCILE_EVENT,
-          source: "proline_partner",
-          payload: {
-            changed,
-            local: {
-              amountPaid: localAmountPaid,
-              invoicedTotal: localInvoiced,
-              paidInFull: job.paidInFull,
-            },
-            remote: {
-              amountPaid: remoteAmountPaid ?? null,
-              invoicedTotal: remoteInvoiced ?? null,
-              paidInFull: remotePaidInFull ?? null,
-              paymentCount: pays.length,
+      if (Object.keys(data).length) {
+        await db.job.update({ where: { id: job.id }, data });
+        await db.jobEvent.create({
+          data: {
+            jobId: job.id,
+            type: PARTNER_RECONCILE_EVENT,
+            source: "proline_partner",
+            payload: {
+              changed: changed.length ? changed : ["amountPaid"],
+              local: {
+                amountPaid: localAmountPaid,
+                invoicedTotal: localInvoiced,
+                paidInFull: job.paidInFull,
+              },
+              remote: {
+                amountPaid: remoteAmountPaid ?? null,
+                invoicedTotal: remoteInvoiced ?? null,
+                paidInFull: remotePaidInFull ?? null,
+                paymentCount: pays.length,
+              },
             },
           },
-        },
-      });
+        });
+      }
     }
 
     const paymentFieldsChanged = changed.includes("amountPaid") || changed.includes("paidInFull") || eventsToWrite > 0;
     await recalculateJobAndCommissions(job.id, {
-      forceCommissionRecalc: paymentFieldsChanged || changed.length > 0,
+      forceCommissionRecalc: paymentFieldsChanged || changed.length > 0 || pays.length > 0,
       forceCommissionRecalcReason: "proline.partner.payment_reconcile",
     });
     result.updated += 1;

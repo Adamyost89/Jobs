@@ -136,9 +136,16 @@ function readPaymentEvent(
  * event. A job's first snapshot is only a baseline (taken whenever snapshots started), not a payment moment, so
  * any jump it reveals is also treated as early cash.
  */
+function paymentIdFromDeltaEventType(type: string): string | null {
+  if (type.startsWith(PAYMENT_DELTA_EVENT_PREFIX)) return type.slice(PAYMENT_DELTA_EVENT_PREFIX.length) || null;
+  if (type.startsWith(PARTNER_PAYMENT_EVENT_PREFIX)) return type.slice(PARTNER_PAYMENT_EVENT_PREFIX.length) || null;
+  return null;
+}
+
 function buildPaidTimeline(currentPaid: number, history: PaymentHistoryEvent[]): PaidTimeline {
   const steps: { at: number; value: number }[] = [];
   const pending: { at: number; amount: number }[] = [];
+  const seenPaymentIds = new Set<string>();
   let initial = 0;
   let value = 0;
   let known = false;
@@ -159,6 +166,11 @@ function buildPaidTimeline(currentPaid: number, history: PaymentHistoryEvent[]):
     if (!read) continue;
     const at = e.createdAt.getTime();
     if (read.kind === "delta") {
+      const payId = paymentIdFromDeltaEventType(e.type);
+      if (payId) {
+        if (seenPaymentIds.has(payId)) continue;
+        seenPaymentIds.add(payId);
+      }
       if (known) {
         value += read.amount;
         steps.push({ at, value });
