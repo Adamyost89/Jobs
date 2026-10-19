@@ -1,8 +1,18 @@
+import {
+  hasProlinePartnerKeys,
+  prolinePartnerEditProject,
+  readProlinePartnerEnv,
+} from "@/lib/proline-partner-client";
+
 export type ProlineNameWritebackInput = {
   prolineJobId: string;
   leadNumber?: string | null;
   jobNumber: string;
   projectName: string;
+};
+
+export type ProlineNameWritebackResult = {
+  via: "partner" | "zapier";
 };
 
 function trimString(v: string | null | undefined): string {
@@ -55,4 +65,36 @@ export async function sendProlineNameWritebackViaZapier(
   if (res.ok) return;
   const bodyText = await res.text().catch(() => "");
   throw new Error(`Proline name write-back failed (${res.status}): ${bodyText.slice(0, 300)}`);
+}
+
+async function sendProlineNameWritebackViaPartner(input: ProlineNameWritebackInput): Promise<void> {
+  const env = readProlinePartnerEnv();
+  const result = await prolinePartnerEditProject(env, {
+    project_id: input.prolineJobId,
+    project_name: input.projectName,
+  });
+  if (!result.ok) {
+    throw new Error(result.error || "Partner edit/project failed");
+  }
+}
+
+/**
+ * Prefer Partner `/v1/edit/project` when keys are configured; otherwise Zapier catch hook.
+ */
+export async function sendProlineNameWriteback(
+  input: ProlineNameWritebackInput
+): Promise<ProlineNameWritebackResult> {
+  if (hasProlinePartnerKeys()) {
+    try {
+      await sendProlineNameWritebackViaPartner(input);
+      return { via: "partner" };
+    } catch (partnerError) {
+      const zapUrl = (process.env.ZAPIER_PROLINE_NAME_WEBHOOK_URL || "").trim();
+      if (!zapUrl) throw partnerError;
+      await sendProlineNameWritebackViaZapier(input);
+      return { via: "zapier" };
+    }
+  }
+  await sendProlineNameWritebackViaZapier(input);
+  return { via: "zapier" };
 }

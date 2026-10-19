@@ -8,6 +8,23 @@ Use this when wiring ProLine to the Elevated platform. **Do not commit API keys 
 - That key is for **outbound** REST list/sync from this app. Set **`PROLINE_API_BASE_URL`** and **`PROLINE_API_PROJECTS_PATH`** to the list URL ProLine documents for your tenant (paths vary; Bubble-style APIs often look like `/api/1.1/obj/…`). Optional: `PROLINE_API_AUTH_STYLE` (`bearer` default, `token`, `x_api_key`), `PROLINE_API_PAGE_LIMIT`, `PROLINE_SYNC_DEFAULT_YEAR`.
 - The inbound **webhook** path uses `PROLINE_WEBHOOK_SECRET` (shared secret you choose; ProLine may send it as a header or you append it to the URL—match whatever ProLine supports in the Webhooks tab).
 
+## Partner API (preferred for payments + name writeback)
+
+Official Partner API at `https://api.proline.app/v1/` (every call is `POST` with JSON). Auth headers: **`PARTNER_KEY`** (your integration) and **`COMPANY_KEY`** (Elevated’s company). Set on the server only:
+
+- `PROLINE_PARTNER_KEY`
+- `PROLINE_COMPANY_KEY`
+- optional `PROLINE_PARTNER_BASE_URL` (default `https://api.proline.app`)
+
+When both keys are present:
+
+- Job-number **name writeback** uses `/v1/edit/project` (Zapier remains fallback if Partner fails or keys are missing).
+- Super Admin **Settings → Integrations** shows Partner configured / not, plus **Dry-run / Apply Partner payments** (`POST /api/integrations/proline/partner-reconcile-payments`). That backfills dated `PROLINE_PARTNER_PAYMENT_*` job events for commission tier cutovers.
+- Optional project field sync: `POST /api/integrations/proline/partner-sync-projects` (Super Admin).
+- Smoke test: `npm run proline:partner-probe` (one page each of projects / payments / invoices; respects ~1 call / 5s rate limits).
+
+Webhooks stay the live path. Do not poll Partner on every webhook.
+
 ## REST: pull projects into `Job` (bulk sync)
 
 - **Guided connection test (UI):** as **Super Admin**, open **Dashboard → Settings** and use the **ProLine API assistant** card. It runs a read-only HTTP probe, explains errors (401, 404, wrong JSON shape), and suggests `.env` lines when the response matches a known list shape. Optional one-off fields are **not** saved to disk (merge with server `.env` for empty fields).

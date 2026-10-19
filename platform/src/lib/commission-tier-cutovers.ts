@@ -14,10 +14,16 @@ import { normalizeProlineWebhookBody } from "./proline-webhook";
 /** Dated record of `Job.amountPaid`, written by `recalculateJobAndCommissions` whenever it changes. */
 export const CUSTOMER_PAID_SNAPSHOT_EVENT = "CUSTOMER_PAID_SNAPSHOT";
 const PAYMENT_DELTA_EVENT_PREFIX = "PROLINE_PAYMENT_DELTA_";
+/** Partner API dated payments (`proline-partner-payment-reconcile.ts`). */
+const PARTNER_PAYMENT_EVENT_PREFIX = "PROLINE_PARTNER_PAYMENT_";
 /** Job edit from the app; `payload.patch.amountPaid` is the new value when it was changed. */
 const MANUAL_PAYMENT_EVENT = "MANUAL_PAYMENT_UPDATE";
 /** Bulk corrections that log `{ changed, local, remote }` after setting `amountPaid` to `remote.amountPaid`. */
-const PAYMENT_CORRECTION_EVENTS = new Set(["PROLINE_PAYMENT_RECONCILE", "PROLINE_CSV_COMPARE"]);
+const PAYMENT_CORRECTION_EVENTS = new Set([
+  "PROLINE_PAYMENT_RECONCILE",
+  "PROLINE_CSV_COMPARE",
+  "PROLINE_PARTNER_RECONCILE",
+]);
 const DATED_TIER_METRICS: CommissionRunningMetric[] = ["ytd_paid_commissions", "ytd_primary_paid_amount"];
 const REACHED_CACHE_TTL_MS = 5 * 60_000;
 
@@ -73,6 +79,7 @@ async function loadPaymentHistory(jobIds: string[]): Promise<Map<string, Payment
         { type: { startsWith: "PROLINE_INVOICE_DELTA_" } },
         { type: { startsWith: "PROLINE_NAME_WRITEBACK" } },
         { type: { startsWith: "PROLINE_API_SYNC_" } },
+        { type: "PROLINE_PARTNER_PROJECT_SYNC" },
       ],
     },
     select: { jobId: true, type: true, payload: true, createdAt: true },
@@ -100,8 +107,8 @@ function readPaymentEvent(
     const v = num(asRecord(p.patch)?.amountPaid);
     return v === null ? null : { kind: "observed", value: Math.max(0, v), authoritative: true };
   }
-  if (e.type.startsWith(PAYMENT_DELTA_EVENT_PREFIX)) {
-    const d = num(p.paymentDelta);
+  if (e.type.startsWith(PAYMENT_DELTA_EVENT_PREFIX) || e.type.startsWith(PARTNER_PAYMENT_EVENT_PREFIX)) {
+    const d = num(p.paymentDelta) ?? num(p.amount);
     return d === null ? null : { kind: "delta", amount: d };
   }
   if (PAYMENT_CORRECTION_EVENTS.has(e.type)) {

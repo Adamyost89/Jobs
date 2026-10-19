@@ -11,6 +11,8 @@ import { loadSalespeopleWithKindForAdmin } from "@/lib/salespeople-kind-db";
 import { ProLineConnectionAssistant } from "@/components/ProLineConnectionAssistant";
 import { ProlineNameAliasSettings } from "@/components/ProlineNameAliasSettings";
 import { ReconcileProlinePaymentsButton } from "@/components/ReconcileProlinePaymentsButton";
+import { ReconcileProlinePartnerPaymentsButton } from "@/components/ReconcileProlinePartnerPaymentsButton";
+import { hasProlinePartnerKeys } from "@/lib/proline-partner-client";
 import { StatusBadgeColorSettings } from "@/components/StatusBadgeColorSettings";
 import { EndOfJobFormSettingsCard } from "@/components/EndOfJobFormSettingsCard";
 import { SyncCommissionLedgerButton } from "@/components/SyncCommissionLedgerButton";
@@ -78,6 +80,7 @@ export default async function SettingsPage({
       process.env.PROLINE_API_BASE_URL?.trim() &&
       process.env.PROLINE_API_PROJECTS_PATH?.trim()
   );
+  const partnerApiConfigured = hasProlinePartnerKeys();
 
   const showAll = section === "all";
   const showPeople = showAll || section === "people";
@@ -209,6 +212,17 @@ export default async function SettingsPage({
               webhooks are down but REST still works)
             </li>
             <li>
+              ProLine Partner API:{" "}
+              {partnerApiConfigured ? (
+                <span style={{ color: "var(--success, #3d9a6a)" }}>configured</span>
+              ) : (
+                <span>not configured</span>
+              )}{" "}
+              — set <code>PROLINE_PARTNER_KEY</code> + <code>PROLINE_COMPANY_KEY</code> on the server (never in git). CLI:{" "}
+              <code>npm run proline:partner-probe</code>. Reconcile:{" "}
+              <code>POST /api/integrations/proline/partner-reconcile-payments</code>
+            </li>
+            <li>
               Zapier bridge: <code>POST /api/integrations/zapier-bridge</code> (Bearer{" "}
               <code>ZAPIER_BRIDGE_SECRET</code>)
             </li>
@@ -218,7 +232,10 @@ export default async function SettingsPage({
             </li>
           </ul>
           <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />
-          <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine payment reconcile</h3>
+          <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine Partner API payments</h3>
+          <ReconcileProlinePartnerPaymentsButton partnerConfigured={partnerApiConfigured} />
+          <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />
+          <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine REST payment reconcile (legacy)</h3>
           <ReconcileProlinePaymentsButton />
           <hr style={{ border: 0, borderTop: "1px solid var(--border, rgba(255,255,255,0.12))", margin: "1.25rem 0" }} />
           <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>ProLine API assistant</h3>

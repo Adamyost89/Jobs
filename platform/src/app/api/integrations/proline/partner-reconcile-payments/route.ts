@@ -1,0 +1,70 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { Role } from "@prisma/client";
+import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/session";
+import { reconcileProlinePaymentsFromPartnerApi } from "@/lib/proline-partner-payment-reconcile";
+
+export const maxDuration = 300;
+
+const bodySchema = z
+  .object({
+    apply: z.boolean().optional(),
+    maxPages: z.number().int().min(1).max(200).optional(),
+    tolerance: z.number().min(0).max(100).optional(),
+    createdAfter: z.string().nullable().optional(),
+    createdBefore: z.string().nullable().optional(),
+    includeInvoices: z.boolean().optional(),
+  })
+  .optional();
+
+export async function POST(req: Request) {
+  const user = await getSession();
+  if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const raw = await req.json().catch(() => ({}));
+  const parsed = bodySchema.safeParse(raw);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const body = parsed.data ?? {};
+  try {
+    const result = await reconcileProlinePaymentsFromPartnerApi(prisma, {
+      apply: body.apply === true,
+      maxPages: body.maxPages ?? 50,
+      tolerance: body.tolerance,
+      createdAfter: body.createdAfter,
+      createdBefore: body.createdBefore,
+      includeInvoices: body.includeInvoices,
+    });
+
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ADMIN) {
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: body.apply === true ? "PROLINE_PARTNER_PAYMENT_RECONCILE_APPLY" : "PROLINE_PARTNER_PAYMENT_RECONCILE_DRY",
+          entityType: "Job",
+          entityId: "bulk",
+          payload: {
+            paymentsSeen: result.paymentsSeen,
+            matchedJobs: result.matchedJobs,
+            updated: result.updated,
+            paymentEventsWritten: result.paymentEventsWritten,
+          },
+        },
+      });
+    }
+
+    return NextResponse.json({
+      ok: true as const,
+      apply: body.apply === true,
+      ...result,
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ ok: false as const, error: message }, { status: 400 });
+  }
+}

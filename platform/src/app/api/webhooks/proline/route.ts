@@ -5,7 +5,7 @@ import { allocateNextJobNumber, recalculateJobAndCommissions } from "@/lib/job-w
 import { normalizeProlineWebhookBody } from "@/lib/proline-webhook";
 import {
   buildProlineProjectNameForAssignedJob,
-  sendProlineNameWritebackViaZapier,
+  sendProlineNameWriteback,
 } from "@/lib/proline-name-writeback";
 import { resolveOrCreateSalespersonByName } from "@/lib/salesperson-name";
 import {
@@ -330,7 +330,7 @@ export async function POST(req: Request) {
 
     const projectName = buildProlineProjectNameForAssignedJob(originalName ?? full.name, full.jobNumber);
     try {
-      await sendProlineNameWritebackViaZapier({
+      const wb = await sendProlineNameWriteback({
         prolineJobId: full.prolineJobId,
         leadNumber: full.leadNumber,
         jobNumber: full.jobNumber,
@@ -340,12 +340,13 @@ export async function POST(req: Request) {
         data: {
           jobId: full.id,
           type: "PROLINE_NAME_WRITEBACK",
-          source: "zapier",
+          source: wb.via === "partner" ? "proline_partner" : "zapier",
           payload: {
             prolineJobId: full.prolineJobId,
             leadNumber: full.leadNumber,
             projectName,
             jobNumber: full.jobNumber,
+            via: wb.via,
           },
         },
       });
@@ -354,7 +355,7 @@ export async function POST(req: Request) {
         data: {
           jobId: full.id,
           type: "PROLINE_NAME_WRITEBACK_FAILED",
-          source: "zapier",
+          source: "proline",
           payload: {
             prolineJobId: full.prolineJobId,
             leadNumber: full.leadNumber,
