@@ -168,7 +168,7 @@ export async function reconcileProlinePaymentsFromPartnerApi(
   const env = readProlinePartnerEnv();
   const tolerance = opts.tolerance ?? 0.005;
   const maxPages = opts.maxPages ?? 100;
-  const includeInvoices = opts.includeInvoices !== false;
+  const includeInvoices = opts.includeInvoices === true;
 
   const allPayments: NormalizedPartnerPayment[] = [];
   try {
@@ -249,11 +249,13 @@ export async function reconcileProlinePaymentsFromPartnerApi(
   diagnostics.distinctPartnerProjectIds = partnerProjectIds.length;
 
   // Load Partner projects so new ids (vs…) can resolve to legacy Bubble ids / project numbers.
-  // Do not apply the payment date window — older projects still receive new payments.
+  // Stop early once every payment_project_id has been seen (list is newest-first, so this often finishes
+  // well before scanning the whole company — important under ~1 call / 5s rate limits / HTTP timeouts).
+  const neededProjectIds = new Set(partnerProjectIds);
   const partnerProjects: NormalizedPartnerProject[] = [];
   try {
     for await (const page of prolinePartnerListAll(env, "/v1/list/projects", {
-      maxPages: Math.max(maxPages, 200),
+      maxPages: Math.min(Math.max(maxPages, 60), 120),
     })) {
       for (const row of page.results) {
         if (
@@ -265,8 +267,16 @@ export async function reconcileProlinePaymentsFromPartnerApi(
           diagnostics.samplePartnerProjectKeys = Object.keys(row as object).slice(0, 40);
         }
         const proj = normalizePartnerProject(row);
-        if (proj) partnerProjects.push(proj);
+        if (!proj) continue;
+        partnerProjects.push(proj);
+        for (const alias of proj.aliasIds) neededProjectIds.delete(alias);
       }
+      if (neededProjectIds.size === 0) break;
+    }
+    if (neededProjectIds.size > 0) {
+      result.errors.push(
+        `Project alias map incomplete: ${neededProjectIds.size} payment project id(s) not found in listed projects (rate-limit page cap). Re-run or use CLI npm run proline:partner-reconcile for a deeper scan.`
+      );
     }
   } catch (e) {
     result.errors.push(`Projects: ${e instanceof Error ? e.message : String(e)}`);

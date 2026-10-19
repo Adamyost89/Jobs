@@ -27,6 +27,7 @@
     "normalize:salespeople-first-names": "tsx scripts/normalize-salespeople-first-names.ts",
     "proline:probe": "tsx scripts/proline-probe.ts",
     "proline:partner-probe": "tsx scripts/proline-partner-probe.ts",
+    "proline:partner-reconcile": "tsx scripts/proline-partner-reconcile.ts",
     "proline:selftest": "tsx scripts/proline-api-selftest.ts",
     "proline:reconcile-payments": "tsx scripts/proline-reconcile-payments.ts"
   },

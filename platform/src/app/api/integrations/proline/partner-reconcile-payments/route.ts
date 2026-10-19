@@ -5,7 +5,8 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { reconcileProlinePaymentsFromPartnerApi } from "@/lib/proline-partner-payment-reconcile";
 
-export const maxDuration = 300;
+/** Self-hosted / long Partner rate limits; browser may still time out — use CLI for full scans. */
+export const maxDuration = 800;
 
 const bodySchema = z
   .object({
@@ -34,11 +35,12 @@ export async function POST(req: Request) {
   try {
     const result = await reconcileProlinePaymentsFromPartnerApi(prisma, {
       apply: body.apply === true,
-      maxPages: body.maxPages ?? 50,
+      maxPages: body.maxPages ?? 80,
       tolerance: body.tolerance,
       createdAfter: body.createdAfter,
       createdBefore: body.createdBefore,
-      includeInvoices: body.includeInvoices,
+      // Browser path defaults off — invoices nearly double runtime under rate limits.
+      includeInvoices: body.includeInvoices === true,
     });
 
     if (user.role === Role.SUPER_ADMIN || user.role === Role.ADMIN) {
