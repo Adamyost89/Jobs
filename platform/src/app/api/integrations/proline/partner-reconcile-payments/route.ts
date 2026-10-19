@@ -3,10 +3,13 @@ import { z } from "zod";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { reconcileProlinePaymentsFromPartnerApi } from "@/lib/proline-partner-payment-reconcile";
+import {
+  getPartnerReconcileJob,
+  startPartnerReconcileJob,
+} from "@/lib/partner-reconcile-job";
 
-/** Self-hosted / long Partner rate limits; browser may still time out — use CLI for full scans. */
-export const maxDuration = 800;
+/** Background job returns immediately; polling does the wait (avoids Cloudflare 524). */
+export const maxDuration = 60;
 
 const bodySchema = z
   .object({
@@ -19,11 +22,65 @@ const bodySchema = z
   })
   .optional();
 
-export async function POST(req: Request) {
-  const user = await getSession();
-  if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+function requireAdmin() {
+  return getSession().then((user) => {
+    if (!user || (user.role !== Role.ADMIN && user.role !== Role.SUPER_ADMIN)) {
+      return null;
+    }
+    return user;
+  });
+}
+
+export async function GET(req: Request) {
+  const user = await requireAdmin();
+  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const runId = new URL(req.url).searchParams.get("runId");
+  if (!runId) {
+    return NextResponse.json({ error: "runId required" }, { status: 400 });
   }
+
+  const job = getPartnerReconcileJob(runId);
+  if (!job) {
+    return NextResponse.json({ ok: false, error: "Unknown or expired runId" }, { status: 404 });
+  }
+
+  if (job.status === "running") {
+    return NextResponse.json({
+      ok: true as const,
+      status: "running" as const,
+      runId: job.id,
+      apply: job.apply,
+      startedAt: job.startedAt,
+    });
+  }
+
+  if (job.status === "error") {
+    return NextResponse.json({
+      ok: false as const,
+      status: "error" as const,
+      runId: job.id,
+      apply: job.apply,
+      error: job.error ?? "Partner reconcile failed",
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt,
+    });
+  }
+
+  return NextResponse.json({
+    ok: true as const,
+    status: "done" as const,
+    runId: job.id,
+    apply: job.apply,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    ...(job.result ?? {}),
+  });
+}
+
+export async function POST(req: Request) {
+  const user = await requireAdmin();
+  if (!user) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const raw = await req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(raw);
@@ -32,41 +89,28 @@ export async function POST(req: Request) {
   }
 
   const body = parsed.data ?? {};
-  try {
-    const result = await reconcileProlinePaymentsFromPartnerApi(prisma, {
+  const job = startPartnerReconcileJob(
+    prisma,
+    {
       apply: body.apply === true,
       maxPages: body.maxPages ?? 80,
       tolerance: body.tolerance,
       createdAfter: body.createdAfter,
       createdBefore: body.createdBefore,
-      // Browser path defaults off — invoices nearly double runtime under rate limits.
       includeInvoices: body.includeInvoices === true,
-    });
+    },
+    { userId: user.id }
+  );
 
-    if (user.role === Role.SUPER_ADMIN || user.role === Role.ADMIN) {
-      await prisma.auditLog.create({
-        data: {
-          userId: user.id,
-          action: body.apply === true ? "PROLINE_PARTNER_PAYMENT_RECONCILE_APPLY" : "PROLINE_PARTNER_PAYMENT_RECONCILE_DRY",
-          entityType: "Job",
-          entityId: "bulk",
-          payload: {
-            paymentsSeen: result.paymentsSeen,
-            matchedJobs: result.matchedJobs,
-            updated: result.updated,
-            paymentEventsWritten: result.paymentEventsWritten,
-          },
-        },
-      });
-    }
-
-    return NextResponse.json({
-      ok: true as const,
-      apply: body.apply === true,
-      ...result,
-    });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ ok: false as const, error: message }, { status: 400 });
-  }
+  return NextResponse.json({
+    ok: true as const,
+    status: job.status,
+    runId: job.id,
+    apply: job.apply,
+    startedAt: job.startedAt,
+    message:
+      job.status === "running"
+        ? "Partner reconcile started in the background. Poll with ?runId=…"
+        : undefined,
+  });
 }

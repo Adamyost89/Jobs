@@ -24,7 +24,7 @@ export type PartnerPaymentReconcileOpts = {
   createdAfter?: string | null;
   createdBefore?: string | null;
   tolerance?: number;
-  /** Also page invoices (slower; +1 call / 5s per page). Default true. */
+  /** Also page invoices (slower; +1 call / 5s per page). Default false. */
   includeInvoices?: boolean;
 };
 
