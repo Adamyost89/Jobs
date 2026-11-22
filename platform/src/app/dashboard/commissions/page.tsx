@@ -240,6 +240,13 @@ export default async function CommissionsPage({
         <p style={{ margin: 0, fontSize: "0.88rem", color: "var(--muted)", maxWidth: 520 }}>
           Outstanding balances only (all job years). Checklist-blocked lines stay hidden until you open them from the
           filters. Full payout rollups: <Link href="/dashboard/commissions/payout-summary">Payout rollups</Link>
+          {user.role === "SUPER_ADMIN" ? (
+            <>
+              {" "}
+              To add a commission, open <Link href="/dashboard/jobs">Jobs</Link> and use{" "}
+              <strong style={{ color: "var(--text)" }}>Add commission</strong> on that row.
+            </>
+          ) : null}
         </p>
       </div>
 

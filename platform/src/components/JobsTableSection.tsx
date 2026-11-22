@@ -462,10 +462,11 @@ export function JobsTableSection({
                   background: "none",
                   border: 0,
                   padding: 0,
-                  color: "inherit",
+                  color: "var(--accent)",
                   font: "inherit",
+                  fontWeight: 700,
                   cursor: "pointer",
-                  textDecoration: commissionJobId === row.id ? "underline" : "none",
+                  textDecoration: "underline",
                 }}
               >
                 {row.jobNumber}
@@ -689,7 +690,7 @@ export function JobsTableSection({
               <thead>
                 <tr>
                   {showRowEditColumn ? (
-                    <th style={{ width: "4.5rem", paddingLeft: "0.75rem" }} aria-label="Edit" />
+                    <th style={{ width: canManageRowActions ? "9.5rem" : "4.5rem", paddingLeft: "0.75rem" }} aria-label="Actions" />
                   ) : null}
                   {cols.map((id) => renderTh(id))}
                 </tr>
@@ -702,15 +703,29 @@ export function JobsTableSection({
                       <tr style={rowStyle}>
                         {showRowEditColumn ? (
                           <td style={{ whiteSpace: "nowrap", paddingLeft: "0.75rem", verticalAlign: "middle" }}>
-                            <button
-                              type="button"
-                              className="btn secondary"
-                              onClick={() => beginEdit(row)}
-                              disabled={deletingId != null || savingEditId != null || recheckingId != null}
-                              style={{ padding: "0.4rem 0.75rem" }}
-                            >
-                              {editingId === row.id ? "Editing" : "Edit"}
-                            </button>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "flex-start" }}>
+                              <button
+                                type="button"
+                                className="btn secondary"
+                                onClick={() => beginEdit(row)}
+                                disabled={deletingId != null || savingEditId != null || recheckingId != null}
+                                style={{ padding: "0.4rem 0.75rem" }}
+                              >
+                                {editingId === row.id ? "Editing" : "Edit"}
+                              </button>
+                              {canManageRowActions ? (
+                                <button
+                                  type="button"
+                                  className="btn secondary"
+                                  onClick={() => toggleAddCommission(row)}
+                                  disabled={deletingId != null || savingEditId != null || recheckingId != null}
+                                  aria-expanded={commissionJobId === row.id}
+                                  style={{ padding: "0.4rem 0.75rem" }}
+                                >
+                                  {commissionJobId === row.id ? "Adding…" : "Add commission"}
+                                </button>
+                              ) : null}
+                            </div>
                           </td>
                         ) : null}
                         {cols.map((id) => renderTd(row, id))}
