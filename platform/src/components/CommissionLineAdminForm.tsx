@@ -67,7 +67,8 @@ export function CommissionLineAdminForm({
   return (
     <div style={{ display: "grid", gap: "0.35rem", maxWidth: 240 }}>
       <p style={{ margin: 0, fontSize: "0.72rem", color: "var(--muted)", lineHeight: 1.25 }}>
-        Admin correction for {salespersonName}:
+        Admin correction for {salespersonName}. Locks this remaining owed for customer cash already collected. A later
+        customer payment still adds commission on the new cash.
       </p>
       <div className="page-actions-inline" style={{ alignItems: "stretch", gap: "0.35rem" }}>
         <label style={{ display: "flex", flexDirection: "column", gap: "0.2rem", fontSize: "0.72rem", color: "var(--muted)" }}>

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { canEditCommissions } from "@/lib/rbac";
 import { recalculateJobAndCommissions } from "@/lib/job-workflow";
+import { overrideLockWrite } from "@/lib/commission-override-lock";
 
 const patchSchema = z
   .object({
@@ -31,7 +32,10 @@ export async function PATCH(
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const existing = await prisma.commission.findUnique({ where: { id } });
+  const existing = await prisma.commission.findUnique({
+    where: { id },
+    include: { job: { select: { amountPaid: true } } },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -44,10 +48,18 @@ export async function PATCH(
   if (p.owedAmount !== undefined) {
     data.owedAmount = new Prisma.Decimal(p.owedAmount.toFixed(2));
   }
-  if (p.paidAmount !== undefined || p.owedAmount !== undefined) {
-    data.override = true;
-  } else if (p.override !== undefined) {
-    data.override = p.override;
+  const locking = p.paidAmount !== undefined || p.owedAmount !== undefined || p.override === true;
+  if (locking) {
+    const customerPaid = Math.max(0, existing.job.amountPaid?.toNumber() ?? 0);
+    const owed = p.owedAmount ?? existing.owedAmount.toNumber();
+    const paid = p.paidAmount ?? existing.paidAmount.toNumber();
+    Object.assign(data, overrideLockWrite(customerPaid, owed, paid));
+  } else if (p.override === false) {
+    data.override = false;
+    data.overrideCustomerPaid = null;
+    data.overrideOwedAmount = null;
+    data.overridePaidAmount = null;
+    data.overrideSyncedPaid = null;
   }
 
   const row = await prisma.commission.update({

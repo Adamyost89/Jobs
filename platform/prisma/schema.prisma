@@ -177,6 +177,17 @@ model Commission {
   paidAmount     Decimal  @default(0) @db.Decimal(14, 2)
   owedAmount     Decimal  @default(0) @db.Decimal(14, 2)
   override       Boolean  @default(false)
+  /**
+   * Customer cash the manual owed/paid amounts apply through.
+   * A later customer payment still earns commission on the increase.
+   */
+  overrideCustomerPaid Decimal? @db.Decimal(14, 2)
+  /** Owed amount locked at `overrideCustomerPaid`, before later customer payments. */
+  overrideOwedAmount   Decimal? @db.Decimal(14, 2)
+  /** Paid amount locked at `overrideCustomerPaid`. */
+  overridePaidAmount   Decimal? @db.Decimal(14, 2)
+  /** Customer cash already folded into `owedAmount` for this locked line. */
+  overrideSyncedPaid   Decimal? @db.Decimal(14, 2)
   ruleVersionId  String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

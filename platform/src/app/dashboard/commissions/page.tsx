@@ -25,6 +25,7 @@ import { commissionPayoutBlockedForJob } from "@/lib/end-of-job-form";
 import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { JobQuotePickerLink } from "@/components/JobQuotePickerLink";
 import { JobContractPaidHints } from "@/components/JobContractPaidHints";
+import { healOverrideCommissionsForLaterPayments } from "@/lib/job-workflow";
 
 function parsePaydayParam(raw: string | string[] | undefined): string | null {
   const v = Array.isArray(raw) ? raw[0] : raw;
@@ -68,6 +69,9 @@ export default async function CommissionsPage({
   const sp = (await searchParams) ?? {};
   const user = await getSession();
   if (!user) return null;
+  await healOverrideCommissionsForLaterPayments().catch((error) =>
+    console.error("heal override commissions failed", error)
+  );
   const showCalcTrace = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
   const canFilterBySalesperson = canViewHrPayroll(user);
   const salespersonDisplayToken = canFilterBySalesperson ? pickString(sp.spn)?.trim() : undefined;

@@ -93,6 +93,11 @@ export type CommissionComputeContext = {
   drewParticipation: string | null;
   existingPaidBySalesperson: Record<string, number>;
   overrides: Record<string, boolean>;
+  /**
+   * Manual adjustment locked against the customer cash collected at that moment.
+   * Later customer payments add commission on the increase and keep the adjustment.
+   */
+  overrideLocks?: Record<string, { customerPaid: number; owed: number; paid: number }>;
   plan: CommissionPlanConfigV1;
   tierTotals: CommissionTierTotals;
   kindBySalespersonName: Record<string, SalesKind>;
@@ -454,6 +459,57 @@ function orderedPeopleNames(plan: CommissionPlanConfigV1): string[] {
   return Object.keys(plan.people).sort();
 }
 
+function earnedToDateForCollected(
+  ctx: CommissionComputeContext,
+  salespersonName: string,
+  collectedCommissionBase: number
+): number {
+  const rule = ctx.plan.people[salespersonName];
+  if (!rule) return 0;
+  const totals = ctx.tierTotals[salespersonName] ?? { ytdPaid: 0, ytdPrimaryBasis: 0, ytdPrimaryPaidAmount: 0 };
+  const collected = Math.max(0, collectedCommissionBase);
+  const segments = datedTierSegments(rule, ctx, salespersonName, totals, collected);
+  return (
+    (segments ? earnedFromSegments(segments) : null) ??
+    earnedToDateWithRunningTierProgression(rule, ctx, salespersonName, totals, collected) ??
+    collected * resolvePersonRate(rule, ctx, salespersonName)
+  );
+}
+
+/**
+ * A locked line keeps the manual owed/paid for cash already collected. Commission on customer payments
+ * that arrive afterward is added on top, so adjusting the first payment does not hide the next one.
+ */
+function overrideAdjustment(
+  ctx: CommissionComputeContext,
+  salespersonName: string,
+  paidCommission: number
+): { incremental: number; earned: number; owed: number; hasLock: boolean } | null {
+  if (!ctx.overrides[salespersonName]) return null;
+  const lock = ctx.overrideLocks?.[salespersonName];
+  if (!lock) return { incremental: 0, earned: 0, owed: 0, hasLock: false };
+  const customerPaid = Math.max(0, ctx.customerPaid);
+  const lockedEarned = Math.max(0, lock.owed) + Math.max(0, lock.paid);
+  if (customerPaid <= lock.customerPaid + 0.005) {
+    return {
+      incremental: 0,
+      earned: round2(lockedEarned),
+      owed: owedAfterPaid(lockedEarned, paidCommission),
+      hasLock: true,
+    };
+  }
+  const earnedNow = earnedToDateForCollected(ctx, salespersonName, customerPaid);
+  const earnedThen = earnedToDateForCollected(ctx, salespersonName, Math.max(0, lock.customerPaid));
+  const incremental = round2(Math.max(0, earnedNow - earnedThen));
+  const earned = round2(lockedEarned + incremental);
+  return {
+    incremental,
+    earned,
+    owed: owedAfterPaid(earned, paidCommission),
+    hasLock: true,
+  };
+}
+
 function applyElevatedPaidGuard(
   rule: CommissionPersonRuleV1,
   rate: number,
@@ -482,29 +538,23 @@ export function computeCommissionsForJob(ctx: CommissionComputeContext): Commiss
       continue;
     }
 
-    if (ctx.activeBySalespersonName[sp] === false) {
-      if (!ctx.existingCommissionNamesOnJob.has(sp)) continue;
-      if (ctx.overrides[sp]) {
-        out.push({
-          salespersonName: sp,
-          owed: 0,
-          paid: ctx.existingPaidBySalesperson[sp] ?? 0,
-          overrideSkip: true,
-        });
-        continue;
-      }
-      const paid = ctx.existingPaidBySalesperson[sp] ?? 0;
-      out.push({ salespersonName: sp, owed: 0, paid, overrideSkip: false });
+    if (ctx.overrides[sp]) {
+      const paidCommission = ctx.existingPaidBySalesperson[sp] ?? 0;
+      const adjustment = overrideAdjustment(ctx, sp, paidCommission);
+      const incremental = adjustment?.incremental ?? 0;
+      out.push({
+        salespersonName: sp,
+        owed: adjustment?.owed ?? 0,
+        paid: paidCommission,
+        overrideSkip: incremental <= 0.005,
+      });
       continue;
     }
 
-    if (ctx.overrides[sp]) {
-      out.push({
-        salespersonName: sp,
-        owed: 0,
-        paid: ctx.existingPaidBySalesperson[sp] ?? 0,
-        overrideSkip: true,
-      });
+    if (ctx.activeBySalespersonName[sp] === false) {
+      if (!ctx.existingCommissionNamesOnJob.has(sp)) continue;
+      const paid = ctx.existingPaidBySalesperson[sp] ?? 0;
+      out.push({ salespersonName: sp, owed: 0, paid, overrideSkip: false });
       continue;
     }
 
@@ -639,10 +689,15 @@ export function explainCommissionForSalesperson(
   }
 
   if (override) {
+    const adjustment = overrideAdjustment(ctx, salespersonName, paidCommission);
+    const laterCash = adjustment?.hasLock && adjustment.incremental > 0.005;
+    const lockedThrough = ctx.overrideLocks?.[salespersonName]?.customerPaid;
     return {
       salespersonName,
       included: true,
-      reason: "override-locked line; auto recalc skipped",
+      reason: laterCash
+        ? "override locked the earlier payment; commission added for customer cash collected since that adjustment"
+        : "override-locked line; auto recalc skipped",
       scope,
       kind,
       active,
@@ -655,8 +710,12 @@ export function explainCommissionForSalesperson(
       paymentProgress,
       collectedCommissionBase,
       totalCommissionAtRate: round2(totalCommission),
-      earnedToDate: round2(earnedToDate),
-      earnedToDateNote,
+      earnedToDate: adjustment?.hasLock ? adjustment.earned : round2(earnedToDate),
+      earnedToDateNote: !adjustment?.hasLock
+        ? earnedToDateNote
+        : laterCash
+          ? `manual amount held through ${round2(lockedThrough ?? 0)} collected; ${round2(adjustment.incremental)} added for later customer payments`
+          : `manual amount locked through ${round2(lockedThrough ?? customerPaid)} collected`,
       alreadyPaidCommission: paidCommission,
       runningTierSnapshot: runningTierSnapshotFor(rule, totals),
       elevatedPaidGuard: {
@@ -665,7 +724,7 @@ export function explainCommissionForSalesperson(
         legacyRate,
         legacyCommission: round2(legacyCommission),
       },
-      owed: 0,
+      owed: adjustment?.hasLock ? adjustment.owed : 0,
     };
   }
 

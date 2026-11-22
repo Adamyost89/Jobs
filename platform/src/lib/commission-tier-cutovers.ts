@@ -60,7 +60,9 @@ function payrollDayStart(iso: string): number {
 // Per-job customer cash timeline
 // ---------------------------------------------------------------------------
 
-type PaymentHistoryEvent = { jobId: string; type: string; payload: unknown; createdAt: Date };
+export type CustomerPaidHistoryEvent = { jobId: string; type: string; payload: unknown; createdAt: Date };
+
+type PaymentHistoryEvent = CustomerPaidHistoryEvent;
 
 /** `initial` = cash before the first dated event; `steps` = cumulative amount paid after each dated event. */
 type PaidTimeline = { initial: number; steps: { at: number; value: number }[] };
@@ -217,6 +219,51 @@ function paidBefore(tl: PaidTimeline, boundary: number): number {
     v = s.value;
   }
   return v;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Customer cash collected at `atMs`. Payments recorded after that moment are excluded, including when the
+ * running timeline has folded unexplained cash into the baseline.
+ */
+export function customerPaidAsOfFromEvents(
+  currentPaid: number,
+  events: CustomerPaidHistoryEvent[],
+  atMs: number
+): number {
+  const paidNow = Math.max(0, currentPaid);
+  const tl = buildPaidTimeline(paidNow, events);
+  const fromTimeline = paidBefore(tl, atMs + 1);
+  let laterDelta = 0;
+  let earlierObserved: number | null = null;
+  for (const e of events) {
+    const read = readPaymentEvent(e);
+    if (!read) continue;
+    if (e.createdAt.getTime() <= atMs) {
+      if (read.kind === "observed") earlierObserved = read.value;
+      continue;
+    }
+    if (read.kind === "delta" && read.amount > 0.0005) laterDelta += read.amount;
+  }
+  const peeled = Math.max(0, paidNow - laterDelta);
+  if (laterDelta > 0.005 && fromTimeline > peeled + 0.005) return roundMoney(peeled);
+  if (
+    earlierObserved != null &&
+    fromTimeline > earlierObserved + 0.005 &&
+    fromTimeline >= paidNow - 0.005
+  ) {
+    return roundMoney(Math.max(0, earlierObserved));
+  }
+  return roundMoney(fromTimeline);
+}
+
+/** Customer cash collected on this job at `at` (inclusive). */
+export async function customerPaidAsOf(jobId: string, currentPaid: number, at: Date): Promise<number> {
+  const history = await loadPaymentHistory([jobId]);
+  return customerPaidAsOfFromEvents(currentPaid, history.get(jobId) ?? [], at.getTime());
 }
 
 // ---------------------------------------------------------------------------

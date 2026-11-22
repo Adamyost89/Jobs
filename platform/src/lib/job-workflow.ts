@@ -1,6 +1,7 @@
 import { Prisma, type Job } from "@prisma/client";
 import { prisma } from "./db";
 import { computeCommissionsForJob } from "./commission-rules";
+import { resolveOverrideLocks } from "./commission-override-lock";
 import { skipAutoCommissionRecalcForJobYear } from "./commission-import-policy";
 import { commissionPlanForJobYear } from "./commission-plan-defaults";
 import { loadCommissionTierTotalsForYear } from "./commission-tier-totals";
@@ -175,6 +176,8 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
     })
   );
 
+  const overrideLocks = await resolveOverrideLocks(job.id, customerPaid, job.commissions, { persist: true });
+
   const rows = computeCommissionsForJob({
     year: job.year,
     leadNumber: job.leadNumber,
@@ -189,6 +192,7 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
     overrides: Object.fromEntries(
       job.commissions.filter((c) => c.override).map((c) => [c.salesperson.name, true])
     ),
+    overrideLocks,
     plan,
     tierTotals,
     kindBySalespersonName,
@@ -231,6 +235,38 @@ export async function recalculateJobAndCommissions(jobId: string, opts: Recalcul
       },
     });
   }
+
+  if (job.commissions.some((c) => c.override)) {
+    await prisma.commission.updateMany({
+      where: { jobId: job.id, override: true },
+      data: { overrideSyncedPaid: new Prisma.Decimal(customerPaid.toFixed(2)) },
+    });
+  }
+}
+
+/** Recompute locked lines whose customer cash has grown since the adjustment was applied. */
+export async function healOverrideCommissionsForLaterPayments(): Promise<number> {
+  const rows = await prisma.commission.findMany({
+    where: { override: true },
+    select: {
+      jobId: true,
+      overrideSyncedPaid: true,
+      job: { select: { amountPaid: true } },
+    },
+  });
+  const jobIds = new Set<string>();
+  for (const c of rows) {
+    const paid = Math.max(0, dec(c.job.amountPaid ?? 0));
+    const synced = c.overrideSyncedPaid == null ? null : dec(c.overrideSyncedPaid);
+    if (synced == null || paid > synced + 0.005) jobIds.add(c.jobId);
+  }
+  for (const id of jobIds) {
+    await recalculateJobAndCommissions(id, {
+      forceCommissionRecalc: true,
+      forceCommissionRecalcReason: "override.later_customer_payment",
+    });
+  }
+  return jobIds.size;
 }
 
 export async function recalculateAllJobsAndCommissions(): Promise<{ totalJobs: number }> {

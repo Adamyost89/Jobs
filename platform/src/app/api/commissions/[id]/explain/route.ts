@@ -8,6 +8,7 @@ import { loadRunningTierCutoversForJob } from "@/lib/commission-tier-cutovers";
 import { loadSalespersonFlagsByName } from "@/lib/salespeople-kind-db";
 import { explainCommissionForSalesperson } from "@/lib/commission-rules";
 import { commissionDisplayAmounts } from "@/lib/commission-display";
+import { resolveOverrideLocks } from "@/lib/commission-override-lock";
 
 function dec(n: Prisma.Decimal | number | string | null | undefined): number {
   if (n === null || n === undefined) return 0;
@@ -79,6 +80,9 @@ export async function GET(
     row.salesperson.active
   );
 
+  const overrideLocks = await resolveOverrideLocks(row.jobId, customerPaid, row.job.commissions, {
+    persist: false,
+  });
   const explain = explainCommissionForSalesperson(
     {
       year: row.job.year,
@@ -91,11 +95,16 @@ export async function GET(
       primarySalespersonName: row.job.salesperson?.name ?? null,
       drewParticipation: row.job.drewParticipation,
       existingPaidBySalesperson: Object.fromEntries(
-        row.job.commissions.map((c) => [c.salesperson.name, dec(c.paidAmount)])
+        row.job.commissions.map((c) => {
+          const ledgerPaid = dec(c.paidAmount);
+          if (c.id === row.id && payoutSum > 0) return [c.salesperson.name, payoutSum];
+          return [c.salesperson.name, ledgerPaid];
+        })
       ),
       overrides: Object.fromEntries(
         row.job.commissions.filter((c) => c.override).map((c) => [c.salesperson.name, true])
       ),
+      overrideLocks,
       plan,
       tierTotals,
       kindBySalespersonName: flags.kindByName,

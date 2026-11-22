@@ -18,7 +18,7 @@ export function RecalculateCommissionsButton({ years, salespeople }: Props) {
     if (busy) return;
     const who = salespeople.find((s) => s.id === salespersonId)?.name;
     const scope = who ? `${who}'s ${year} jobs` : `every ${year} job`;
-    if (!window.confirm(`Recalculate commissions on ${scope}? Owed amounts will be overwritten (override-locked lines are kept).`)) {
+    if (!window.confirm(`Recalculate commissions on ${scope}? Owed amounts will be overwritten. Override-locked amounts stay, and later customer payments still add commission on new cash.`)) {
       return;
     }
     setBusy(true);

@@ -23,6 +23,7 @@ import { quoteLinksByJobIds } from "@/lib/job-quote-links";
 import { isInsuranceCustomerName } from "@/lib/insurance-job";
 import { resolvedChangeOrders } from "@/lib/change-orders";
 import { commissionPayoutBlockedForJob } from "@/lib/end-of-job-form";
+import { healOverrideCommissionsForLaterPayments } from "@/lib/job-workflow";
 
 /**
  * Jobs list query params (GET):
@@ -77,6 +78,9 @@ export default async function JobsPage({
 }) {
   const user = await getSession();
   if (!user) return null;
+  await healOverrideCommissionsForLaterPayments().catch((error) =>
+    console.error("heal override commissions failed", error)
+  );
   const canSeeGp = canViewAllJobs(user);
 
   const sp = await searchParams;
@@ -506,6 +510,12 @@ export default async function JobsPage({
                           : "gp low to high"}
         <span style={{ display: "block", marginTop: "0.35rem", fontSize: "0.82rem" }}>
           Commission columns = <strong>all reps</strong> on that job (incl. manager lines).
+          {user.role === "SUPER_ADMIN" ? (
+            <>
+              {" "}
+              Click a job number to add a commission.
+            </>
+          ) : null}
         </span>
       </p>
 
