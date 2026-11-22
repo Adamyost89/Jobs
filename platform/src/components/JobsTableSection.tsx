@@ -138,7 +138,6 @@ export function JobsTableSection({
   } | null>(null);
   const [editMsg, setEditMsg] = useState<string | null>(null);
   const [requiringChecklistId, setRequiringChecklistId] = useState<string | null>(null);
-  const [commissionJobId, setCommissionJobId] = useState<string | null>(null);
 
   useEffect(() => {
     setPrefs(loadJobsTablePrefsFromStorage());
@@ -282,18 +281,8 @@ export function JobsTableSection({
     if (!showRowEditColumn || deletingId || savingEditId) return;
     setDeleteMsg(null);
     setEditMsg(null);
-    setCommissionJobId(null);
     setEditingId(row.id);
     setEditForm(canEdit ? toEditForm(row) : null);
-  }
-
-  function toggleAddCommission(row: JobsTableRowDTO) {
-    if (!canManageRowActions) return;
-    setEditMsg(null);
-    setDeleteMsg(null);
-    setEditingId(null);
-    setEditForm(null);
-    setCommissionJobId((current) => (current === row.id ? null : row.id));
   }
 
   function cancelEdit() {
@@ -452,43 +441,12 @@ export function JobsTableSection({
       case "jobNumber":
         return (
           <td key={id} className="cell-strong cell-nowrap">
-            {canManageRowActions ? (
-              <button
-                type="button"
-                onClick={() => toggleAddCommission(row)}
-                title={`Add a commission on job ${row.jobNumber}`}
-                aria-expanded={commissionJobId === row.id}
-                style={{
-                  background: "none",
-                  border: 0,
-                  padding: 0,
-                  color: "var(--accent)",
-                  font: "inherit",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
-              >
-                {row.jobNumber}
-              </button>
-            ) : (
-              <JobQuotePickerLink
-                fallbackHref={jobsDrilldownUrl({ year: row.year, q: row.jobNumber })}
-                fallbackLabel={row.jobNumber}
-                quoteLinks={row.quoteLinks}
-                style={{ color: "inherit", textDecoration: "none" }}
-              />
-            )}
-            {canManageRowActions && (row.quoteLinks?.length ?? 0) > 0 ? (
-              <div>
-                <JobQuotePickerLink
-                  fallbackHref={jobsDrilldownUrl({ year: row.year, q: row.jobNumber })}
-                  fallbackLabel="Quote"
-                  quoteLinks={row.quoteLinks}
-                  style={{ fontSize: "0.72rem" }}
-                />
-              </div>
-            ) : null}
+            <JobQuotePickerLink
+              fallbackHref={jobsDrilldownUrl({ year: row.year, q: row.jobNumber })}
+              fallbackLabel={row.jobNumber}
+              quoteLinks={row.quoteLinks}
+              style={{ color: "inherit", textDecoration: "none" }}
+            />
           </td>
         );
       case "year":
@@ -690,7 +648,7 @@ export function JobsTableSection({
               <thead>
                 <tr>
                   {showRowEditColumn ? (
-                    <th style={{ width: canManageRowActions ? "9.5rem" : "4.5rem", paddingLeft: "0.75rem" }} aria-label="Actions" />
+                    <th style={{ width: "4.5rem", paddingLeft: "0.75rem" }} aria-label="Edit" />
                   ) : null}
                   {cols.map((id) => renderTh(id))}
                 </tr>
@@ -703,44 +661,19 @@ export function JobsTableSection({
                       <tr style={rowStyle}>
                         {showRowEditColumn ? (
                           <td style={{ whiteSpace: "nowrap", paddingLeft: "0.75rem", verticalAlign: "middle" }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "0.35rem", alignItems: "flex-start" }}>
-                              <button
-                                type="button"
-                                className="btn secondary"
-                                onClick={() => beginEdit(row)}
-                                disabled={deletingId != null || savingEditId != null || recheckingId != null}
-                                style={{ padding: "0.4rem 0.75rem" }}
-                              >
-                                {editingId === row.id ? "Editing" : "Edit"}
-                              </button>
-                              {canManageRowActions ? (
-                                <button
-                                  type="button"
-                                  className="btn secondary"
-                                  onClick={() => toggleAddCommission(row)}
-                                  disabled={deletingId != null || savingEditId != null || recheckingId != null}
-                                  aria-expanded={commissionJobId === row.id}
-                                  style={{ padding: "0.4rem 0.75rem" }}
-                                >
-                                  {commissionJobId === row.id ? "Adding…" : "Add commission"}
-                                </button>
-                              ) : null}
-                            </div>
+                            <button
+                              type="button"
+                              className="btn secondary"
+                              onClick={() => beginEdit(row)}
+                              disabled={deletingId != null || savingEditId != null || recheckingId != null}
+                              style={{ padding: "0.4rem 0.75rem" }}
+                            >
+                              {editingId === row.id ? "Editing" : "Edit"}
+                            </button>
                           </td>
                         ) : null}
                         {cols.map((id) => renderTd(row, id))}
                       </tr>
-                      {canManageRowActions && commissionJobId === row.id ? (
-                        <tr>
-                          <td colSpan={cols.length + (showRowEditColumn ? 1 : 0)} style={{ paddingTop: 0 }}>
-                            <AddJobCommissionPanel
-                              jobId={row.id}
-                              jobNumber={row.jobNumber}
-                              onClose={() => setCommissionJobId(null)}
-                            />
-                          </td>
-                        </tr>
-                      ) : null}
                       {showRowEditColumn && editingId === row.id ? (
                         <tr>
                           <td colSpan={cols.length + (showRowEditColumn ? 1 : 0)} style={{ paddingTop: 0 }}>
@@ -954,6 +887,9 @@ export function JobsTableSection({
                                 </button>
                                 ) : null}
                               </div>
+                              {canManageRowActions ? (
+                                <AddJobCommissionPanel embedded jobId={row.id} jobNumber={row.jobNumber} />
+                              ) : null}
                             </div>
                           </td>
                         </tr>

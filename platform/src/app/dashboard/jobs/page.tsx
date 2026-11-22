@@ -513,8 +513,7 @@ export default async function JobsPage({
           {user.role === "SUPER_ADMIN" ? (
             <>
               {" "}
-              Each row has an <strong style={{ color: "var(--text)" }}>Add commission</strong> button. The job number
-              opens the same form.
+              Click <strong style={{ color: "var(--text)" }}>Edit</strong> on a job to add a commission.
             </>
           ) : null}
         </span>

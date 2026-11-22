@@ -9,10 +9,12 @@ export function AddJobCommissionPanel({
   jobId,
   jobNumber,
   onClose,
+  embedded = false,
 }: {
   jobId: string;
   jobNumber: string;
-  onClose: () => void;
+  onClose?: () => void;
+  embedded?: boolean;
 }) {
   const [people, setPeople] = useState<SalespersonOption[]>([]);
   const [salespersonId, setSalespersonId] = useState("");
@@ -90,7 +92,14 @@ export function AddJobCommissionPanel({
   const inactive = people.filter((p) => !p.active);
 
   return (
-    <div className="card" style={{ margin: "0.35rem 0.7rem 0.8rem", padding: "0.9rem 1rem" }}>
+    <div
+      className={embedded ? undefined : "card"}
+      style={
+        embedded
+          ? { marginTop: "1.1rem", paddingTop: "1rem", borderTop: "1px solid #2a3545" }
+          : { margin: "0.35rem 0.7rem 0.8rem", padding: "0.9rem 1rem" }
+      }
+    >
       <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
         <div>
           <strong>Add commission on job {jobNumber}</strong>
@@ -99,9 +108,11 @@ export function AddJobCommissionPanel({
             payments that come in later still earn commission on the new cash.
           </p>
         </div>
-        <button type="button" className="btn secondary" onClick={onClose} disabled={busy}>
-          Close
-        </button>
+        {onClose ? (
+          <button type="button" className="btn secondary" onClick={onClose} disabled={busy}>
+            Close
+          </button>
+        ) : null}
       </div>
       <div
         style={{

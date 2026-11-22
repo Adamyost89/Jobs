@@ -243,8 +243,8 @@ export default async function CommissionsPage({
           {user.role === "SUPER_ADMIN" ? (
             <>
               {" "}
-              To add a commission, open <Link href="/dashboard/jobs">Jobs</Link> and use{" "}
-              <strong style={{ color: "var(--text)" }}>Add commission</strong> on that row.
+              To add a commission, open <Link href="/dashboard/jobs">Jobs</Link> and click{" "}
+              <strong style={{ color: "var(--text)" }}>Edit</strong> on that job.
             </>
           ) : null}
         </p>
